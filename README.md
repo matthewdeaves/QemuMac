@@ -3,13 +3,15 @@
 
 Introduction
 ------------
-This project provides a set of scripts to simplify the setup and management of classic Macintosh (m68k architecture) emulation using QEMU. It allows you to define different Mac OS configurations in separate files and easily launch them. Key features include automatic setup of bridged networking for inter-VM communication and a utility to share files between your host Linux system and the emulated Mac environment via a shared disk image.
+This project provides a set of scripts to simplify the setup and management of classic Macintosh (m68k architecture) emulation using QEMU. It allows you to define different Mac OS configurations in separate files and easily launch them. Key features include flexible networking options (bridged TAP for inter-VM communication or simple User Mode for internet access) and a utility to share files between your host Linux system and the emulated Mac environment via a shared disk image.
 
 Purpose
 -------
 - To provide a consistent and repeatable way to launch QEMU for specific Mac models and OS versions.
 - To manage separate disk images (OS, shared data, PRAM) for different configurations.
-- To automatically configure TAP networking, enabling direct communication (AppleTalk, TCP/IP) between multiple running VM instances.
+- To offer flexible networking:
+    - **TAP Mode (Default):** Automatically configures bridged TAP networking, enabling direct communication (AppleTalk, TCP/IP) between multiple running VM instances, but with no access to the internet.
+    - **User Mode:** Provides simple internet access for the VM via QEMU's built-in NAT, without requiring host network configuration or special privileges.
 - To simplify the process of booting from CD/ISO images for OS installation.
 - To offer a convenient method (`mac_disc_mounter.sh`) for accessing a shared disk image from the Linux host for file transfer.
 
@@ -17,19 +19,21 @@ Prerequisites
 -------------
 1.  **QEMU:** You need the `qemu-system-m68k` package installed.
     - On Debian/Ubuntu: `sudo apt update && sudo apt install qemu-system-m68k`
-2.  **Networking Utilities:** For the automatic network setup, you need `bridge-utils` and `iproute2` (usually installed by default).
+2.  **Networking Utilities (for TAP Mode):** If using the default TAP network mode (`-N tap`), you need `bridge-utils` and `iproute2` (usually installed by default).
     - On Debian/Ubuntu: `sudo apt update && sudo apt install bridge-utils`
-    - The script will check for `brctl` and prompt if `bridge-utils` is missing.
-3.  **Sudo Privileges:** The `run68k.sh` script now requires `sudo` privileges to create and manage the network bridge and TAP interfaces. You will likely be prompted for your password when launching a VM.
+    - The script will check for `brctl` and `ip` if TAP mode is selected and prompt if needed packages are missing.
+3.  **Sudo Privileges:** The `run68k.sh` script requires `sudo` privileges *when using the default TAP network mode* (`-N tap`) to create and manage the network bridge and TAP interfaces. You will likely be prompted for your password when launching a VM in TAP mode. User mode (`-N user`) does not require sudo for networking itself.
 4.  **Macintosh ROM Files:** You MUST obtain the correct ROM file(s) for the Macintosh model(s) you wish to emulate (e.g., `800.ROM` for a Quadra 800).
     - **IMPORTANT:** ROM files are copyrighted software and are NOT included with this project. You must acquire them legally (e.g., dump them from your own physical hardware). Place the ROM file(s) where the configuration files expect them (or update the paths in the `.conf` files). You can often find ROM files online. A common source is [Macintosh Repository](https://www.macintoshrepository.org/7038-all-macintosh-roms-68k-ppc-)
 5.  **Mac OS Installation Media:** You need CD-ROM images (.iso, .img, .toast) or floppy disk images for the version(s) of Mac OS you intend to install. These are also NOT included. I use the Apple Legacy Software Recovery CD from [Macintosh Garden](https://macintoshgarden.org/apps/apple-legacy-software-recovery-cd)
-6.  **Linux Host:** The `mac_disc_mounter.sh` script is specifically designed for Linux systems (using `apt` for package management and standard mount commands). The `run68k.sh` script is tested on Ubuntu but might work on other Unix-like systems (like macOS) with potential minor adjustments (e.g., display type, network setup commands).
+6.  **Linux Host:** The `mac_disc_mounter.sh` script is specifically designed for Linux systems (using `apt` for package management and standard mount commands). The `run68k.sh` script is tested on Ubuntu but might work on other Unix-like systems (like macOS) with potential minor adjustments (e.g., display type, network setup commands if using TAP).
 7.  **(For `mac_disc_mounter.sh`) HFS/HFS+ Utilities:** The mounting script requires `hfsprogs` and `hfsplus` to interact with Mac-formatted disk images. The script will attempt to install these automatically using `sudo apt-get install` if they are not found.
+8.  **TAP Functions Script (for TAP Mode):** The file `qemu-tap-functions.sh` must be present in the same directory as `run68k.sh` if you are using the default TAP network mode. It contains the necessary functions for setting up and tearing down TAP interfaces and bridges.
 
 File Structure
 --------------
-- `run68k.sh`: The main script to launch the QEMU emulator with network setup.
+- `run68k.sh`: The main script to launch the QEMU emulator.
+- `qemu-tap-functions.sh`: Contains helper functions for TAP networking setup/cleanup (used only when `-N tap` is active).
 - `mac_disc_mounter.sh`: Utility script to mount/unmount the shared disk image on the Linux host.
 - `*.conf`: Configuration files defining specific emulation setups (e.g., `sys755-q800.conf`).
 - `*.ROM`: (User-provided) Macintosh ROM files.
@@ -49,17 +53,16 @@ These files define the parameters for a specific emulation instance using shell 
 - `QEMU_HDD_SIZE`: (Optional) Size for the OS HDD if it needs to be created (default: 1G).
 - `QEMU_SHARED_HDD_SIZE`: (Optional) Size for the Shared HDD if it needs to be created (default: 200M).
 - `QEMU_CPU`: (Optional) Specify a specific CPU variant if needed.
-- `BRIDGE_NAME`: (Optional) Name of the host network bridge to use (default: `br0`).
-- `QEMU_TAP_IFACE`: (Optional) Specify a fixed name for the VM's TAP network interface. If omitted, a unique name is generated based on the config filename (e.g., `tap_sys755q800`).
-- `QEMU_MAC_ADDR`: (Optional) Specify a fixed MAC address for the VM's network interface. If omitted, a unique QEMU MAC address is generated.
+- **TAP Mode Specific (Optional):** These are only used if network mode is `tap`.
+    - `BRIDGE_NAME`: Name of the host network bridge to use (default: `br0`).
+    - `QEMU_TAP_IFACE`: Specify a fixed name for the VM's TAP network interface. If omitted, a unique name is generated based on the config filename (e.g., `tap_sys755q800`).
+    - `QEMU_MAC_ADDR`: Specify a fixed MAC address for the VM's network interface. If omitted, a unique QEMU MAC address is generated.
 
 You can create new `.conf` files for different Mac OS versions, machine types, or experimental setups. Ensure the paths point to unique locations if you want separate installations.
 
 Usage: `run68k.sh`
 -------------------
-This script launches the QEMU emulator based on a specified configuration file and sets up TAP networking.
-
-**IMPORTANT:** This script now requires `sudo` privileges to manage network interfaces.
+This script launches the QEMU emulator based on a specified configuration file and sets up networking according to the chosen mode.
 
 **Syntax:**
 `./run68k.sh -C <config_file.conf> [options]`
@@ -71,42 +74,59 @@ This script launches the QEMU emulator based on a specified configuration file a
 - `-c FILE`: Specify a CD-ROM image file (.iso, .img) to attach to the emulator. *Note this is little c not big C.*
 - `-b`: Boot from the attached CD-ROM (requires the `-c` option). Use this for OS installation.
 - `-d TYPE`: Force a specific QEMU display type (`sdl`, `gtk`, `cocoa`). If omitted, it attempts to auto-detect (cocoa for macOS, sdl for Linux/other).
+- `-N TYPE`: Specify network type:
+    - `tap` (Default): Use bridged TAP networking. Requires `sudo` and `qemu-tap-functions.sh`. Enables inter-VM communication but no internet access.
+    - `user`: Use QEMU User Mode networking. No `sudo` needed for networking, provides simple internet access (NAT), but no inter-VM communication.
 - `-?`: Show help message.
 
 **Examples:**
 
-1.  **Run an existing System 7.5.5 installation:**
+1.  **Run an existing System 7.5.5 installation (using default TAP networking):**
     `./run68k.sh -C sys755-q800.conf`
     *(You will likely be prompted for your sudo password for network setup)*
 
-2.  **Boot from a System 7.6.1 install CD to install the OS:**
+2.  **Run an existing System 7.5.5 installation with User Mode networking (for internet access):**
+    `./run68k.sh -C sys755-q800.conf -N user`
+    *(No sudo prompt for networking expected)*
+
+3.  **Boot from a System 7.6.1 install CD to install the OS (using default TAP networking):**
     `./run68k.sh -C sys761-q800.conf -c /path/to/your/Mac_OS_7.6.1.iso -b`
     *(will create `761/hdd_sys761.img`, `761/shared_761.img`, and `761/pram_761_q800.img` if they don't exist)*
     *You will need to use Drive Setup to format the disks on first boot before installing an OS*
 
-Networking Setup (Automatic)
-----------------------------
-The `run68k.sh` script now automatically configures networking to allow communication between multiple running VM instances.
+Networking Setup
+----------------
+The `run68k.sh` script configures networking based on the mode selected with the `-N` option.
 
-**How it Works:**
-1.  **Bridge Creation:** The script ensures a network bridge (default name `br0`, configurable via `BRIDGE_NAME` in `.conf`) exists on the host system. If not, it creates it using `sudo ip link`.
-2.  **TAP Interface Creation:** For each VM instance launched, the script creates a dedicated virtual network interface called a TAP device (e.g., `tap_sys755q800`) using `sudo ip tuntap`. This TAP device is owned by the user running the script.
-3.  **Connecting TAP to Bridge:** The script brings the TAP interface up and connects it to the network bridge using `sudo brctl addif`.
-4.  **QEMU Connection:** QEMU is configured to use this specific TAP device (`-netdev tap,... -net nic,...`) instead of the simpler (but isolated) `-net user`.
-5.  **Cleanup:** When the script exits (normally or via Ctrl+C), it automatically attempts to remove the TAP device from the bridge and delete the TAP device using `sudo`.
+**Why the Choice?**
+- **TAP Mode (`-N tap`, Default):** Best for running multiple VMs that need to communicate directly with each other (e.g., AppleTalk file sharing, network games). It simulates VMs being on the same physical network segment. However, it does *not* automatically grant the VMs internet access; that requires extra manual configuration on the host (bridging to a physical interface, NAT setup).
+- **User Mode (`-N user`):** Best for a single VM that needs simple access to the internet (if the host has it). QEMU handles NAT internally. It's simpler to set up (no `sudo`, no extra host config) but makes direct communication between VMs, or from the host to the VM, difficult.
 
-**Benefits:**
-- VMs connected to the same bridge can communicate directly using protocols like AppleTalk (for classic file sharing, printers) and TCP/IP (if configured).
-- This allows you to run multiple Mac OS VMs simultaneously and have them interact as if they were on the same physical Ethernet network.
-
-**In-VM Configuration:**
-- After launching the VM, you need to configure networking *inside* the emulated Mac OS:
-    - **Control Panels:** Use the `MacTCP` or `TCP/IP` (Open Transport) control panel.
+**TAP Mode (`-N tap`, Default) Details:**
+- **Requires:** `sudo`, `bridge-utils`, `iproute2`, `qemu-tap-functions.sh`.
+- **How it Works:**
+    1.  **Bridge Creation:** Ensures a network bridge (default `br0`) exists on the host (`sudo ip link`).
+    2.  **TAP Interface Creation:** Creates a dedicated TAP device (e.g., `tap_sys755q800`) for the VM (`sudo ip tuntap`).
+    3.  **Connecting TAP to Bridge:** Connects the TAP interface to the bridge (`sudo brctl addif`).
+    4.  **QEMU Connection:** QEMU uses this TAP device (`-netdev tap,... -net nic,...`).
+    5.  **Cleanup:** When the script exits, it automatically removes the TAP device from the bridge and deletes it (`sudo`).
+- **Benefits:** Direct VM-to-VM communication (AppleTalk, TCP/IP).
+- **Limitations:** No internet access for VMs.
+- **In-VM Configuration (TAP Mode):**
+    - **Control Panels:** Use `MacTCP` or `TCP/IP` (Open Transport).
     - **Connection Method:** Select `Ethernet`.
-    - **IP Address:** You can often use `DHCP` if you have a DHCP server running on your host or LAN accessible via the bridge. Otherwise, assign static IP addresses manually within the same subnet for each VM (e.g., `192.168.100.1`, `192.168.100.2`, with subnet mask `255.255.255.0`). Ensure these IPs don't conflict with other devices if your bridge is connected to your main LAN.
-    - **AppleTalk:** Use the `AppleTalk` control panel and ensure it's set to `Active` and connected via `Ethernet`. VMs on the same bridge should then see each other in the Chooser for file sharing.
+    - **IP Address:** Assign static IP addresses via DHCP.
+    - **AppleTalk:** Use the `AppleTalk` control panel (set to `Active`, via `Ethernet`). VMs on the same bridge should see each other in the Chooser.
 
-**Note:** This setup primarily enables VM-to-VM communication. Connecting VMs to your wider LAN or the internet requires additional host configuration (e.g., adding the host's physical interface to the bridge, setting up IP forwarding/NAT on the host) which is beyond the scope of this script's automatic setup.
+**User Mode (`-N user`) Details:**
+- **Requires:** None beyond QEMU itself.
+- **How it Works:** QEMU uses its internal network stack (`-net nic,model=dp83932 -net user`). It creates a virtual DHCP server and NAT router for the VM.
+- **Benefits:** Simple internet access for the VM (if host has it). No `sudo` needed for networking. No host network configuration.
+- **Limitations:** No easy direct communication between multiple VMs or from host to VM.
+- **In-VM Configuration (User Mode):**
+    - **Control Panels:** Use `MacTCP` or `TCP/IP`.
+    - **Connection Method:** Select `Ethernet`.
+    - **IP Address:** Configure using `DHCP Server`. QEMU will assign an IP (usually in the `10.0.2.x` range).
 
 Usage: `mac_disc_mounter.sh` (Linux Only)
 -----------------------------------------
@@ -148,38 +168,40 @@ This script mounts or unmounts the *shared* disk image associated with a specifi
 
 Getting Started / First OS Installation
 ---------------------------------------
-1.  **Install Prerequisites:** Ensure QEMU and `bridge-utils` are installed.
-2.  **Obtain ROM:** Get the correct ROM file (e.g., `800.ROM`) and place it where the `.conf` file expects it (e.g., in the same directory as the scripts, or update the `QEMU_ROM` path in the `.conf` file).
+1.  **Install Prerequisites:** Ensure QEMU is installed. If using TAP networking (default), install `bridge-utils` and ensure `qemu-tap-functions.sh` is present.
+2.  **Obtain ROM:** Get the correct ROM file and place it appropriately.
 3.  **Obtain Install Media:** Get the Mac OS install CD/ISO image.
-4.  **Choose Config:** Select a `.conf` file corresponding to the OS you want to install (e.g., `sys761-q800.conf`).
-5.  **Run Installer:** Execute `run68k.sh` with the `-c` (CD image) and `-b` (boot from CD) flags:
+4.  **Choose Config:** Select a `.conf` file.
+5.  **Run Installer:** Execute `run68k.sh` with the `-c` (CD image) and `-b` (boot from CD) flags. The default TAP networking is usually fine for installation.
     `./run68k.sh -C sys761-q800.conf -c /path/to/your/Mac_OS_7.6.1.iso -b`
-    *(The script will prompt for sudo password, create network interfaces, and create necessary directories/empty disk images if they don't exist)*
-6.  **Install OS:** Inside the QEMU window, follow the standard Mac OS installation procedure. You will need to initialize/format the virtual hard disk (`QEMU_HDD`) using a tool like "Drive Setup" or "Apple HD SC Setup" from the installer before you can install onto it.
-7.  **(Optional) Format Shared Disk:** While the installer is running (or after installation), you can also format the *shared* disk (`QEMU_SHARED_HDD`) using Drive Setup so it's ready for file transfer later. Format it as HFS or HFS+.
-8.  **Shutdown:** Once installation is complete, shut down the emulated Mac.
-9.  **First Boot from HDD:** Run the script *without* the `-c` and `-b` flags to boot from the newly installed OS on the virtual hard disk:
-    `./run68k.sh -C sys761-q800.conf`
-10. **Configure Networking (Inside VM):** Set up MacTCP/TCP/IP and AppleTalk control panels as described in the "Networking Setup" section if you want network connectivity.
-11. **File Transfer:**
-    - Shut down the emulated Mac.
-    - Mount the shared disk on your Linux host: `sudo ./mac_disc_mounter.sh -C sys761-q800.conf`
-    - Copy files to/from the mount point (e.g., `/mnt/mac_shared`).
-    - Unmount the disk: `sudo ./mac_disc_mounter.sh -C sys761-q800.conf -u`
-    - Start the emulator again: `./run68k.sh -C sys761-q800.conf`
+    *(If using TAP mode, the script will prompt for sudo password, create network interfaces, etc.)*
+6.  **Install OS:** Inside QEMU, initialize/format the virtual HDD (`QEMU_HDD`) using "Drive Setup" or similar, then install the OS.
+7.  **(Optional) Format Shared Disk:** Format the `QEMU_SHARED_HDD` as HFS/HFS+ using Drive Setup.
+8.  **Shutdown:** Shut down the emulated Mac.
+9.  **First Boot from HDD:** Run the script *without* `-c` and `-b`. Choose your network mode with `-N` if needed (default is TAP).
+    `./run68k.sh -C sys761-q800.conf` (Boots with TAP networking)
+    `./run68k.sh -C sys755-q800.conf` (Boots with TAP networking)
+
+OR
+    `./run68k.sh -C sys761-q800.conf -N user` (Boots with User networking)
+    `./run68k.sh -C sys755-q800.conf -N user` (Boots with User networking)
+10. **Configure Networking (Inside VM):** Set up MacTCP/TCP/IP and AppleTalk according to the network mode chosen (see "Networking Setup" section).
+11. **File Transfer:** Shut down VM, use `mac_disc_mounter.sh` to mount/unmount shared disk, copy files, restart VM.
 
 Important Notes
 ---------------
-- **ROM Legality:** Remember, you are responsible for legally obtaining any Macintosh ROM files.
-- **Permissions:** `run68k.sh` requires `sudo` for networking. `mac_disc_mounter.sh` also requires `sudo`. Ensure you have write permissions in the directories where disk images will be created by `run68k.sh`.
-- **Shared Disk Formatting:** The shared disk image needs to be formatted *inside* the emulated Mac OS before `mac_disc_mounter.sh` can successfully mount it for read/write access on the host.
-- **VM Shutdown:** Always shut down the QEMU virtual machine cleanly before attempting to mount its shared disk image on the host.
+- **ROM Legality:** You are responsible for legally obtaining Macintosh ROM files.
+- **Permissions:** `run68k.sh` requires `sudo` *when using TAP networking*. `mac_disc_mounter.sh` also requires `sudo`. Ensure write permissions for disk image directories.
+- **Shared Disk Formatting:** Format the shared disk *inside* the VM first.
+- **VM Shutdown:** Always shut down the VM before using `mac_disc_mounter.sh`.
+- **Multiple VMs:** Don't run the same VM config concurrently - you don't want 2 VMs accessing the same disk images at the same time.
 
 Troubleshooting
 ---------------
-- **"ROM file ... not found"**: Verify the `QEMU_ROM` path in your `.conf` file is correct and the ROM file exists at that location.
-- **"Failed to create directory/image"**: Check filesystem permissions for the directories specified in the `.conf` file paths (`QEMU_HDD`, `QEMU_SHARED_HDD`, `QEMU_PRAM`).
-- **Network Errors ("Failed to create bridge/TAP", "Failed to add TAP to bridge")**: Ensure `bridge-utils` is installed. Check `sudo` permissions. Make sure the bridge name (`br0`) or TAP name doesn't conflict with existing interfaces managed outside this script. Check system logs (`dmesg`, `journalctl`) for more details.
-- **VMs Cannot See Each Other:** Verify both VMs are running and connected to the *same* bridge (`br0` by default). Check the MacTCP/TCP/IP settings inside each VM (ensure they are on the same subnet if using static IPs). Check AppleTalk control panel settings (Ethernet, Active).
-- **QEMU display issues**: If the default display (`sdl` or `cocoa`) doesn't work well (e.g., mouse problems), try forcing another type with `-d gtk` (if available) or `-d sdl`. Ensure necessary host libraries (like SDL or GTK development headers) are installed.
-- **Cannot mount shared disk**: Ensure the VM is shut down. Ensure the disk was formatted inside the VM. Try the check (`-c`) or repair (`-r`) options with `mac_disc_mounter.sh`. Check system logs (`dmesg`) for mount errors.
+- **"ROM file ... not found"**: Verify `QEMU_ROM` path in `.conf`.
+- **"Failed to create directory/image"**: Check filesystem permissions.
+- **Network Errors (TAP Mode - "Failed to create bridge/TAP", etc.)**: Ensure `bridge-utils` installed. Check `sudo`. Check for interface name conflicts. Check system logs (`dmesg`, `journalctl`). Ensure `qemu-tap-functions.sh` exists.
+- **VMs Cannot See Each Other:** Ensure you are using TAP mode (`-N tap` or default). Verify both VMs are on the same bridge. Check in-VM IP/AppleTalk settings (see TAP Mode config details). This is expected behavior in User mode (`-N user`).
+- **No Internet Access:** This is expected in TAP mode (`-N tap`) without extra host configuration. If internet access is the priority, try User mode (`-N user`). Verify User mode in-VM config is set to DHCP.
+- **QEMU display issues**: Try forcing display type with `-d`. Ensure host libraries (SDL/GTK) are installed.
+- **Cannot mount shared disk**: Ensure VM is off. Ensure disk was formatted in VM. Try check (`-c`) or repair (`-r`) options. Check `dmesg`.
