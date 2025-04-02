@@ -270,8 +270,23 @@ echo "OS HDD: $QEMU_HDD"
 echo "Shared HDD: $QEMU_SHARED_HDD"
 echo "PRAM: $QEMU_PRAM"
 
-# Prepare the base command (excluding network)
+# Determine boot order flag
+BOOT_ORDER_FLAG=""
+if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
+    echo "Boot order: CD-ROM first ($CD_FILE)"
+    BOOT_ORDER_FLAG="-boot d"
+elif [ "$BOOT_FROM_CD" = true ] && [ -z "$CD_FILE" ]; then
+    echo "Warning: -b specified but no CD image provided with -c. Defaulting to HDD boot."
+    BOOT_ORDER_FLAG="-boot c"
+else
+    echo "Boot order: OS HDD first"
+    BOOT_ORDER_FLAG="-boot c"
+fi
+
+
+# Prepare the base command (including boot order)
 QEMU_CMD_BASE="qemu-system-m68k \
+    $BOOT_ORDER_FLAG \
     -M \"$QEMU_MACHINE\" \
     -m \"$QEMU_RAM\" \
     -bios \"$QEMU_ROM\" \
@@ -288,42 +303,37 @@ fi
 QEMU_NET_ARGS=""
 if [ "$NETWORK_TYPE" == "tap" ]; then
     echo "Network: TAP device '$TAP_DEV_NAME' on bridge '$BRIDGE_NAME', MAC: $MAC_ADDRESS"
-    QEMU_NET_ARGS="-netdev tap,id=net0,ifname=$TAP_DEV_NAME,script=no,downscript=no -net nic,netdev=net0,macaddr=$MAC_ADDRESS"
+    # Use a NIC model known to work well with m68k Mac OS (e.g., dp83932 - SONIC)
+    QEMU_NET_ARGS="-netdev tap,id=net0,ifname=$TAP_DEV_NAME,script=no,downscript=no -net nic,model=dp83932,netdev=net0,macaddr=$MAC_ADDRESS"
 elif [ "$NETWORK_TYPE" == "user" ]; then
     echo "Network: User Mode Networking"
     # Use a common NIC model compatible with classic MacOS networking (e.g., OpenTransport)
     QEMU_NET_ARGS="-net nic,model=dp83932 -net user"
 fi
 
-# Add hard disks and CD-ROM with appropriate boot order
+# Add hard disks and CD-ROM with FIXED SCSI IDs
 QEMU_DRIVE_ARGS=""
-if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
-    echo "Boot order: CD-ROM first ($CD_FILE)"
-    QEMU_DRIVE_ARGS="$QEMU_DRIVE_ARGS \
-    -device scsi-cd,scsi-id=0,drive=cd0 \
-    -drive file=\"$CD_FILE\",format=raw,media=cdrom,if=none,id=cd0 \
-    -device scsi-hd,scsi-id=1,drive=hd0,vendor=\"SEAGATE\",product=\"ST31200N\" \
-    -drive file=\"$QEMU_HDD\",media=disk,format=raw,if=none,id=hd0 \
-    -device scsi-hd,scsi-id=2,drive=hd1,vendor=\"SEAGATE\",product=\"ST3200N\" \
-    -drive file=\"$QEMU_SHARED_HDD\",media=disk,format=raw,if=none,id=hd1"
-else
-    echo "Boot order: OS HDD first"
-    QEMU_DRIVE_ARGS="$QEMU_DRIVE_ARGS \
-    -device scsi-hd,scsi-id=0,drive=hd0,vendor=\"SEAGATE\",product=\"ST31200N\" \
-    -drive file=\"$QEMU_HDD\",media=disk,format=raw,if=none,id=hd0 \
-    -device scsi-hd,scsi-id=1,drive=hd1,vendor=\"SEAGATE\",product=\"ST3200N\" \
+
+# OS HDD (SCSI ID 0)
+QEMU_DRIVE_ARGS="$QEMU_DRIVE_ARGS \
+    -device scsi-hd,scsi-id=0,drive=hd0,vendor=\"QEMU\",product=\"QEMU_OS_DISK\" \
+    -drive file=\"$QEMU_HDD\",media=disk,format=raw,if=none,id=hd0"
+
+# Shared HDD (SCSI ID 1)
+QEMU_DRIVE_ARGS="$QEMU_DRIVE_ARGS \
+    -device scsi-hd,scsi-id=1,drive=hd1,vendor=\"QEMU\",product=\"QEMU_SHARED\" \
     -drive file=\"$QEMU_SHARED_HDD\",media=disk,format=raw,if=none,id=hd1"
 
-    # Add CD-ROM if specified (as SCSI ID 3)
-    if [ -n "$CD_FILE" ]; then
-        echo "CD-ROM: $CD_FILE (as SCSI ID 3)"
-        QEMU_DRIVE_ARGS="$QEMU_DRIVE_ARGS \
-        -device scsi-cd,scsi-id=3,drive=cd0 \
-        -drive file=\"$CD_FILE\",format=raw,media=cdrom,if=none,id=cd0"
-    else
-        echo "No CD-ROM specified"
-    fi
+# CD-ROM (SCSI ID 3) - only if specified
+if [ -n "$CD_FILE" ]; then
+    echo "CD-ROM: $CD_FILE (as SCSI ID 3)"
+    QEMU_DRIVE_ARGS="$QEMU_DRIVE_ARGS \
+    -device scsi-cd,scsi-id=3,drive=cd0 \
+    -drive file=\"$CD_FILE\",format=raw,media=cdrom,if=none,id=cd0"
+else
+    echo "No CD-ROM specified"
 fi
+
 
 echo "Display: $DISPLAY_TYPE"
 echo "--------------------------"
