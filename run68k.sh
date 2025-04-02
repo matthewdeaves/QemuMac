@@ -101,7 +101,7 @@ if [ ! -s "$QEMU_PRAM" ]; then
         fi
     fi
     echo "Creating new PRAM image file: $QEMU_PRAM"
-    dd if=/dev/zero of="$QEMU_PRAM" bs=1k count=8
+    dd if=/dev/zero of="$QEMU_PRAM" bs=256 count=1
     if [ $? -ne 0 ]; then
         echo "Error: Failed to create PRAM image '$QEMU_PRAM'."
         exit 1
