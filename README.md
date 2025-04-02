@@ -3,7 +3,9 @@
 
 Introduction
 ------------
-This project provides a set of scripts to simplify the setup and management of classic Macintosh (m68k architecture) emulation using QEMU. It allows you to define different Mac OS configurations in separate files and easily launch them. Key features include flexible networking options (bridged TAP for inter-VM communication or simple User Mode for internet access) and a utility to share files between your host Linux system and the emulated Mac environment via a shared disk image. See it in use on [YoutTube](https://www.youtube.com/watch?v=YA2fHUXZhas)
+This project provides a set of scripts to simplify the setup and management of classic Macintosh (m68k architecture) emulation using QEMU. It allows you to define different Mac OS configurations in separate files and easily launch them. Key features include flexible networking options (bridged TAP for inter-VM communication or simple User Mode for internet access) and a utility to share files between your host Linux system and the emulated Mac environment via a shared disk image. See it in use on [YouTube](https://www.youtube.com/watch?v=YA2fHUXZhas)
+
+Known bug: the -b flag (or lack of) is not respected when supplying a .ISO as a CD. If a CD is provided the Mac will always try to boot from it.
 
 Purpose
 -------
