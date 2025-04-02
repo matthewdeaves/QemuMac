@@ -34,7 +34,7 @@ Configuration (`.conf` files)
 -----------------------------
 These files define the parameters for a specific emulation instance using shell variable assignments. Key variables include:
 - `CONFIG_NAME`: A descriptive name for the setup.
-- `QEMU_MACHINE`: The QEMU machine type (e.g., `q800`, `mac99`).
+- `QEMU_MACHINE`: The QEMU machine type (e.g., `q800`).
 - `QEMU_RAM`: RAM allocation in Megabytes (MB).
 - `QEMU_ROM`: Path to the required ROM file for the specified machine.
 - `QEMU_HDD`: Path to the primary OS hard disk image file for this configuration.
