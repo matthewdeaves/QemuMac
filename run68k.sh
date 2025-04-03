@@ -8,7 +8,9 @@
 set -o errexit  # Exit immediately if a command exits with a non-zero status.
 set -o nounset  # Treat unset variables as an error when substituting.
 set -o pipefail # Pipelines return status of the last command to exit with non-zero status.
-set -x
+
+# --- Debugging ---
+DEBUG_MODE=false # Will be set to true by -D flag
 
 # --- Configuration variables (will be loaded from .conf file) ---
 CONFIG_NAME=""
@@ -54,6 +56,7 @@ show_help() {
     echo "  -b       Boot from CD-ROM (requires -c option, modifies PRAM)"
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
     echo "  -N TYPE  Specify network type: 'tap' (default), 'user' (NAT), or 'passt' (slirp alternative)"
+    echo "  -D       Enable debug mode (set -x, show PRAM before launch)"
     echo "  -?       Show this help message"
     echo "Networking Notes:"
     echo "  'tap' mode (default): Uses TAP device on a bridge (default: br0)."
@@ -88,16 +91,23 @@ check_command() {
 
 # Parse command-line arguments
 parse_arguments() {
-    while getopts "C:c:bd:N:?" opt; do
+    while getopts "C:c:bd:N:D?" opt; do
         case $opt in
             C) CONFIG_FILE="$OPTARG" ;;
             c) CD_FILE="$OPTARG" ;;
             b) BOOT_FROM_CD=true ;;
             d) DISPLAY_TYPE="$OPTARG" ;;
             N) NETWORK_TYPE="$OPTARG" ;;
+            D) DEBUG_MODE=true ;; # Set debug mode flag
             \?|*) show_help ;;
         esac
     done
+
+    # Enable debugging if the debug flag is set
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "--- DEBUG MODE ENABLED ---"
+        set -x # Enable command tracing
+    fi
 
     # Validate Network Type early
     if [[ "$NETWORK_TYPE" != "tap" && "$NETWORK_TYPE" != "user" && "$NETWORK_TYPE" != "passt" ]]; then
@@ -253,10 +263,10 @@ set_pram_boot_order() {
         byte2='\xdf'
         echo "Info: Setting PRAM to boot from HDD (SCSI ID 0)."
     elif [ "$device_type" == "cdrom" ]; then
-        # Boot from SCSI ID 2 (as per dev PRAM analysis): Value 0xFFDD -> Bytes FF DD
+        # Boot from SCSI ID 3 (as per QEMU args): Value 0xFFDC -> Bytes FF DC
         byte1='\xff'
-        byte2='\xdd'
-        echo "Info: Setting PRAM to boot from CD-ROM (SCSI ID 2)."
+        byte2='\xdc' # <-- CORRECTED VALUE FOR SCSI ID 3
+        echo "Info: Setting PRAM to boot from CD-ROM (SCSI ID 3)."
     else
         echo "Error: Invalid device type '$device_type' passed to set_pram_boot_order." >&2
         exit 1
@@ -270,6 +280,11 @@ set_pram_boot_order() {
     if [ $? -ne 0 ]; then
         echo "Error: Failed to write boot order to PRAM file '$pram_file'." >&2
         exit 1
+    fi
+
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "DEBUG: PRAM bytes at offset 122 after writing:"
+        hexdump -C -s 122 -n 2 "$pram_file"
     fi
 }
 
@@ -456,13 +471,15 @@ run_emulation() {
     echo "Shared HDD: $QEMU_SHARED_HDD"
     echo "PRAM: $QEMU_PRAM"
 
-    # --- DEBUG: Inspect PRAM before launch ---
-    echo "--- Pausing before QEMU launch. Check PRAM now. ---"
-    local pram_path_in_func="$QEMU_PRAM" # Capture variable for clarity
-    echo "Checking PRAM file: $pram_path_in_func"
-    echo "Bytes at offset 122 (should be FF DF for HDD boot):"
-    hexdump -C -s 122 -n 2 "$pram_path_in_func"
-    read -p "Press Enter to continue and launch QEMU..."
+    # --- DEBUG: Inspect PRAM before launch (Conditional) ---
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "--- Pausing before QEMU launch (DEBUG MODE). Check PRAM now. ---"
+        local pram_path_in_func="$QEMU_PRAM" # Capture variable for clarity
+        echo "Checking PRAM file: $pram_path_in_func"
+        echo "Bytes at offset 122 (0x7A):"
+        hexdump -C -s 122 -n 2 "$pram_path_in_func"
+        read -p "Press Enter to continue and launch QEMU..."
+    fi
     # --- END DEBUG ---
 
     # Uncomment the next line if you want to see the full command array before execution
@@ -492,8 +509,9 @@ check_command "qemu-system-m68k" "qemu-system-m68k package" || exit 1
 check_command "qemu-img" "qemu-utils package" || exit 1
 check_command "dd" "coreutils package" || exit 1
 check_command "printf" "coreutils package" || exit 1 # Needed for PRAM writing
+check_command "hexdump" "bsdmainutils package" || exit 1 # Needed for debug mode
 
-parse_arguments "$@"
+parse_arguments "$@" # Parse arguments first to enable debug mode early if requested
 load_configuration
 prepare_disk_images # Ensures PRAM file exists
 
