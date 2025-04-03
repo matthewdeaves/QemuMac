@@ -1,12 +1,14 @@
 #!/bin/bash
 
 # Script to run Mac OS emulation using QEMU with configuration files
-# Supports TAP/Bridge networking and User Mode networking (with optional SMB).
+# Supports TAP/Bridge, User Mode (with optional SMB), and Passt networking.
+# Controls MacOS boot order via PRAM modification.
 
 # --- Strict Mode & Error Handling ---
 set -o errexit  # Exit immediately if a command exits with a non-zero status.
 set -o nounset  # Treat unset variables as an error when substituting.
 set -o pipefail # Pipelines return status of the last command to exit with non-zero status.
+set -x
 
 # --- Configuration variables (will be loaded from .conf file) ---
 CONFIG_NAME=""
@@ -30,7 +32,7 @@ CONFIG_FILE=""
 CD_FILE=""                # Path to CD/ISO image
 BOOT_FROM_CD=false
 DISPLAY_TYPE=""           # Auto-detect later if not specified
-NETWORK_TYPE="tap"        # Default network type ('tap' or 'user')
+NETWORK_TYPE="tap"        # Default network type ('tap', 'user', or 'passt')
 TAP_FUNCTIONS_SCRIPT="./qemu-tap-functions.sh" # Path to TAP functions script
 
 # --- Variables used only in TAP mode ---
@@ -49,9 +51,9 @@ show_help() {
     echo "           and QEMU_USER_SMB_DIR (for User mode SMB share)."
     echo "Options:"
     echo "  -c FILE  Specify CD-ROM image file (if not specified, no CD will be attached)"
-    echo "  -b       Boot from CD-ROM (requires -c option)"
+    echo "  -b       Boot from CD-ROM (requires -c option, modifies PRAM)"
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
-    echo "  -N TYPE  Specify network type: 'tap' (default, bridge-based) or 'user' (simple NAT)"
+    echo "  -N TYPE  Specify network type: 'tap' (default), 'user' (NAT), or 'passt' (slirp alternative)"
     echo "  -?       Show this help message"
     echo "Networking Notes:"
     echo "  'tap' mode (default): Uses TAP device on a bridge (default: br0)."
@@ -64,6 +66,9 @@ show_help() {
     echo "     - Can share a host directory via SMB using QEMU_USER_SMB_DIR in config."
     echo "     - Does NOT easily allow inter-VM communication or host-to-VM connections."
     echo "     - No special privileges or extra packages needed."
+    echo "  'passt' mode: Uses the passt userspace networking backend."
+    echo "     - Alternative to 'user' mode, potentially better performance/features."
+    echo "     - Requires the 'passt' command to be installed on the host (see https://passt.top/)."
     exit 1
 }
 
@@ -72,7 +77,7 @@ show_help() {
 check_command() {
     if ! command -v "$1" &> /dev/null; then
         echo "Error: Command '$1' not found." >&2
-        if [ -n "$2" ]; then
+        if [ -n "${2:-}" ]; then # Use default value if $2 is unset
              echo "Please install it. Suggestion: $2" >&2
         fi
         # Allow the caller to decide if this is fatal
@@ -95,8 +100,8 @@ parse_arguments() {
     done
 
     # Validate Network Type early
-    if [[ "$NETWORK_TYPE" != "tap" && "$NETWORK_TYPE" != "user" ]]; then
-        echo "Error: Invalid network type specified with -N. Use 'tap' or 'user'." >&2
+    if [[ "$NETWORK_TYPE" != "tap" && "$NETWORK_TYPE" != "user" && "$NETWORK_TYPE" != "passt" ]]; then
+        echo "Error: Invalid network type specified with -N. Use 'tap', 'user', or 'passt'." >&2
         show_help
     fi
 }
@@ -146,6 +151,8 @@ load_configuration() {
             echo "Error: Failed to source configuration file '$CONFIG_FILE'." >&2
             exit 1
         fi
+        # Extract config name for potential use (e.g., TAP naming)
+        CONFIG_NAME=$(basename "$CONFIG_FILE" .conf)
     else
         echo "Error: Configuration file not found: $CONFIG_FILE" >&2
         exit 1
@@ -226,6 +233,46 @@ prepare_disk_images() {
     prepare_shared_hdd
 }
 
+# Function to set the boot device SCSI ID in the PRAM file
+# Usage: set_pram_boot_order <device_type> # "hdd" or "cdrom"
+set_pram_boot_order() {
+    local device_type="$1"
+    local pram_file="$QEMU_PRAM"
+    local offset=122 # 0x7A in decimal
+
+    # Ensure PRAM file exists (should have been created by prepare_pram)
+    if [ ! -f "$pram_file" ]; then
+        echo "Error: PRAM file '$pram_file' not found during boot order setting." >&2
+        exit 1
+    fi
+
+    local byte1 byte2
+    if [ "$device_type" == "hdd" ]; then
+        # Boot from SCSI ID 0: Value 0xFFDF -> Bytes FF DF
+        byte1='\xff'
+        byte2='\xdf'
+        echo "Info: Setting PRAM to boot from HDD (SCSI ID 0)."
+    elif [ "$device_type" == "cdrom" ]; then
+        # Boot from SCSI ID 2 (as per dev PRAM analysis): Value 0xFFDD -> Bytes FF DD
+        byte1='\xff'
+        byte2='\xdd'
+        echo "Info: Setting PRAM to boot from CD-ROM (SCSI ID 2)."
+    else
+        echo "Error: Invalid device type '$device_type' passed to set_pram_boot_order." >&2
+        exit 1
+    fi
+
+    # Write the 2 bytes (16 bits) at the specified offset (0x7A = 122)
+    # Using printf for byte representation and dd for precise writing
+    # conv=notrunc prevents truncating the file
+    # status=none suppresses dd output
+    printf "%b%b" "$byte1" "$byte2" | dd of="$pram_file" bs=1 seek="$offset" count=2 conv=notrunc status=none
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to write boot order to PRAM file '$pram_file'." >&2
+        exit 1
+    fi
+}
+
 # Setup TAP networking specifics
 setup_tap_networking() {
     echo "Info: Setting up TAP networking..."
@@ -289,12 +336,23 @@ setup_user_networking() {
     fi
 }
 
+# Setup Passt networking specifics
+setup_passt_networking() {
+    echo "Info: Setting up Passt networking..."
+    check_command "passt" "passt package (see https://passt.top/)" || exit 1
+    echo "Info: Passt networking selected. Ensure 'passt' command is available."
+    # Passt generally doesn't require host-side setup like TAP
+    # No cleanup trap needed
+}
+
 # Setup networking based on selected type
 setup_networking() {
     if [ "$NETWORK_TYPE" == "tap" ]; then
         setup_tap_networking
     elif [ "$NETWORK_TYPE" == "user" ]; then
         setup_user_networking
+    elif [ "$NETWORK_TYPE" == "passt" ]; then
+        setup_passt_networking
     fi
 }
 
@@ -351,45 +409,34 @@ build_qemu_command() {
             "-net" "nic,model=dp83932"
             "-net" "$user_net_opts"
         )
+    elif [ "$NETWORK_TYPE" == "passt" ]; then
+        echo "Network: Passt backend"
+        qemu_args+=(
+            "-netdev" "passt,id=net0" # Add passt options here if needed, e.g., ,ports=...
+            "-net" "nic,model=dp83932,netdev=net0" # Keep using dp83932 unless testing shows issues
+        )
     fi
 
-    # --- Add hard disks and CD-ROM with bootindex ---
+    # --- Add hard disks and CD-ROM ---
+    # Boot order is controlled by PRAM for MacOS, bootindex is ignored by firmware.
 
-    # Determine boot indices based on the -b flag
-    local hdd_bootindex="1" # Default: HDD boots first
-    local cd_bootindex="2"  # Default: CD boots second
-
-    if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
-        echo "Boot order: CD-ROM first (bootindex=1), HDD second (bootindex=2)"
-        hdd_bootindex="2"
-        cd_bootindex="1"
-    elif [ "$BOOT_FROM_CD" = true ] && [ -z "$CD_FILE" ]; then
-        echo "Warning: -b specified but no CD image provided with -c. Defaulting to HDD boot (bootindex=1)." >&2
-        # hdd_bootindex remains 1
-    else
-        echo "Boot order: OS HDD first (bootindex=1)"
-        # hdd_bootindex remains 1
-        # cd_bootindex remains 2 (or higher if CD exists)
-    fi
-
-
-    # OS HDD (SCSI ID 0) - Assign its bootindex
+    # OS HDD (SCSI ID 0)
     qemu_args+=(
-        "-device" "scsi-hd,scsi-id=0,drive=hd0,bootindex=$hdd_bootindex,vendor=QEMU,product=QEMU_OS_DISK"
+        "-device" "scsi-hd,scsi-id=0,drive=hd0,vendor=QEMU,product=QEMU_OS_DISK"
         "-drive" "file=$QEMU_HDD,media=disk,format=raw,if=none,id=hd0"
     )
 
-    # Shared HDD (SCSI ID 1) - No bootindex needed unless you want it bootable
+    # Shared HDD (SCSI ID 1)
     qemu_args+=(
         "-device" "scsi-hd,scsi-id=1,drive=hd1,vendor=QEMU,product=QEMU_SHARED"
         "-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=none,id=hd1"
     )
 
-    # CD-ROM (SCSI ID 3) - Assign its bootindex only if specified
+    # CD-ROM (SCSI ID 3) - Attach if specified
     if [ -n "$CD_FILE" ]; then
-        echo "CD-ROM: $CD_FILE (as SCSI ID 3, bootindex=$cd_bootindex)"
+        echo "CD-ROM: $CD_FILE (as SCSI ID 3)"
         qemu_args+=(
-            "-device" "scsi-cd,scsi-id=3,drive=cd0,bootindex=$cd_bootindex"
+            "-device" "scsi-cd,scsi-id=3,drive=cd0"
             "-drive" "file=$CD_FILE,format=raw,media=cdrom,if=none,id=cd0"
         )
     else
@@ -409,10 +456,20 @@ run_emulation() {
     echo "Shared HDD: $QEMU_SHARED_HDD"
     echo "PRAM: $QEMU_PRAM"
 
+    # --- DEBUG: Inspect PRAM before launch ---
+    echo "--- Pausing before QEMU launch. Check PRAM now. ---"
+    local pram_path_in_func="$QEMU_PRAM" # Capture variable for clarity
+    echo "Checking PRAM file: $pram_path_in_func"
+    echo "Bytes at offset 122 (should be FF DF for HDD boot):"
+    hexdump -C -s 122 -n 2 "$pram_path_in_func"
+    read -p "Press Enter to continue and launch QEMU..."
+    # --- END DEBUG ---
+
     # Uncomment the next line if you want to see the full command array before execution
     # declare -p qemu_args
 
     # Execute QEMU using the array
+    echo "--- Starting QEMU ---" # Added indicator
     qemu-system-m68k "${qemu_args[@]}"
 
     local exit_code=$?
@@ -434,10 +491,24 @@ run_emulation() {
 check_command "qemu-system-m68k" "qemu-system-m68k package" || exit 1
 check_command "qemu-img" "qemu-utils package" || exit 1
 check_command "dd" "coreutils package" || exit 1
+check_command "printf" "coreutils package" || exit 1 # Needed for PRAM writing
 
 parse_arguments "$@"
 load_configuration
-prepare_disk_images
+prepare_disk_images # Ensures PRAM file exists
+
+# --- Set Boot Order in PRAM ---
+if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
+    set_pram_boot_order "cdrom"
+elif [ "$BOOT_FROM_CD" = true ] && [ -z "$CD_FILE" ]; then
+    echo "Warning: -b specified but no CD image provided with -c. Setting PRAM to HDD boot." >&2
+    set_pram_boot_order "hdd"
+else
+    # Default boot is from HDD
+    set_pram_boot_order "hdd"
+fi
+# --- End PRAM Boot Order Setting ---
+
 determine_display_type
 setup_networking
 build_qemu_command
