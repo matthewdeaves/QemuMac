@@ -2,16 +2,43 @@
 # qemu-tap-functions.sh
 # Contains functions for setting up and tearing down TAP networking for QEMU VMs.
 # To be sourced by the main QEMU runner script.
+#
+# This script provides the following functions:
+# - generate_mac: Creates a random MAC address with QEMU's prefix
+# - generate_tap_name: Creates a TAP interface name based on config name
+# - setup_bridge: Creates or ensures a network bridge is up
+# - setup_tap: Creates and configures a TAP interface for a VM
+# - cleanup_tap: Removes a TAP interface when VM exits
+#
+# These functions handle the low-level networking operations needed for
+# TAP-based networking in QEMU, allowing VMs to communicate with each other
+# and potentially with the outside network (if the bridge is configured for it).
 
 # Function to generate a random MAC address if not provided
+# Returns: A MAC address string in the format 52:54:00:XX:XX:XX
+# Usage: MAC_ADDRESS=$(generate_mac)
 generate_mac() {
     local hexchars="0123456789ABCDEF"
-    # QEMU MAC prefix 52:54:00
+    # QEMU MAC prefix 52:54:00 (QEMU's OUI)
     echo "52:54:00:$(for i in {1..6} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/\1:/g' -e 's/:$//')"
+}
+
+# Function to generate TAP device name if not provided in config
+# Takes config file base name as argument
+# Returns: A TAP interface name based on the config name
+# Usage: TAP_DEV_NAME=$(generate_tap_name "config_name")
+generate_tap_name() {
+    local conf_base_name="$1"
+    # Sanitize config file name for use as part of tap name
+    local sanitized_name=$(echo "$conf_base_name" | sed 's/[^a-zA-Z0-9]//g')
+    # Limit length to avoid exceeding interface name limits (IFNAMSIZ is often 16)
+    echo "tap_${sanitized_name:0:10}"
 }
 
 # Function to set up the network bridge
 # Takes bridge name as argument
+# Creates the bridge if it doesn't exist and ensures it's up
+# Usage: setup_bridge "br0"
 setup_bridge() {
     local bridge="$1"
     echo "--- Network Setup (TAP) ---"
@@ -39,6 +66,8 @@ setup_bridge() {
 
 # Function to set up the TAP interface for the VM
 # Takes TAP name, Bridge name, and User as arguments
+# Creates the TAP device, assigns it to the user, and adds it to the bridge
+# Usage: setup_tap "tap_name" "bridge_name" "username"
 setup_tap() {
     local tap_name="$1"
     local bridge_name="$2"
@@ -79,6 +108,9 @@ setup_tap() {
 
 # Function to clean up the TAP interface
 # Takes TAP name and Bridge name as arguments
+# Removes the TAP interface from the bridge and deletes it
+# Called automatically by the trap set in the main script
+# Usage: cleanup_tap "tap_name" "bridge_name"
 cleanup_tap() {
     local tap_name="$1"
     local bridge_name="$2"
@@ -102,19 +134,3 @@ cleanup_tap() {
     fi
     echo "---------------------------"
 }
-
-# --- TAP Specific Variable Generation ---
-# These functions might be called by the main script *if* TAP mode is selected
-# and config values are missing.
-
-# Function to generate TAP device name if not provided in config
-# Takes config file base name as argument
-generate_tap_name() {
-    local conf_base_name="$1"
-    # Sanitize config file name for use as part of tap name
-    local sanitized_name=$(echo "$conf_base_name" | sed 's/[^a-zA-Z0-9]//g')
-    # Limit length to avoid exceeding interface name limits (IFNAMSIZ is often 16)
-    echo "tap_${sanitized_name:0:10}"
-}
-
-# Note: generate_mac is already defined above
