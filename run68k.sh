@@ -3,6 +3,7 @@
 # Script to run Mac OS emulation using QEMU with configuration files
 # Supports TAP/Bridge, User Mode (with optional SMB), and Passt networking.
 # Controls MacOS boot order via PRAM modification.
+# Allows attaching an additional user-specified hard drive.
 
 # --- Strict Mode & Error Handling ---
 set -o errexit  # Exit immediately if a command exits with a non-zero status.
@@ -32,6 +33,7 @@ QEMU_USER_SMB_DIR=""      # Optional: Directory to share via SMB in user mode ne
 # --- Script variables ---
 CONFIG_FILE=""
 CD_FILE=""                # Path to CD/ISO image
+ADDITIONAL_HDD_FILE=""    # Path to the additional HDD image (NEW)
 BOOT_FROM_CD=false
 DISPLAY_TYPE=""           # Auto-detect later if not specified
 NETWORK_TYPE="tap"        # Default network type ('tap', 'user', or 'passt')
@@ -53,6 +55,7 @@ show_help() {
     echo "           and QEMU_USER_SMB_DIR (for User mode SMB share)."
     echo "Options:"
     echo "  -c FILE  Specify CD-ROM image file (if not specified, no CD will be attached)"
+    echo "  -a FILE  Specify an additional hard drive image file (e.g., mydrive.hda or mydrive.img)" # NEW FLAG
     echo "  -b       Boot from CD-ROM (requires -c option, modifies PRAM)"
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
     echo "  -N TYPE  Specify network type: 'tap' (default), 'user' (NAT), or 'passt' (slirp alternative)"
@@ -91,10 +94,11 @@ check_command() {
 
 # Parse command-line arguments
 parse_arguments() {
-    while getopts "C:c:bd:N:D?" opt; do
+    while getopts "C:c:a:bd:N:D?" opt; do # Added 'a:' for the new flag
         case $opt in
             C) CONFIG_FILE="$OPTARG" ;;
             c) CD_FILE="$OPTARG" ;;
+            a) ADDITIONAL_HDD_FILE="$OPTARG" ;; # Store the additional HDD path
             b) BOOT_FROM_CD=true ;;
             d) DISPLAY_TYPE="$OPTARG" ;;
             N) NETWORK_TYPE="$OPTARG" ;;
@@ -236,8 +240,8 @@ prepare_shared_hdd() {
     fi
 }
 
-# Prepare all necessary disk images
-prepare_disk_images() {
+# Prepare all necessary disk images from config
+prepare_config_disk_images() {
     prepare_pram
     prepare_hdd
     prepare_shared_hdd
@@ -434,6 +438,7 @@ build_qemu_command() {
 
     # --- Add hard disks and CD-ROM ---
     # Boot order is controlled by PRAM for MacOS, bootindex is ignored by firmware.
+    # SCSI IDs: 0=OS, 1=Shared, 2=CDROM, 3=Additional HDD
 
     # OS HDD (SCSI ID 0)
     qemu_args+=(
@@ -447,7 +452,7 @@ build_qemu_command() {
         "-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=none,id=hd1"
     )
 
-    # CD-ROM (SCSI ID 3) - Attach if specified
+    # CD-ROM (SCSI ID 2) - Attach if specified
     if [ -n "$CD_FILE" ]; then
         echo "CD-ROM: $CD_FILE (as SCSI ID 2)"
         qemu_args+=(
@@ -456,6 +461,15 @@ build_qemu_command() {
         )
     else
         echo "No CD-ROM specified"
+    fi
+
+    # Additional HDD (SCSI ID 3) - Attach if specified via -a flag (NEW)
+    if [ -n "$ADDITIONAL_HDD_FILE" ]; then
+        echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 3)"
+        qemu_args+=(
+            "-device" "scsi-hd,scsi-id=3,drive=hd_add,vendor=QEMU,product=QEMU_ADD_DISK"
+            "-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=none,id=hd_add" # Use format=raw for .hda/.img
+        )
     fi
 
     echo "Display: $DISPLAY_TYPE"
@@ -469,6 +483,9 @@ run_emulation() {
     echo "Machine: $QEMU_MACHINE, RAM: ${QEMU_RAM}M, ROM: $QEMU_ROM"
     echo "OS HDD: $QEMU_HDD"
     echo "Shared HDD: $QEMU_SHARED_HDD"
+    if [ -n "$ADDITIONAL_HDD_FILE" ]; then # NEW: Log additional HDD
+        echo "Additional HDD: $ADDITIONAL_HDD_FILE"
+    fi
     echo "PRAM: $QEMU_PRAM"
 
     # --- DEBUG: Inspect PRAM before launch (Conditional) ---
@@ -513,7 +530,14 @@ check_command "hexdump" "bsdmainutils package" || exit 1 # Needed for debug mode
 
 parse_arguments "$@" # Parse arguments first to enable debug mode early if requested
 load_configuration
-prepare_disk_images # Ensures PRAM file exists
+
+# NEW: Check if the additional HDD file exists if specified
+if [ -n "$ADDITIONAL_HDD_FILE" ] && [ ! -f "$ADDITIONAL_HDD_FILE" ]; then
+    echo "Error: Additional hard drive file specified with -a not found: $ADDITIONAL_HDD_FILE" >&2
+    exit 1
+fi
+
+prepare_config_disk_images # Ensures PRAM file exists, prepares config disks
 
 # --- Set Boot Order in PRAM ---
 if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
