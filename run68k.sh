@@ -442,13 +442,13 @@ build_qemu_command() {
 
     # OS HDD (SCSI ID 0)
     qemu_args+=(
-        "-device" "scsi-hd,scsi-id=0,drive=hd0,vendor=QEMU,product=QEMU_OS_DISK"
+        "-device" "scsi-hd,scsi-id=0,drive=hd0,vendor=SEAGATE,product=QEMU_OS_DISK"
         "-drive" "file=$QEMU_HDD,media=disk,format=raw,if=none,id=hd0"
     )
 
     # Shared HDD (SCSI ID 1)
     qemu_args+=(
-        "-device" "scsi-hd,scsi-id=1,drive=hd1,vendor=QEMU,product=QEMU_SHARED"
+        "-device" "scsi-hd,scsi-id=1,drive=hd1,vendor=SEAGATE,product=QEMU_SHARED"
         "-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=none,id=hd1"
     )
 
@@ -467,7 +467,7 @@ build_qemu_command() {
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
         echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 3)"
         qemu_args+=(
-            "-device" "scsi-hd,scsi-id=3,drive=hd_add,vendor=QEMU,product=QEMU_ADD_DISK"
+            "-device" "scsi-hd,scsi-id=3,drive=hd_add,vendor=SEAGATE,product=QEMU_ADD_DISK"
             "-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=none,id=hd_add" # Use format=raw for .hda/.img
         )
     fi
