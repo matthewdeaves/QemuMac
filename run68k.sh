@@ -33,7 +33,7 @@ QEMU_USER_SMB_DIR=""      # Optional: Directory to share via SMB in user mode ne
 # --- Script variables ---
 CONFIG_FILE=""
 CD_FILE=""                # Path to CD/ISO image
-ADDITIONAL_HDD_FILE=""    # Path to the additional HDD image (NEW)
+ADDITIONAL_HDD_FILE=""    # Path to the additional HDD image
 BOOT_FROM_CD=false
 DISPLAY_TYPE=""           # Auto-detect later if not specified
 NETWORK_TYPE="tap"        # Default network type ('tap', 'user', or 'passt')
@@ -55,7 +55,7 @@ show_help() {
     echo "           and QEMU_USER_SMB_DIR (for User mode SMB share)."
     echo "Options:"
     echo "  -c FILE  Specify CD-ROM image file (if not specified, no CD will be attached)"
-    echo "  -a FILE  Specify an additional hard drive image file (e.g., mydrive.hda or mydrive.img)" # NEW FLAG
+    echo "  -a FILE  Specify an additional hard drive image file (e.g., mydrive.hda or mydrive.img)"
     echo "  -b       Boot from CD-ROM (requires -c option, modifies PRAM)"
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
     echo "  -N TYPE  Specify network type: 'tap' (default), 'user' (NAT), or 'passt' (slirp alternative)"
@@ -94,7 +94,7 @@ check_command() {
 
 # Parse command-line arguments
 parse_arguments() {
-    while getopts "C:c:a:bd:N:D?" opt; do # Added 'a:' for the new flag
+    while getopts "C:c:a:bd:N:D?" opt; do
         case $opt in
             C) CONFIG_FILE="$OPTARG" ;;
             c) CD_FILE="$OPTARG" ;;
@@ -463,7 +463,7 @@ build_qemu_command() {
         echo "No CD-ROM specified"
     fi
 
-    # Additional HDD (SCSI ID 3) - Attach if specified via -a flag (NEW)
+    # Additional HDD (SCSI ID 3) - Attach if specified via -a flag
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
         echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 3)"
         qemu_args+=(
@@ -483,7 +483,7 @@ run_emulation() {
     echo "Machine: $QEMU_MACHINE, RAM: ${QEMU_RAM}M, ROM: $QEMU_ROM"
     echo "OS HDD: $QEMU_HDD"
     echo "Shared HDD: $QEMU_SHARED_HDD"
-    if [ -n "$ADDITIONAL_HDD_FILE" ]; then # NEW: Log additional HDD
+    if [ -n "$ADDITIONAL_HDD_FILE" ]; then
         echo "Additional HDD: $ADDITIONAL_HDD_FILE"
     fi
     echo "PRAM: $QEMU_PRAM"
@@ -531,7 +531,7 @@ check_command "hexdump" "bsdmainutils package" || exit 1 # Needed for debug mode
 parse_arguments "$@" # Parse arguments first to enable debug mode early if requested
 load_configuration
 
-# NEW: Check if the additional HDD file exists if specified
+# Check if the additional HDD file exists if specified
 if [ -n "$ADDITIONAL_HDD_FILE" ] && [ ! -f "$ADDITIONAL_HDD_FILE" ]; then
     echo "Error: Additional hard drive file specified with -a not found: $ADDITIONAL_HDD_FILE" >&2
     exit 1
