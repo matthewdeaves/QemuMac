@@ -1,0 +1,192 @@
+#!/bin/bash
+
+#######################################
+# QEMU Networking Management Module
+# Handles setup and configuration of different networking modes
+#######################################
+
+# Source shared utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=qemu-utils.sh
+source "$SCRIPT_DIR/qemu-utils.sh"
+
+# --- Network Setup Functions ---
+
+#######################################
+# Setup TAP networking with enhanced error handling
+# Arguments:
+#   None
+# Globals:
+#   TAP_FUNCTIONS_SCRIPT, BRIDGE_NAME, QEMU_TAP_IFACE, QEMU_MAC_ADDR
+#   CONFIG_NAME, TAP_DEV_NAME, MAC_ADDRESS
+# Returns:
+#   None
+# Exits:
+#   1 if TAP setup fails
+#######################################
+setup_tap_networking() {
+    info_log "Setting up TAP networking..."
+    
+    # Check for required TAP functions script
+    validate_file_exists "$TAP_FUNCTIONS_SCRIPT" "TAP functions script" || exit 1
+    
+    # Source the functions into the current script's environment
+    # shellcheck source=qemu-tap-functions.sh
+    source "$TAP_FUNCTIONS_SCRIPT"
+    check_exit_status $? "Failed to source TAP functions script '$TAP_FUNCTIONS_SCRIPT'"
+    
+    # Check for commands required ONLY for TAP mode
+    check_command "ip" "iproute2" || exit 1
+    check_command "brctl" "bridge-utils" || exit 1
+    check_command "sudo" "sudo" || exit 1
+    
+    # Generate TAP device name if not specified in config
+    if [ -z "${QEMU_TAP_IFACE:-}" ]; then
+        TAP_DEV_NAME=$(generate_tap_name "$CONFIG_NAME")
+        info_log "QEMU_TAP_IFACE not set in config, generated TAP name: $TAP_DEV_NAME"
+    else
+        TAP_DEV_NAME="$QEMU_TAP_IFACE"
+        info_log "Using TAP interface name from config: $TAP_DEV_NAME"
+    fi
+    
+    # Generate MAC address if not specified
+    if [ -z "${QEMU_MAC_ADDR:-}" ]; then
+        MAC_ADDRESS=$(generate_mac_address)
+        info_log "QEMU_MAC_ADDR not set in config, generated MAC: $MAC_ADDRESS"
+    else
+        MAC_ADDRESS="$QEMU_MAC_ADDR"
+        info_log "Using MAC address from config: $MAC_ADDRESS"
+    fi
+    
+    # Setup bridge first
+    setup_bridge "$BRIDGE_NAME"
+    
+    # Setup TAP interface for this VM
+    setup_tap "$TAP_DEV_NAME" "$BRIDGE_NAME" "$(whoami)"
+    
+    # Set trap to clean up TAP interface on exit
+    # shellcheck disable=SC2064
+    trap "cleanup_tap '$TAP_DEV_NAME' '$BRIDGE_NAME'" EXIT SIGINT SIGTERM
+    info_log "TAP networking enabled. Cleanup trap set."
+}
+
+#######################################
+# Setup User Mode networking
+# Arguments:
+#   None
+# Globals:
+#   QEMU_USER_SMB_DIR
+# Returns:
+#   None
+#######################################
+setup_user_networking() {
+    info_log "User Mode networking enabled. No host-side setup or cleanup needed."
+    
+    if [ -n "${QEMU_USER_SMB_DIR:-}" ]; then
+        if [ -d "$QEMU_USER_SMB_DIR" ]; then
+            info_log "User mode SMB share configured for directory: $QEMU_USER_SMB_DIR"
+        else
+            warning_log "QEMU_USER_SMB_DIR specified ('$QEMU_USER_SMB_DIR') but directory does not exist. SMB share will likely fail."
+        fi
+    fi
+}
+
+#######################################
+# Setup Passt networking
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if passt command not found
+#######################################
+setup_passt_networking() {
+    info_log "Setting up Passt networking..."
+    check_command "passt" "passt package (see https://passt.top/)" || exit 1
+    info_log "Passt networking selected. Ensure 'passt' command is available."
+    # Passt generally doesn't require host-side setup like TAP
+    # No cleanup trap needed
+}
+
+#######################################
+# Setup networking based on selected type
+# Arguments:
+#   network_type: Type of networking (tap, user, passt)
+# Globals:
+#   Various networking globals depending on type
+# Returns:
+#   None
+# Exits:
+#   1 if networking setup fails
+#######################################
+setup_networking() {
+    local network_type="$1"
+    
+    # Validate network type
+    case "$network_type" in
+        "tap")
+            setup_tap_networking
+            ;;
+        "user")
+            setup_user_networking
+            ;;
+        "passt")
+            setup_passt_networking
+            ;;
+        *)
+            echo "Error: Invalid network type '$network_type'. Supported types: tap, user, passt" >&2
+            exit 1
+            ;;
+    esac
+}
+
+#######################################
+# Build network arguments for QEMU command
+# Arguments:
+#   network_type: Type of networking (tap, user, passt)
+#   qemu_args_var: Name of array variable to append to
+# Globals:
+#   TAP_DEV_NAME, MAC_ADDRESS, QEMU_USER_SMB_DIR, BRIDGE_NAME
+# Returns:
+#   None (modifies array via nameref)
+#######################################
+build_network_args() {
+    local network_type="$1"
+    local -n qemu_args_ref=$2
+    
+    case "$network_type" in
+        "tap")
+            echo "Network: TAP device '$TAP_DEV_NAME' on bridge '$BRIDGE_NAME', MAC: $MAC_ADDRESS"
+            qemu_args_ref+=(
+                "-netdev" "tap,id=net0,ifname=$TAP_DEV_NAME,script=no,downscript=no"
+                "-net" "nic,model=dp83932,netdev=net0,macaddr=$MAC_ADDRESS"
+            )
+            ;;
+        "user")
+            echo "Network: User Mode Networking"
+            local user_net_opts="user"
+            if [ -n "${QEMU_USER_SMB_DIR:-}" ] && [ -d "$QEMU_USER_SMB_DIR" ]; then
+                user_net_opts+=",smb=$QEMU_USER_SMB_DIR"
+            elif [ -n "${QEMU_USER_SMB_DIR:-}" ]; then
+                warning_log "SMB directory '$QEMU_USER_SMB_DIR' not found, skipping SMB share."
+            fi
+            qemu_args_ref+=(
+                "-net" "nic,model=dp83932"
+                "-net" "$user_net_opts"
+            )
+            ;;
+        "passt")
+            echo "Network: Passt backend"
+            qemu_args_ref+=(
+                "-netdev" "passt,id=net0"
+                "-net" "nic,model=dp83932,netdev=net0"
+            )
+            ;;
+        *)
+            echo "Error: Unknown network type '$network_type' in build_network_args" >&2
+            exit 1
+            ;;
+    esac
+}
