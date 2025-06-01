@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #######################################
 # QEMU Mac OS Emulation Runner
@@ -48,7 +48,12 @@ CD_FILE=""
 ADDITIONAL_HDD_FILE=""
 BOOT_FROM_CD=false
 DISPLAY_TYPE=""
-NETWORK_TYPE="tap"
+# Auto-detect network type based on OS (TAP requires Linux, User mode for macOS)
+if [[ "$(uname)" == "Darwin" ]]; then
+    NETWORK_TYPE="user"  # Default to user mode on macOS (TAP requires Linux tools)
+else
+    NETWORK_TYPE="tap"   # Default to TAP on Linux
+fi
 DEBUG_MODE=false
 
 # --- Variables used only in TAP mode ---
@@ -78,20 +83,21 @@ show_help() {
     echo "  -a FILE  Specify an additional hard drive image file (e.g., mydrive.hda or mydrive.img)"
     echo "  -b       Boot from CD-ROM (requires -c option, modifies PRAM)"
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
-    echo "  -N TYPE  Specify network type: 'tap' (default), 'user' (NAT), or 'passt' (slirp alternative)"
+    echo "  -N TYPE  Specify network type: 'tap' (Linux default), 'user' (macOS default, NAT), or 'passt' (slirp alternative)"
     echo "  -D       Enable debug mode (set -x, show PRAM before launch)"
     echo "  -?       Show this help message"
     echo "Networking Notes:"
-    echo "  'tap' mode (default): Uses TAP device on a bridge (default: $DEFAULT_BRIDGE_NAME)."
+    echo "  'tap' mode (Linux default): Uses TAP device on a bridge (default: $DEFAULT_BRIDGE_NAME)."
     echo "     - Enables inter-VM communication on the same bridge."
     echo "     - Requires '$TAP_FUNCTIONS_SCRIPT'."
     echo "     - Requires 'bridge-utils', 'iproute2', and sudo privileges."
     echo "     - Does NOT automatically provide internet access to VMs (requires extra host config)."
-    echo "  'user' mode: Uses QEMU's built-in User Mode Networking."
+    echo "  'user' mode (macOS default): Uses QEMU's built-in User Mode Networking."
     echo "     - Provides simple internet access via NAT (if host has it)."
     echo "     - Can share a host directory via SMB using QEMU_USER_SMB_DIR in config."
     echo "     - Does NOT easily allow inter-VM communication or host-to-VM connections."
     echo "     - No special privileges or extra packages needed."
+    echo "     - Recommended for macOS as TAP mode requires Linux-specific tools."
     echo "  'passt' mode: Uses the passt userspace networking backend."
     echo "     - Alternative to 'user' mode, potentially better performance/features."
     echo "     - Requires the 'passt' command to be installed on the host (see https://passt.top/)."

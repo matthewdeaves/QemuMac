@@ -27,11 +27,12 @@ This project provides a modular set of shell scripts to simplify the setup and m
 
 ### Running Mac OS Emulation
 ```bash
-# Run existing Mac OS installation (TAP networking, default)
+# Run existing Mac OS installation (auto-detects networking: TAP on Linux, User on macOS)
 ./run68k.sh -C sys755-q800.conf
 
-# Run with User Mode networking (for internet access)  
-./run68k.sh -C sys755-q800.conf -N user
+# Run with specific networking mode
+./run68k.sh -C sys755-q800.conf -N user    # User Mode (internet access, macOS default)
+./run68k.sh -C sys755-q800.conf -N tap     # TAP Mode (VM-to-VM, Linux default)
 
 # Boot from CD/ISO for OS installation
 ./run68k.sh -C sys761-q800.conf -c /path/to/Mac_OS.iso -b
@@ -41,6 +42,17 @@ This project provides a modular set of shell scripts to simplify the setup and m
 
 # Enable debug mode with detailed logging
 ./run68k.sh -C sys755-q800.conf -D
+```
+
+### Platform-Specific Notes
+```bash
+# macOS (Apple Silicon/Intel) - requires modern bash and uses User Mode by default
+brew install qemu bash  # Install dependencies first
+./run68k.sh -C sys755-q800.conf  # Auto-uses User Mode networking
+
+# Linux - uses TAP networking by default
+sudo apt install qemu-system-m68k bridge-utils  # Install dependencies first  
+./run68k.sh -C sys755-q800.conf  # Auto-uses TAP networking
 ```
 
 ### File Sharing via Shared Disk
@@ -81,9 +93,13 @@ Each `.conf` file defines a complete Mac OS emulation setup with schema validati
 - `BRIDGE_NAME`, `QEMU_TAP_IFACE`, `QEMU_MAC_ADDR`, `QEMU_USER_SMB_DIR`
 
 ### Networking Modes
-- **TAP Mode (`-N tap`, default)**: Bridged networking for VM-to-VM communication, requires sudo
-- **User Mode (`-N user`)**: NAT networking for internet access, no sudo required
+- **TAP Mode (`-N tap`, Linux default)**: Bridged networking for VM-to-VM communication, requires sudo and Linux-specific tools
+- **User Mode (`-N user`, macOS default)**: NAT networking for internet access, no sudo required, works on all platforms
 - **Passt Mode (`-N passt`)**: Modern user-space networking (requires passt command)
+
+**Platform Defaults:**
+- **Linux**: TAP Mode (supports all networking tools)
+- **macOS**: User Mode (TAP requires Linux-specific iproute2/bridge-utils)
 
 ### File Structure Convention
 Config files create subdirectories containing:

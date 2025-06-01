@@ -47,17 +47,18 @@ This project provides a robust framework for classic Mac emulation with modern c
 ✅ **Auto-Detection**: Smart defaults for display types and network interfaces  
 ✅ **Version Checking**: QEMU compatibility validation and warnings  
 ✅ **Package Management**: Automatic installation of required dependencies  
-✅ **Cross-Platform**: Designed for Linux, tested on Ubuntu, works on other Unix-like systems  
+✅ **Cross-Platform**: Designed for Linux, tested on Ubuntu, works on macOS (including Apple Silicon)  
 
 ## Quick Start
 
+### Linux (Ubuntu/Debian)
 ```bash
 # 1. Install QEMU
 sudo apt update && sudo apt install qemu-system-m68k bridge-utils
 
 # 2. Place your ROM file (e.g., 800.ROM) in the project directory
 
-# 3. Run a Mac OS installation
+# 3. Run a Mac OS installation (uses TAP networking by default)
 ./run68k.sh -C sys755-q800.conf -c /path/to/Mac_OS.iso -b
 
 # 4. After installation, run normally
@@ -67,31 +68,59 @@ sudo apt update && sudo apt install qemu-system-m68k bridge-utils
 sudo ./mac_disc_mounter.sh -C sys755-q800.conf
 ```
 
+### macOS (Intel/Apple Silicon)
+```bash
+# 1. Install QEMU and modern bash
+brew install qemu bash
+
+# 2. Place your ROM file (e.g., 800.ROM) in the project directory  
+
+# 3. Run a Mac OS installation (uses User Mode networking by default)
+./run68k.sh -C sys755-q800.conf -c /path/to/Mac_OS.iso -b
+
+# 4. After installation, run normally (auto-detects User Mode on macOS)
+./run68k.sh -C sys755-q800.conf
+
+# 5. Share files via shared disk (format as HFS/HFS+ in Mac OS first)
+# Files can be accessed directly from host at: ./761/shared_761.img
+```
+
 ## Prerequisites
 
 ### Required Software
 
 1. **QEMU (minimum version 4.0)**
    ```bash
-   # Debian/Ubuntu
+   # Linux (Debian/Ubuntu)
    sudo apt update && sudo apt install qemu-system-m68k qemu-utils
    
-   # Fedora/RHEL
+   # Linux (Fedora/RHEL)
    sudo dnf install qemu-system-m68k qemu-img
+   
+   # macOS (Homebrew)
+   brew install qemu
    ```
 
-2. **Networking Utilities (for TAP mode)**
+2. **Modern Bash (macOS only)**
    ```bash
-   # Debian/Ubuntu
+   # macOS ships with bash 3.2, but scripts require bash 4.0+ for associative arrays
+   brew install bash
+   ```
+
+3. **Networking Utilities (Linux TAP mode only)**
+   ```bash
+   # Linux (Debian/Ubuntu)
    sudo apt install bridge-utils iproute2
    
-   # Usually pre-installed, but required for TAP networking
+   # Note: TAP networking not available on macOS - uses User Mode automatically
    ```
 
-3. **HFS/HFS+ Tools (for file sharing)**
+4. **HFS/HFS+ Tools (Linux file sharing only)**
    ```bash
-   # Automatically installed by mac_disc_mounter.sh when needed
+   # Linux: Automatically installed by mac_disc_mounter.sh when needed
    sudo apt install hfsprogs hfsplus
+   
+   # macOS: Not needed - shared disk can be accessed directly as raw image
    ```
 
 ### Required Files (Not Included)
@@ -276,9 +305,10 @@ The primary script for launching Mac emulation with comprehensive options:
 
 The networking system supports three distinct modes, each optimized for different use cases:
 
-### TAP Mode (Default) - VM-to-VM Communication
+### TAP Mode (Linux Default) - VM-to-VM Communication
 
-**Best for**: Multiple VMs that need to communicate directly (AppleTalk, network games, file sharing)
+**Best for**: Multiple VMs that need to communicate directly (AppleTalk, network games, file sharing)  
+**Note**: Linux only - requires Linux-specific networking tools
 
 ```bash
 ./run68k.sh -C sys755-q800.conf -N tap
@@ -314,9 +344,10 @@ The networking system supports three distinct modes, each optimized for differen
 - ❌ Requires sudo privileges
 - ❌ More complex setup
 
-### User Mode - Internet Access
+### User Mode - Internet Access (macOS Default)
 
-**Best for**: Single VM that needs internet access, simple setups, no admin privileges
+**Best for**: Single VM that needs internet access, simple setups, no admin privileges  
+**Note**: Default on macOS where TAP mode requires Linux-specific tools
 
 ```bash
 ./run68k.sh -C sys755-q800.conf -N user
