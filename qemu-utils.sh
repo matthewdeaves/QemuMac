@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #######################################
 # QEMU Mac Emulation Shared Utilities
@@ -484,7 +484,7 @@ check_qemu_version() {
         return 1
     fi
     
-    current_version=$(qemu-system-m68k --version | grep -oP 'version \K[0-9.]+' | head -n1)
+    current_version=$(qemu-system-m68k --version | sed -n 's/.*version \([0-9.]*\).*/\1/p' | head -n1)
     
     if [ -z "$current_version" ]; then
         warning_log "Could not determine QEMU version"
