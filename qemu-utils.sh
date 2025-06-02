@@ -15,6 +15,9 @@ if [ "${QEMU_UTILS_INITIALIZED:-false}" != true ]; then
     readonly DEFAULT_SHARED_HDD_SIZE="200M"
     readonly DEFAULT_BRIDGE_NAME="br0"
     readonly DEFAULT_MOUNT_POINT="/mnt/mac_shared"
+    readonly DEFAULT_AUDIO_BACKEND="pa"
+    readonly DEFAULT_AUDIO_LATENCY="50000"
+    readonly DEFAULT_ASC_MODE="easc"
     readonly SUPPORTED_FILESYSTEMS=("hfs" "hfsplus")
     readonly QEMU_MAC_PREFIX="52:54:00"
 fi
@@ -167,6 +170,13 @@ declare -A OPTIONAL_CONFIG_VARS=(
     ["QEMU_TAP_IFACE"]="TAP interface name"
     ["QEMU_MAC_ADDR"]="MAC address"
     ["QEMU_USER_SMB_DIR"]="SMB share directory for user mode"
+    ["QEMU_AUDIO_BACKEND"]="Audio backend (pa, alsa, sdl, none)"
+    ["QEMU_AUDIO_LATENCY"]="Audio latency in microseconds"
+    ["QEMU_ASC_MODE"]="Apple Sound Chip mode (easc or asc)"
+    ["QEMU_CPU_MODEL"]="Explicit CPU model (m68000-m68060)"
+    ["QEMU_TCG_THREAD_MODE"]="TCG threading mode (single or multi)"
+    ["QEMU_TB_SIZE"]="Translation block cache size"
+    ["QEMU_MEMORY_BACKEND"]="Memory backend type (ram, file, memfd)"
 )
 
 #######################################
@@ -245,6 +255,177 @@ validate_config_filename() {
         echo "Error: Invalid config filename format: $config_filename" >&2
         echo "Config files must contain only alphanumeric characters, dots, dashes, underscores and end with .conf" >&2
         return 1
+    fi
+    
+    return 0
+}
+
+#######################################
+# Validate audio backend configuration
+# Arguments:
+#   audio_backend: Audio backend to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_audio_backend() {
+    local audio_backend="$1"
+    local valid_backends=("pa" "alsa" "sdl" "oss" "none" "wav" "spice" "dbus" "pipewire")
+    
+    if [ -z "$audio_backend" ]; then
+        return 0  # Empty is valid (will use default)
+    fi
+    
+    for backend in "${valid_backends[@]}"; do
+        if [ "$audio_backend" = "$backend" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid audio backend '$audio_backend'" >&2
+    echo "Valid backends: ${valid_backends[*]}" >&2
+    return 1
+}
+
+#######################################
+# Validate ASC mode configuration
+# Arguments:
+#   asc_mode: ASC mode to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_asc_mode() {
+    local asc_mode="$1"
+    local valid_modes=("easc" "asc")
+    
+    if [ -z "$asc_mode" ]; then
+        return 0  # Empty is valid (will use default)
+    fi
+    
+    for mode in "${valid_modes[@]}"; do
+        if [ "$asc_mode" = "$mode" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid ASC mode '$asc_mode'" >&2
+    echo "Valid modes: ${valid_modes[*]}" >&2
+    return 1
+}
+
+#######################################
+# Validate CPU model for m68k emulation
+# Arguments:
+#   cpu_model: CPU model to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_cpu_model() {
+    local cpu_model="$1"
+    local valid_models=("m68000" "m68010" "m68020" "m68030" "m68040" "m68060")
+    
+    if [ -z "$cpu_model" ]; then
+        return 0  # Empty is valid (will use QEMU default)
+    fi
+    
+    for model in "${valid_models[@]}"; do
+        if [ "$cpu_model" = "$model" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid CPU model '$cpu_model'" >&2
+    echo "Valid m68k CPU models: ${valid_models[*]}" >&2
+    return 1
+}
+
+#######################################
+# Validate TCG thread mode
+# Arguments:
+#   thread_mode: TCG threading mode to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_tcg_thread_mode() {
+    local thread_mode="$1"
+    local valid_modes=("single" "multi")
+    
+    if [ -z "$thread_mode" ]; then
+        return 0  # Empty is valid (will use QEMU default)
+    fi
+    
+    for mode in "${valid_modes[@]}"; do
+        if [ "$thread_mode" = "$mode" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid TCG thread mode '$thread_mode'" >&2
+    echo "Valid modes: ${valid_modes[*]}" >&2
+    return 1
+}
+
+#######################################
+# Validate memory backend type
+# Arguments:
+#   backend_type: Memory backend type to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_memory_backend() {
+    local backend_type="$1"
+    local valid_backends=("ram" "file" "memfd")
+    
+    if [ -z "$backend_type" ]; then
+        return 0  # Empty is valid (will use QEMU default)
+    fi
+    
+    for backend in "${valid_backends[@]}"; do
+        if [ "$backend_type" = "$backend" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid memory backend type '$backend_type'" >&2
+    echo "Valid backends: ${valid_backends[*]}" >&2
+    return 1
+}
+
+#######################################
+# Validate translation block cache size
+# Arguments:
+#   tb_size: Translation block cache size to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_tb_size() {
+    local tb_size="$1"
+    
+    if [ -z "$tb_size" ]; then
+        return 0  # Empty is valid (will use QEMU default)
+    fi
+    
+    # Check if it's a positive integer
+    if ! [[ "$tb_size" =~ ^[0-9]+$ ]] || [ "$tb_size" -le 0 ]; then
+        echo "Error: Invalid translation block cache size '$tb_size'" >&2
+        echo "Must be a positive integer (recommended: 64-1024)" >&2
+        return 1
+    fi
+    
+    # Warn for unusual values
+    if [ "$tb_size" -lt 64 ] || [ "$tb_size" -gt 1024 ]; then
+        warning_log "TB cache size '$tb_size' is outside recommended range (64-1024)"
     fi
     
     return 0
@@ -372,6 +553,159 @@ install_packages() {
         echo "Required packages installed successfully."
     else
         echo "All required packages are already installed."
+    fi
+}
+
+#######################################
+# Install all QEMU Mac emulation dependencies
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails or unsupported system
+#######################################
+install_qemu_dependencies() {
+    echo "Installing QEMU Mac emulation dependencies..."
+    
+    # Detect package manager and install accordingly
+    if command -v apt-get &> /dev/null; then
+        echo "Detected Debian/Ubuntu system (apt)"
+        local core_packages=(
+            "qemu-system-m68k"      # QEMU m68k emulation
+            "qemu-utils"            # QEMU utilities (qemu-img, etc.)
+            "coreutils"             # Core utilities (dd, printf, etc.)
+            "bsdmainutils"          # BSD utilities (hexdump, etc.)
+        )
+        
+        local networking_packages=(
+            "bridge-utils"          # Bridge utilities (brctl)
+            "iproute2"              # IP route utilities
+            "passt"                 # Modern userspace networking
+        )
+        
+        local filesystem_packages=(
+            "hfsprogs"              # HFS+ filesystem support
+            "hfsplus"               # Additional HFS+ tools
+        )
+        
+        echo "Installing core QEMU packages..."
+        install_packages "${core_packages[@]}"
+        
+        echo "Installing networking packages..."
+        install_packages "${networking_packages[@]}"
+        
+        echo "Installing filesystem packages..."
+        install_packages "${filesystem_packages[@]}"
+        
+    elif command -v brew &> /dev/null; then
+        echo "Detected macOS system (Homebrew)"
+        local brew_packages=(
+            "qemu"                  # QEMU (includes m68k support)
+            "bash"                  # Modern bash (macOS default is old)
+        )
+        
+        echo "Installing packages via Homebrew..."
+        for package in "${brew_packages[@]}"; do
+            if ! brew list "$package" &> /dev/null; then
+                echo "Installing $package..."
+                brew install "$package" || {
+                    echo "Warning: Failed to install $package via Homebrew" >&2
+                }
+            else
+                echo "$package is already installed"
+            fi
+        done
+        
+        echo ""
+        echo "macOS Networking Notes:"
+        echo "  - TAP networking requires Linux-specific tools and is not available on macOS"
+        echo "  - Passt networking is Linux-only and not available via Homebrew"
+        echo "  - Use User Mode networking (-N user) for internet access on macOS"
+        echo "  - Bridge utilities and iproute2 are Linux-specific"
+        echo ""
+        echo "Recommended network mode for macOS: ./run68k.sh -C config.conf -N user"
+        
+    elif command -v dnf &> /dev/null; then
+        echo "Detected Fedora/RHEL system (dnf)"
+        local fedora_packages=(
+            "qemu-system-m68k"
+            "qemu-img"
+            "bridge-utils"
+            "iproute"
+            "passt"
+            "hfsprogs"
+        )
+        
+        echo "Installing packages via dnf..."
+        sudo dnf install -y "${fedora_packages[@]}" || {
+            echo "Error: Failed to install packages via dnf" >&2
+            return 1
+        }
+        
+    else
+        echo "Error: Unsupported package manager. Please manually install:" >&2
+        echo "  - qemu-system-m68k (QEMU m68k emulation)" >&2
+        echo "  - qemu-utils (QEMU utilities)" >&2
+        echo "  - bridge-utils (for TAP networking)" >&2
+        echo "  - iproute2 (for TAP networking)" >&2
+        echo "  - passt (modern networking)" >&2
+        echo "  - hfsprogs (HFS+ support)" >&2
+        return 1
+    fi
+    
+    echo "Dependency installation completed successfully!"
+    echo "You can now run QEMU Mac emulation with all networking modes supported."
+}
+
+#######################################
+# Check and offer to install missing dependencies
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+#######################################
+check_and_offer_install() {
+    local missing_deps=()
+    
+    # Check core dependencies
+    if ! command -v qemu-system-m68k &> /dev/null; then
+        missing_deps+=("qemu-system-m68k")
+    fi
+    
+    if ! command -v qemu-img &> /dev/null; then
+        missing_deps+=("qemu-img")
+    fi
+    
+    # Check networking dependencies
+    if ! command -v brctl &> /dev/null; then
+        missing_deps+=("bridge-utils")
+    fi
+    
+    if ! command -v ip &> /dev/null; then
+        missing_deps+=("iproute2")
+    fi
+    
+    if ! command -v passt &> /dev/null; then
+        missing_deps+=("passt")
+    fi
+    
+    # If dependencies are missing, offer to install
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo "Missing dependencies detected: ${missing_deps[*]}"
+        echo "Would you like to install them automatically? [y/N]"
+        read -r response
+        
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            install_qemu_dependencies
+        else
+            echo "Please install the missing dependencies manually before running the emulation."
+            return 1
+        fi
     fi
 }
 

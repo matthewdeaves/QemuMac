@@ -119,10 +119,11 @@ prepare_config_disk_images() {
 }
 
 #######################################
-# Set the boot device SCSI ID in the PRAM file
+# Set the boot device SCSI ID in the PRAM file using Laurent Vivier's algorithm
 # The PRAM (Parameter RAM) stores boot preferences.
-# Writing specific values at offset 122 (0x7A) controls
-# which SCSI device the Mac will attempt to boot from.
+# Based on Laurent's analysis: Boot order stored as 16-bit RefNum at offset 0x7A (122)
+# Format: (byte) DriveId{for slots} | (byte) PartitionId | (word) RefNum
+# SCSI ID calculation: ~RefNum - 32
 # Arguments:
 #   device_type: "hdd" for hard disk (SCSI ID 0) or "cdrom" for CD-ROM (SCSI ID 2)
 # Globals:
@@ -135,7 +136,8 @@ prepare_config_disk_images() {
 set_pram_boot_order() {
     local device_type="$1"
     local pram_file="$QEMU_PRAM"
-    local offset=122 # 0x7A in decimal
+    local offset_78=120  # 0x78 in decimal - DriveId/PartitionId location
+    local offset_7a=122  # 0x7A in decimal - RefNum location (main boot order)
     
     # Validate arguments
     if [ -z "$device_type" ]; then
@@ -146,19 +148,21 @@ set_pram_boot_order() {
     # Ensure PRAM file exists (should have been created by prepare_pram)
     validate_file_exists "$pram_file" "PRAM file" || exit 1
     
-    local byte1 byte2
+    local scsi_id refnum_value byte1 byte2 drive_partition_byte
     case "$device_type" in
         "hdd")
-            # Boot from SCSI ID 0: Value 0xFFDF -> Bytes FF DF
-            byte1='\xff'
-            byte2='\xdf'
-            info_log "Setting PRAM to boot from HDD (SCSI ID 0)"
+            scsi_id=0
+            # Calculate RefNum using Laurent's formula: ~(scsi_id + 32)
+            refnum_value=$((~(scsi_id + 32) & 0xFFFF))
+            drive_partition_byte='\xff'  # DriveId/PartitionId for HDD
+            info_log "Setting PRAM to boot from HDD (SCSI ID $scsi_id, RefNum: 0x$(printf '%04x' $refnum_value))"
             ;;
         "cdrom")
-            # Boot from SCSI ID 2: Value 0xFFDD -> Bytes FF DD
-            byte1='\xff'
-            byte2='\xdd'
-            info_log "Setting PRAM to boot from CD-ROM (SCSI ID 2)"
+            scsi_id=2
+            # Calculate RefNum using Laurent's formula: ~(scsi_id + 32)
+            refnum_value=$((~(scsi_id + 32) & 0xFFFF))
+            drive_partition_byte='\xff'  # DriveId/PartitionId for CD-ROM
+            info_log "Setting PRAM to boot from CD-ROM (SCSI ID $scsi_id, RefNum: 0x$(printf '%04x' $refnum_value))"
             ;;
         *)
             echo "Error: Invalid device type '$device_type' for PRAM boot order" >&2
@@ -167,16 +171,34 @@ set_pram_boot_order() {
             ;;
     esac
     
-    # Write the 2 bytes (16 bits) at the specified offset (0x7A = 122)
-    # Using printf for byte representation and dd for precise writing
-    # conv=notrunc prevents truncating the file
-    # status=none suppresses dd output
-    printf "%b%b" "$byte1" "$byte2" | dd of="$pram_file" bs=1 seek="$offset" count=2 conv=notrunc status=none
+    # Convert RefNum to bytes (little-endian format)
+    byte1=$(printf '\\x%02x' $((refnum_value & 0xFF)))
+    byte2=$(printf '\\x%02x' $(((refnum_value >> 8) & 0xFF)))
+    
+    # Debug output showing calculations
+    debug_log "PRAM Boot Order Calculation:"
+    debug_log "  SCSI ID: $scsi_id"
+    debug_log "  RefNum calculation: ~($scsi_id + 32) = $refnum_value (0x$(printf '%04x' $refnum_value))"
+    debug_log "  Byte1 (LSB): 0x$(printf '%02x' $((refnum_value & 0xFF)))"
+    debug_log "  Byte2 (MSB): 0x$(printf '%02x' $(((refnum_value >> 8) & 0xFF)))"
+    
+    # Write DriveId/PartitionId byte at offset 0x78 (may not be critical but following Laurent's observation)
+    printf "%b" "$drive_partition_byte" | dd of="$pram_file" bs=1 seek="$offset_78" count=1 conv=notrunc status=none 2>/dev/null
+    
+    # Write the RefNum (16-bit value) at offset 0x7A in little-endian format
+    printf "%b%b" "$byte1" "$byte2" | dd of="$pram_file" bs=1 seek="$offset_7a" count=2 conv=notrunc status=none
     check_exit_status $? "Failed to write boot order to PRAM file '$pram_file'"
     
-    if [ "${DEBUG_MODE:-false}" = true ]; then
-        echo "DEBUG: PRAM bytes at offset 122 after writing:"
-        hexdump -C -s 122 -n 2 "$pram_file"
+    # Enhanced debug output
+    if [ "${DEBUG_MODE:-false}" = true ] || [ "${BOOT_DEBUG:-false}" = true ]; then
+        echo "PRAM Boot Order Debug Information:"
+        echo "  Target Device: $device_type (SCSI ID $scsi_id)"
+        echo "  RefNum Value: 0x$(printf '%04x' $refnum_value)"
+        echo "  PRAM bytes at offset 0x78 (DriveId/PartitionId):"
+        hexdump -C -s 120 -n 1 "$pram_file" | sed 's/^/    /'
+        echo "  PRAM bytes at offset 0x7A (RefNum - boot order):"
+        hexdump -C -s 122 -n 2 "$pram_file" | sed 's/^/    /'
+        echo "  Verification - SCSI ID from RefNum: $((~refnum_value - 32))"
     fi
 }
 

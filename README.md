@@ -51,10 +51,29 @@ This project provides a robust framework for classic Mac emulation with modern c
 
 ## Quick Start
 
-### Linux (Ubuntu/Debian)
+### Automatic Installation (Recommended)
 ```bash
-# 1. Install QEMU
-sudo apt update && sudo apt install qemu-system-m68k bridge-utils
+# 1. Check what dependencies you need
+./install-dependencies.sh --check
+
+# 2. Install all dependencies automatically
+./install-dependencies.sh
+
+# 3. Place your ROM file (e.g., 800.ROM) in the project directory
+
+# 4. Run a Mac OS installation
+./run68k.sh -C sys755-q800.conf -c /path/to/Mac_OS.iso -b
+
+# 5. After installation, run normally
+./run68k.sh -C sys755-q800.conf
+```
+
+### Manual Installation
+
+#### Linux (Ubuntu/Debian)
+```bash
+# 1. Install dependencies
+sudo apt update && sudo apt install qemu-system-m68k qemu-utils bridge-utils iproute2 passt hfsprogs
 
 # 2. Place your ROM file (e.g., 800.ROM) in the project directory
 
@@ -68,7 +87,7 @@ sudo apt update && sudo apt install qemu-system-m68k bridge-utils
 sudo ./mac_disc_mounter.sh -C sys755-q800.conf
 ```
 
-### macOS (Intel/Apple Silicon)
+#### macOS (Intel/Apple Silicon)
 ```bash
 # 1. Install QEMU and modern bash
 brew install qemu bash
@@ -87,14 +106,35 @@ brew install qemu bash
 
 ## Prerequisites
 
+### Automatic Dependency Management
+
+The easiest way to get started is using the included dependency installer:
+
+```bash
+# Check what's needed on your system
+./install-dependencies.sh --check
+
+# Install everything automatically
+./install-dependencies.sh
+
+# Force reinstall if needed
+./install-dependencies.sh --force
+```
+
+### Supported Package Managers
+
+- **Linux**: apt (Debian/Ubuntu), dnf (Fedora/RHEL)
+- **macOS**: Homebrew
+- **Manual**: Instructions provided for unsupported systems
+
 ### Required Software
 
 1. **QEMU (minimum version 4.0)**
    ```bash
-   # Linux (Debian/Ubuntu)
+   # Linux (Debian/Ubuntu) - included in automatic installer
    sudo apt update && sudo apt install qemu-system-m68k qemu-utils
    
-   # Linux (Fedora/RHEL)
+   # Linux (Fedora/RHEL) - included in automatic installer  
    sudo dnf install qemu-system-m68k qemu-img
    
    # macOS (Homebrew)

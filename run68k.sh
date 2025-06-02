@@ -41,6 +41,13 @@ BRIDGE_NAME=""
 QEMU_TAP_IFACE=""
 QEMU_MAC_ADDR=""
 QEMU_USER_SMB_DIR=""
+QEMU_AUDIO_BACKEND=""
+QEMU_AUDIO_LATENCY=""
+QEMU_ASC_MODE=""
+QEMU_CPU_MODEL=""
+QEMU_TCG_THREAD_MODE=""
+QEMU_TB_SIZE=""
+QEMU_MEMORY_BACKEND=""
 
 # --- Script Variables ---
 CONFIG_FILE=""
@@ -75,9 +82,10 @@ show_help() {
     echo "Usage: $0 -C <config_file.conf> [options]"
     echo "Required:"
     echo "  -C FILE  Specify configuration file (e.g., sys755-q800.conf)"
-    echo "           The config file defines machine, RAM, ROM, disks, PRAM, graphics,"
+    echo "           The config file defines machine, RAM, ROM, disks, PRAM, graphics, audio,"
     echo "           and optionally BRIDGE_NAME, QEMU_TAP_IFACE, QEMU_MAC_ADDR (for TAP),"
-    echo "           and QEMU_USER_SMB_DIR (for User mode SMB share)."
+    echo "           QEMU_USER_SMB_DIR (for User mode SMB share), QEMU_AUDIO_BACKEND,"
+    echo "           QEMU_AUDIO_LATENCY, and QEMU_ASC_MODE (for audio configuration)."
     echo "Options:"
     echo "  -c FILE  Specify CD-ROM image file (if not specified, no CD will be attached)"
     echo "  -a FILE  Specify an additional hard drive image file (e.g., mydrive.hda or mydrive.img)"
@@ -85,6 +93,7 @@ show_help() {
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
     echo "  -N TYPE  Specify network type: 'tap' (Linux default), 'user' (macOS default, NAT), or 'passt' (slirp alternative)"
     echo "  -D       Enable debug mode (set -x, show PRAM before launch)"
+    echo "  -B       Enable boot debug mode (show detailed PRAM analysis)"
     echo "  -?       Show this help message"
     echo "Networking Notes:"
     echo "  'tap' mode (Linux default): Uses TAP device on a bridge (default: $DEFAULT_BRIDGE_NAME)."
@@ -117,7 +126,7 @@ show_help() {
 #   1 if invalid arguments provided
 #######################################
 parse_arguments() {
-    while getopts "C:c:a:bd:N:D?" opt; do
+    while getopts "C:c:a:bd:N:DB?" opt; do
         case $opt in
             C) 
                 CONFIG_FILE="$OPTARG"
@@ -141,8 +150,13 @@ parse_arguments() {
                 ;;
             D) 
                 DEBUG_MODE=true
+                BOOT_DEBUG=true
                 debug_log "Debug mode enabled"
                 set -x
+                ;;
+            B) 
+                BOOT_DEBUG=true
+                debug_log "Boot debug mode enabled"
                 ;;
             \?|*) 
                 show_help
@@ -179,9 +193,31 @@ build_qemu_command() {
     # Initialize the array
     qemu_args=()
     
+    # Set audio defaults if not specified
+    local audio_backend="${QEMU_AUDIO_BACKEND:-$DEFAULT_AUDIO_BACKEND}"
+    local audio_latency="${QEMU_AUDIO_LATENCY:-$DEFAULT_AUDIO_LATENCY}"
+    local asc_mode="${QEMU_ASC_MODE:-$DEFAULT_ASC_MODE}"
+    
+    # Validate audio configuration
+    validate_audio_backend "$audio_backend" || exit 1
+    validate_asc_mode "$asc_mode" || exit 1
+    
+    # Build machine parameters with audio and ASC configuration
+    local machine_params="$QEMU_MACHINE"
+    if [ "$asc_mode" = "asc" ]; then
+        machine_params="$machine_params,easc=off"
+    else
+        machine_params="$machine_params,easc=on"
+    fi
+    
+    # Add audio configuration to machine params if not disabled
+    if [ "$audio_backend" != "none" ]; then
+        machine_params="$machine_params,audiodev=audio0"
+    fi
+    
     # Base arguments with proper quoting
     qemu_args+=(
-        "-M" "$QEMU_MACHINE"
+        "-M" "$machine_params"
         "-m" "$QEMU_RAM"
         "-bios" "$QEMU_ROM"
         "-display" "$DISPLAY_TYPE"
@@ -189,9 +225,51 @@ build_qemu_command() {
         "-drive" "file=$QEMU_PRAM,format=raw,if=mtd"
     )
     
+    # Add audio device configuration if not disabled
+    if [ "$audio_backend" != "none" ]; then
+        qemu_args+=("-audiodev" "$audio_backend,id=audio0,in.latency=$audio_latency,out.latency=$audio_latency")
+    fi
+    
     # Add CPU if specified in config (optional)
     if [ -n "${QEMU_CPU:-}" ]; then
         qemu_args+=("-cpu" "$QEMU_CPU")
+    fi
+    
+    # Add performance optimizations
+    local cpu_model="${QEMU_CPU_MODEL:-}"
+    local tcg_thread_mode="${QEMU_TCG_THREAD_MODE:-}"
+    local tb_size="${QEMU_TB_SIZE:-}"
+    local memory_backend="${QEMU_MEMORY_BACKEND:-}"
+    
+    # Validate performance configuration
+    validate_cpu_model "$cpu_model" || exit 1
+    validate_tcg_thread_mode "$tcg_thread_mode" || exit 1
+    validate_tb_size "$tb_size" || exit 1
+    validate_memory_backend "$memory_backend" || exit 1
+    
+    # Add explicit CPU model if specified
+    if [ -n "$cpu_model" ]; then
+        qemu_args+=("-cpu" "$cpu_model")
+    fi
+    
+    # Add TCG optimizations if specified
+    if [ -n "$tcg_thread_mode" ] || [ -n "$tb_size" ]; then
+        local tcg_opts="tcg"
+        if [ -n "$tcg_thread_mode" ]; then
+            tcg_opts="$tcg_opts,thread=$tcg_thread_mode"
+        fi
+        if [ -n "$tb_size" ]; then
+            tcg_opts="$tcg_opts,tb-size=$tb_size"
+        fi
+        qemu_args+=("-accel" "$tcg_opts")
+    fi
+    
+    # Add memory backend optimization if specified
+    if [ -n "$memory_backend" ]; then
+        qemu_args+=(
+            "-object" "memory-backend-$memory_backend,size=${QEMU_RAM}M,id=ram0"
+            "-machine" "memory-backend=ram0"
+        )
     fi
     
     # Add network arguments using the networking module
@@ -234,6 +312,7 @@ build_qemu_command() {
     fi
     
     echo "Display: $DISPLAY_TYPE"
+    echo "Audio: $audio_backend (ASC: $asc_mode, Latency: ${audio_latency}μs)"
     echo "--------------------------"
 }
 
@@ -303,12 +382,47 @@ main() {
     # Check QEMU version compatibility
     check_qemu_version "$REQUIRED_QEMU_VERSION"
     
-    # Check essential commands needed regardless of mode
-    check_command "qemu-system-m68k" "qemu-system-m68k package" || exit 1
-    check_command "qemu-img" "qemu-utils package" || exit 1
-    check_command "dd" "coreutils package" || exit 1
-    check_command "printf" "coreutils package" || exit 1
-    check_command "hexdump" "bsdmainutils package" || exit 1
+    # Check dependencies and offer installation if missing
+    local missing_deps=()
+    
+    # Check essential commands
+    if ! command -v qemu-system-m68k &> /dev/null; then
+        missing_deps+=("qemu-system-m68k")
+    fi
+    if ! command -v qemu-img &> /dev/null; then
+        missing_deps+=("qemu-img") 
+    fi
+    if ! command -v dd &> /dev/null; then
+        missing_deps+=("coreutils")
+    fi
+    if ! command -v hexdump &> /dev/null; then
+        missing_deps+=("bsdmainutils")
+    fi
+    
+    # If core dependencies missing, offer installation
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo "Missing core dependencies: ${missing_deps[*]}"
+        echo ""
+        echo "You can install all dependencies by running:"
+        echo "  ./install-dependencies.sh"
+        echo ""
+        echo "Or install them manually. Run './install-dependencies.sh --check' to see what's needed."
+        echo ""
+        echo "Continue anyway? [y/N]"
+        read -r response
+        
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Installation cancelled. Please install dependencies first."
+            exit 1
+        fi
+        
+        # Still do individual checks for better error messages
+        check_command "qemu-system-m68k" "qemu-system-m68k package" || exit 1
+        check_command "qemu-img" "qemu-utils package" || exit 1
+        check_command "dd" "coreutils package" || exit 1
+        check_command "printf" "coreutils package" || exit 1
+        check_command "hexdump" "bsdmainutils package" || exit 1
+    fi
     
     # Parse arguments first to enable debug mode early if requested
     parse_arguments "$@"

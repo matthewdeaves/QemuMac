@@ -101,6 +101,28 @@ Each `.conf` file defines a complete Mac OS emulation setup with schema validati
 - **Linux**: TAP Mode (supports all networking tools)
 - **macOS**: User Mode (TAP requires Linux-specific iproute2/bridge-utils)
 
+### Dependency Management
+The project includes comprehensive dependency management:
+
+**Automatic Installation:**
+```bash
+./install-dependencies.sh          # Install all dependencies
+./install-dependencies.sh --check  # Check what's needed
+./install-dependencies.sh --force  # Force reinstall
+```
+
+**Supported Dependencies:**
+- **Core**: `qemu-system-m68k`, `qemu-utils`, `coreutils`, `bsdmainutils`
+- **Networking**: `bridge-utils`, `iproute2`, `passt` (modern userspace networking)
+- **Filesystem**: `hfsprogs`, `hfsplus` (HFS+ support for shared disks)
+
+**Platform Support:**
+- **Linux**: apt (Debian/Ubuntu), dnf (Fedora/RHEL)
+- **macOS**: Homebrew
+- **Manual**: Fallback instructions for unsupported systems
+
+**Integration**: The main script (`run68k.sh`) automatically detects missing dependencies and suggests using the installer.
+
 ### File Structure Convention
 Config files create subdirectories containing:
 - `hdd_sys{version}.img`: Main OS disk image

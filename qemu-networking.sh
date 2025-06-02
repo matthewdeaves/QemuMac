@@ -105,9 +105,71 @@ setup_user_networking() {
 setup_passt_networking() {
     info_log "Setting up Passt networking..."
     check_command "passt" "passt package (see https://passt.top/)" || exit 1
-    info_log "Passt networking selected. Ensure 'passt' command is available."
-    # Passt generally doesn't require host-side setup like TAP
-    # No cleanup trap needed
+    
+    # Create socket path for passt
+    local socket_dir="/tmp/qemu-passt-$$"
+    local socket_path="$socket_dir/passt.socket"
+    
+    # Create socket directory
+    mkdir -p "$socket_dir" || {
+        echo "Error: Failed to create passt socket directory '$socket_dir'" >&2
+        exit 1
+    }
+    
+    # Start passt daemon with socket
+    info_log "Starting passt daemon with socket: $socket_path"
+    passt --socket "$socket_path" --foreground &
+    local passt_pid=$!
+    
+    # Wait for socket to be created
+    local timeout=5
+    while [ $timeout -gt 0 ] && [ ! -S "$socket_path" ]; do
+        sleep 1
+        ((timeout--))
+    done
+    
+    if [ ! -S "$socket_path" ]; then
+        echo "Error: Passt socket not created after 5 seconds" >&2
+        kill $passt_pid 2>/dev/null || true
+        exit 1
+    fi
+    
+    # Export variables for command building
+    export PASST_SOCKET_PATH="$socket_path"
+    export PASST_PID="$passt_pid"
+    export PASST_SOCKET_DIR="$socket_dir"
+    
+    # Set cleanup trap for passt
+    # shellcheck disable=SC2064
+    trap "cleanup_passt '$passt_pid' '$socket_dir'" EXIT SIGINT SIGTERM
+    
+    info_log "Passt daemon started successfully (PID: $passt_pid)"
+}
+
+#######################################
+# Clean up passt daemon and socket directory
+# Arguments:
+#   passt_pid: Process ID of passt daemon
+#   socket_dir: Directory containing passt socket
+# Globals:
+#   None
+# Returns:
+#   None
+#######################################
+cleanup_passt() {
+    local passt_pid="$1"
+    local socket_dir="$2"
+    
+    if [ -n "$passt_pid" ]; then
+        info_log "Stopping passt daemon (PID: $passt_pid)..."
+        kill "$passt_pid" 2>/dev/null || true
+        wait "$passt_pid" 2>/dev/null || true
+    fi
+    
+    if [ -n "$socket_dir" ] && [ -d "$socket_dir" ]; then
+        info_log "Cleaning up passt socket directory: $socket_dir"
+        rm -rf "$socket_dir"
+    fi
 }
 
 #######################################
@@ -178,9 +240,9 @@ build_network_args() {
             )
             ;;
         "passt")
-            echo "Network: Passt backend"
+            echo "Network: Passt backend (socket: ${PASST_SOCKET_PATH:-unknown})"
             qemu_args_ref+=(
-                "-netdev" "passt,id=net0"
+                "-netdev" "stream,id=net0,server=off,addr.type=unix,addr.path=${PASST_SOCKET_PATH}"
                 "-net" "nic,model=dp83932,netdev=net0"
             )
             ;;
