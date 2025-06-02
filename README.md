@@ -86,10 +86,10 @@ This project provides a robust, production-ready framework for classic Mac emula
 # 3. Place your ROM file (e.g., 800.ROM) in the project directory
 
 # 4. Run a Mac OS installation with performance optimizations
-./run68k.sh -C sys755-q800.conf -c /path/to/Mac_OS.iso -b
+./run68k.sh -C configs/sys755-fast.conf -c /path/to/Mac_OS.iso -b
 
 # 5. After installation, run with optimized performance
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-fast.conf
 ```
 
 **What gets installed automatically:**
@@ -109,13 +109,13 @@ sudo apt update && sudo apt install qemu-system-m68k qemu-utils bridge-utils ipr
 # 2. Place your ROM file (e.g., 800.ROM) in the project directory
 
 # 3. Run a Mac OS installation (uses TAP networking by default)
-./run68k.sh -C sys755-q800.conf -c /path/to/Mac_OS.iso -b
+./run68k.sh -C configs/sys755-standard.conf -c /path/to/Mac_OS.iso -b
 
 # 4. After installation, run normally
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-standard.conf
 
 # 5. Share files (when VM is shut down)
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf
 ```
 
 #### macOS (Intel/Apple Silicon)
@@ -126,10 +126,10 @@ brew install qemu bash
 # 2. Place your ROM file (e.g., 800.ROM) in the project directory  
 
 # 3. Run a Mac OS installation (uses User Mode networking by default)
-./run68k.sh -C sys755-q800.conf -c /path/to/Mac_OS.iso -b
+./run68k.sh -C configs/sys755-standard.conf -c /path/to/Mac_OS.iso -b
 
 # 4. After installation, run normally (auto-detects User Mode on macOS)
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-standard.conf
 
 # 5. Share files via shared disk (format as HFS/HFS+ in Mac OS first)
 # Files can be accessed directly from host at: ./761/shared_761.img
@@ -242,27 +242,48 @@ The project uses a modular, microservice-inspired architecture designed for main
 | Script | Purpose | Dependencies | Key Features |
 |--------|---------|--------------|---------------|
 | **`run68k.sh`** | Main orchestration script | All modules | Performance optimization, networking, PRAM management |
-| **`qemu-utils.sh`** | Shared utilities and error handling | None | Validation, security, dependency management |
-| **`mac_disc_mounter.sh`** | File sharing via disk mounting | `qemu-utils.sh` | HFS/HFS+ support, repair capabilities |
+| **`scripts/qemu-utils.sh`** | Shared utilities and error handling | None | Validation, security, dependency management |
+| **`scripts/mac_disc_mounter.sh`** | File sharing via disk mounting | `qemu-utils.sh` | HFS/HFS+ support, repair capabilities |
 | **`install-dependencies.sh`** | Cross-platform dependency installer | `qemu-utils.sh` | apt/brew/dnf support, platform detection |
 
 ### 🧩 Modular Components
 
 | Module | Responsibility | Key Functions | Recent Enhancements |
 |--------|----------------|---------------|--------------------|
-| **`qemu-config.sh`** | Configuration loading & validation | Schema validation, defaults | Performance config validation |
-| **`qemu-storage.sh`** | Disk image & PRAM management | Image creation, boot order | Laurent Vivier's PRAM algorithm |
-| **`qemu-networking.sh`** | Network setup for all modes | TAP, User, Passt setup | Socket-based Passt daemon management |
-| **`qemu-display.sh`** | Display type detection | Auto-detection, validation | Platform-aware defaults |
-| **`qemu-tap-functions.sh`** | TAP networking implementation | Bridge/TAP management | Enhanced cleanup and error handling |
+| **`scripts/qemu-config.sh`** | Configuration loading & validation | Schema validation, defaults | Performance config validation |
+| **`scripts/qemu-storage.sh`** | Disk image & PRAM management | Image creation, boot order | Laurent Vivier's PRAM algorithm |
+| **`scripts/qemu-networking.sh`** | Network setup for all modes | TAP, User, Passt setup | Socket-based Passt daemon management |
+| **`scripts/qemu-display.sh`** | Display type detection | Auto-detection, validation | Platform-aware defaults |
+| **`scripts/qemu-tap-functions.sh`** | TAP networking implementation | Bridge/TAP management | Enhanced cleanup and error handling |
 
 ### ⚙️ Configuration Files
 
-| Configuration | Mac OS Version | RAM | Features | Best For |
-|---------------|----------------|-----|----------|----------|
-| **`sys755-q800.conf`** | System 7.5.5 | 128MB | Stable, compatible | General use, development |
-| **`sys761-q800.conf`** | System 7.6.1 | 256MB | Enhanced features | Modern applications |
-| **Custom configs** | User-defined | Configurable | Full customization | Specialized setups |
+### 🎛️ Performance Configuration Variants
+
+| Configuration | Mac OS Version | RAM | Storage Cache | AIO Mode | Best For |
+|---------------|----------------|-----|---------------|----------|----------|
+| **`configs/sys755-standard.conf`** | System 7.5.5 | 128MB | writethrough | threads | Balanced default setup |
+| **`configs/sys755-fast.conf`** | System 7.5.5 | 128MB | writeback | threads | Speed-focused usage |
+| **`configs/sys755-ultimate.conf`** | System 7.5.5 | 128MB | writeback | native | Maximum performance |
+| **`configs/sys755-safest.conf`** | System 7.5.5 | 128MB | none | threads | Maximum data safety |
+| **`configs/sys755-native.conf`** | System 7.5.5 | 128MB | writethrough | native | Linux-optimized I/O |
+| **`configs/sys755-directsync.conf`** | System 7.5.5 | 128MB | directsync | threads | Direct I/O testing |
+| **`configs/sys755-authentic.conf`** | System 7.5.5 | 128MB | writethrough | threads | Historical NuBus hardware |
+
+| Configuration | Mac OS Version | RAM | Storage Cache | AIO Mode | Best For |
+|---------------|----------------|-----|---------------|----------|----------|
+| **`configs/sys761-standard.conf`** | System 7.6.1 | 256MB | writethrough | threads | Balanced default setup |
+| **`configs/sys761-fast.conf`** | System 7.6.1 | 256MB | writeback | threads | Speed-focused usage |
+| **`configs/sys761-ultimate.conf`** | System 7.6.1 | 256MB | writeback | native | Maximum performance |
+| **`configs/sys761-safest.conf`** | System 7.6.1 | 256MB | none | threads | Maximum data safety |
+| **`configs/sys761-native.conf`** | System 7.6.1 | 256MB | writethrough | native | Linux-optimized I/O |
+| **`configs/sys761-directsync.conf`** | System 7.6.1 | 256MB | directsync | threads | Direct I/O testing |
+| **`configs/sys761-authentic.conf`** | System 7.6.1 | 256MB | writethrough | threads | Historical NuBus hardware |
+
+### 🖥️ Display Device Variants
+
+- **Built-in Display** (default): Faster performance using QEMU's native Quadra 800 framebuffer
+- **NuBus Framebuffer** (authentic configs): Historically accurate NuBus graphics card emulation
 
 **New in Latest Version:**
 - ✅ Performance optimization sections
@@ -330,13 +351,13 @@ QEMU_USER_SMB_DIR="/path/to/share"          # SMB share directory
 
 ```bash
 # Copy an existing config
-cp sys755-q800.conf my-custom-config.conf
+cp configs/sys755-standard.conf configs/my-custom-config.conf
 
 # Edit the variables
-nano my-custom-config.conf
+nano configs/my-custom-config.conf
 
 # Use your custom config
-./run68k.sh -C my-custom-config.conf
+./run68k.sh -C configs/my-custom-config.conf
 ```
 
 ## 📖 Usage Guide
@@ -386,34 +407,34 @@ The primary script for launching Mac emulation with comprehensive options:
 #### Basic Usage
 ```bash
 # Run existing installation with TAP networking
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-standard.conf
 
 # Run with internet access (User mode)
-./run68k.sh -C sys755-q800.conf -N user
+./run68k.sh -C configs/sys755-standard.conf -N user
 
 # Run with debug logging
-./run68k.sh -C sys755-q800.conf -D
+./run68k.sh -C configs/sys755-standard.conf -D
 ```
 
 #### OS Installation
 ```bash
 # Install from CD with boot flag
-./run68k.sh -C sys761-q800.conf -c /path/to/Mac_OS_7.6.1.iso -b
+./run68k.sh -C configs/sys761-standard.conf -c /path/to/Mac_OS_7.6.1.iso -b
 
 # First boot after installation (without CD)
-./run68k.sh -C sys761-q800.conf
+./run68k.sh -C configs/sys761-standard.conf
 ```
 
 #### Advanced Usage
 ```bash
 # Custom display and additional storage
-./run68k.sh -C sys755-q800.conf -d gtk -a /path/to/software.img
+./run68k.sh -C configs/sys755-standard.conf -d gtk -a /path/to/software.img
 
 # Headless operation with VNC
-./run68k.sh -C sys755-q800.conf -d vnc
+./run68k.sh -C configs/sys755-standard.conf -d vnc
 
 # Force specific display on auto-detection failure
-./run68k.sh -C sys755-q800.conf -d sdl
+./run68k.sh -C configs/sys755-standard.conf -d sdl
 ```
 
 ## 🌐 Networking Modes
@@ -426,7 +447,7 @@ The networking system supports three distinct modes, each optimized for differen
 **Note**: Linux only - requires Linux-specific networking tools
 
 ```bash
-./run68k.sh -C sys755-q800.conf -N tap
+./run68k.sh -C configs/sys755-standard.conf -N tap
 ```
 
 **Requirements:**
@@ -465,7 +486,7 @@ The networking system supports three distinct modes, each optimized for differen
 **Note**: Default on macOS where TAP mode requires Linux-specific tools
 
 ```bash
-./run68k.sh -C sys755-q800.conf -N user
+./run68k.sh -C configs/sys755-standard.conf -N user
 ```
 
 **Requirements:**
@@ -500,7 +521,7 @@ The networking system supports three distinct modes, each optimized for differen
 **Best for**: Advanced users wanting modern networking performance with userspace convenience
 
 ```bash
-./run68k.sh -C sys755-q800.conf -N passt
+./run68k.sh -C configs/sys755-standard.conf -N passt
 ```
 
 **Requirements:**
@@ -627,25 +648,25 @@ The `mac_disc_mounter.sh` script provides seamless file transfer between your Li
 
 ```bash
 # Mount shared disk (VM must be shut down)
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf
 
 # Copy files to/from /mnt/mac_shared
 
 # Unmount when done
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -u
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -u
 ```
 
 ### Advanced Options
 
 ```bash
 # Custom mount point
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -m /home/user/macfiles
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -m /home/user/macfiles
 
 # Check filesystem type
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -c
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -c
 
 # Repair corrupted filesystem
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -r
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -r
 ```
 
 ### Important Notes
@@ -660,10 +681,10 @@ sudo ./mac_disc_mounter.sh -C sys755-q800.conf -r
 
 ```bash
 # If mount fails, check filesystem
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -c
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -c
 
 # Attempt repair if corrupted
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -r
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -r
 
 # Check what's using the mount point
 sudo lsof +f -- /mnt/mac_shared
@@ -704,14 +725,14 @@ qemu-system-m68k --version
 ls *.conf
 
 # Use System 7.5.5 for this tutorial
-CONFIG_FILE="sys755-q800.conf"
+CONFIG_FILE="configs/sys755-standard.conf"
 ```
 
 ### Step 4: Install Mac OS
 
 ```bash
 # Boot from installation CD
-./run68k.sh -C sys755-q800.conf -c /path/to/Mac_OS_CD.iso -b
+./run68k.sh -C configs/sys755-standard.conf -c /path/to/Mac_OS_CD.iso -b
 ```
 
 **In the Mac OS installer:**
@@ -728,7 +749,7 @@ CONFIG_FILE="sys755-q800.conf"
 
 ```bash
 # Boot from hard disk (remove -c and -b flags)
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-standard.conf
 ```
 
 ### Step 6: Configure Networking (Optional)
@@ -736,7 +757,7 @@ CONFIG_FILE="sys755-q800.conf"
 **For Internet Access:**
 ```bash
 # Shut down the VM and restart with user networking
-./run68k.sh -C sys755-q800.conf -N user
+./run68k.sh -C configs/sys755-standard.conf -N user
 ```
 
 In Mac OS:
@@ -748,7 +769,7 @@ In Mac OS:
 **For VM-to-VM Communication:**
 ```bash
 # Use default TAP networking (already configured)
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-standard.conf
 ```
 
 ### Step 7: Test File Sharing
@@ -757,16 +778,16 @@ In Mac OS:
 # Shut down the VM completely
 
 # Mount the shared disk
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf
 
 # Copy files to the shared disk
 cp /path/to/files/* /mnt/mac_shared/
 
 # Unmount the shared disk
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -u
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -u
 
 # Start the VM and access files from the shared disk
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-standard.conf
 ```
 
 ### Next Steps
@@ -795,13 +816,13 @@ qemu-img snapshot -a "clean_install" 755/hdd_sys755.img
 
 ```bash
 # Create configurations for different systems
-cp sys755-q800.conf sys71-q800.conf
-cp sys755-q800.conf sys8-q800.conf
+cp configs/sys755-standard.conf configs/sys71-custom.conf
+cp configs/sys755-standard.conf configs/sys8-custom.conf
 
 # Edit each config for different directories and names
 # Start multiple VMs (they can communicate via TAP)
-./run68k.sh -C sys755-q800.conf &
-./run68k.sh -C sys71-q800.conf &
+./run68k.sh -C configs/sys755-standard.conf &
+./run68k.sh -C configs/sys71-custom.conf &
 ```
 
 ### Custom ROM and Machine Types
@@ -818,7 +839,7 @@ cp sys755-q800.conf sys8-q800.conf
 
 ```bash
 # Enable comprehensive debugging
-./run68k.sh -C sys755-q800.conf -D
+./run68k.sh -C configs/sys755-standard.conf -D
 
 # This enables:
 # - Command tracing (set -x)
@@ -928,7 +949,7 @@ sudo dmesg | tail
 Enable comprehensive debugging for complex issues:
 
 ```bash
-./run68k.sh -C sys755-q800.conf -D
+./run68k.sh -C configs/sys755-standard.conf -D
 ```
 
 Debug mode provides:
@@ -1033,24 +1054,36 @@ The codebase follows modern shell scripting best practices:
 QemuMac/
 ├── 🎯 Core Scripts
 │   ├── run68k.sh                          # Main orchestration script
+│   ├── install-dependencies.sh            # Cross-platform dependency installer
+│   ├── sys755-safe.conf                   # Legacy root config (System 7.5.5)
+│   └── sys761-safe.conf                   # Legacy root config (System 7.6.1)
+├── 📁 scripts/ - Modular Components
 │   ├── qemu-utils.sh                      # Shared utilities and validation
 │   ├── mac_disc_mounter.sh                # File sharing utility
-│   └── install-dependencies.sh            # Cross-platform dependency installer
-├── 🧩 Modular Components
 │   ├── qemu-config.sh                     # Configuration management
 │   ├── qemu-storage.sh                    # Storage and PRAM handling
 │   ├── qemu-networking.sh                 # Network mode management
 │   ├── qemu-display.sh                    # Display type handling
-│   └── qemu-tap-functions.sh              # TAP networking implementation
-├── ⚙️ Configuration Files
-│   ├── sys755-q800.conf                   # System 7.5.5 configuration
-│   ├── sys761-q800.conf                   # System 7.6.1 configuration
-│   └── [custom].conf                      # User-defined configurations
+│   ├── qemu-tap-functions.sh              # TAP networking implementation
+│   └── debug-pram.sh                      # PRAM analysis utility
+├── 📁 configs/ - Performance Configuration Variants
+│   ├── sys755-standard.conf               # System 7.5.5 balanced default
+│   ├── sys755-fast.conf                   # System 7.5.5 speed-focused
+│   ├── sys755-ultimate.conf               # System 7.5.5 maximum performance
+│   ├── sys755-safest.conf                 # System 7.5.5 maximum safety
+│   ├── sys755-native.conf                 # System 7.5.5 Linux-optimized
+│   ├── sys755-directsync.conf             # System 7.5.5 direct I/O
+│   ├── sys755-authentic.conf              # System 7.5.5 NuBus hardware
+│   ├── sys761-standard.conf               # System 7.6.1 balanced default
+│   ├── sys761-fast.conf                   # System 7.6.1 speed-focused
+│   ├── sys761-ultimate.conf               # System 7.6.1 maximum performance
+│   ├── sys761-safest.conf                 # System 7.6.1 maximum safety
+│   ├── sys761-native.conf                 # System 7.6.1 Linux-optimized
+│   ├── sys761-directsync.conf             # System 7.6.1 direct I/O
+│   └── sys761-authentic.conf              # System 7.6.1 NuBus hardware
 ├── 📚 Documentation
 │   ├── README.md                          # User documentation
-│   ├── CLAUDE.md                          # Development guidance
-│   ├── QEMU_OPTIMIZATION_IMPLEMENTATION.md # Implementation tracking
-│   └── debug-pram.sh                      # PRAM analysis utility
+│   └── CLAUDE.md                          # Development guidance
 ├── 💾 User-Provided Files
 │   ├── *.ROM                              # ROM files (user-provided)
 │   └── */                                 # Configuration-specific directories
