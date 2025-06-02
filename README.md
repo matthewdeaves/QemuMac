@@ -1,6 +1,6 @@
 # 🖥️ QEMU m68k Mac Emulation Helper Scripts
 
-A comprehensive, production-ready suite of shell scripts designed to simplify classic Macintosh (m68k architecture) emulation using QEMU. This project enables running multiple Mac OS configurations with advanced networking modes, performance optimizations, and seamless file sharing capabilities.
+A collection of shell scripts to simplify classic Macintosh (m68k architecture) emulation using QEMU. This project helps you run multiple Mac OS configurations with different networking modes, performance tweaks, and file sharing between host and guest.
 
 **🎥 See it in action:** [YouTube Demo](https://www.youtube.com/watch?v=YA2fHUXZhas)
 
@@ -27,38 +27,38 @@ A comprehensive, production-ready suite of shell scripts designed to simplify cl
 
 ## 🎯 Overview
 
-This project provides a robust, production-ready framework for classic Mac emulation with modern conveniences and enterprise-grade reliability:
+This project provides a helpful set of scripts for classic Mac emulation:
 
 - **🖥️ Multiple Mac OS Versions**: Run System 6.x through Mac OS 8.x on emulated 68k Macs
-- **🌐 Advanced Networking**: Choose between TAP (VM-to-VM), User Mode (internet), or modern Passt networking
-- **⚡ Performance Optimized**: CPU model specification, TCG multi-threading, and memory backend optimization
-- **📁 Seamless File Sharing**: Bidirectional file transfer between host and guest via shared disk images
-- **⚙️ Configuration Management**: Simple `.conf` files define complete emulation environments
-- **🏗️ Modular Architecture**: Well-organized, maintainable codebase with comprehensive error handling
-- **🔄 Dependency Management**: Cross-platform automatic installation of all required components
-- **🛡️ Security-First Design**: Input validation, secure command construction, and proper privilege handling
+- **🌐 Networking Options**: Choose between TAP (VM-to-VM), User Mode (internet), or Passt networking
+- **⚡ Performance Tweaks**: CPU model specification, multi-threading, and memory optimizations
+- **📁 File Sharing**: Transfer files between host and guest via shared disk images
+- **⚙️ Configuration Files**: Simple `.conf` files define complete emulation setups
+- **🏗️ Modular Scripts**: Organized, maintainable codebase with good error handling
+- **🔄 Dependency Management**: Cross-platform installer for required packages
+- **🛡️ Secure Practices**: Input validation and proper command construction
 
 ### Project Goals
 
-- Provide a consistent and repeatable way to launch QEMU for specific Mac models and OS versions
-- Manage separate disk images (OS, shared data, PRAM) for different configurations
-- Enable flexible networking for both internet access and VM-to-VM communication
+- Make it easy to launch QEMU for specific Mac models and OS versions
+- Manage separate disk images (OS, shared data, PRAM) for different setups
+- Support flexible networking for internet access and VM-to-VM communication
 - Simplify OS installation and file transfer workflows
-- Maintain a secure, well-documented, and extensible codebase
+- Keep the codebase organized, documented, and extensible
 
 ## ✨ Key Features
 
 ### 🏗️ **Architecture & Design**
-✅ **Modular Design**: Clean separation of concerns across multiple specialized scripts  
-✅ **Schema Validation**: Robust configuration validation with helpful error messages  
-✅ **Security First**: Input validation, secure command construction, strict error handling  
-✅ **Cross-Platform**: Linux (primary), macOS (including Apple Silicon), with platform-specific optimizations
+✅ **Modular Design**: Clean separation across multiple specialized scripts  
+✅ **Schema Validation**: Configuration validation with helpful error messages  
+✅ **Security Practices**: Input validation, secure command construction, error handling  
+✅ **Cross-Platform**: Linux (primary), macOS (including Apple Silicon), with platform-specific features
 
 ### ⚡ **Performance & Optimization**
-✅ **CPU Optimization**: Explicit CPU model specification (m68040) with validation  
-✅ **TCG Multi-threading**: Enhanced performance on multi-core hosts  
-✅ **Memory Backend**: Object memory backend for improved memory management  
-✅ **Audio Enhancement**: EASC mode with configurable latency and backend selection  
+✅ **CPU Optimization**: Explicit CPU model specification (m68040)  
+✅ **TCG Multi-threading**: Better performance on multi-core hosts  
+✅ **Memory Backend**: Object memory backend for improved memory handling  
+✅ **Audio Enhancement**: EASC mode with configurable latency and backends  
 
 ### 🌐 **Networking**
 ✅ **TAP Networking**: VM-to-VM communication with automatic bridge management  
@@ -68,9 +68,9 @@ This project provides a robust, production-ready framework for classic Mac emula
 
 ### 🔧 **Operations & Management**
 ✅ **Dependency Management**: Cross-platform automatic installation (apt, brew, dnf)  
-✅ **Debug Support**: Comprehensive logging and debug mode with PRAM analysis  
+✅ **Debug Support**: Logging and debug mode with PRAM analysis  
 ✅ **Version Checking**: QEMU compatibility validation and warnings  
-✅ **PRAM Management**: Advanced boot order control with Laurent Vivier's algorithm  
+✅ **PRAM Management**: Boot order control with Laurent Vivier's algorithm  
 ✅ **File Sharing**: HFS/HFS+ shared disk mounting with repair capabilities  
 
 ## 🚀 Quick Start
@@ -551,7 +551,7 @@ The networking system supports three distinct modes, each optimized for differen
 
 ## ⚡ Performance Optimizations
 
-The latest version includes comprehensive performance optimizations that significantly improve emulation speed and compatibility:
+The latest version includes performance optimizations that improve emulation speed and compatibility:
 
 ### 🔧 CPU Optimizations
 
@@ -624,11 +624,11 @@ QEMU_AUDIO_LATENCY="50000"    # 50ms latency
 
 ### 📊 Performance Impact
 
-**Benchmarked Improvements:**
+**Performance Improvements:**
 - **Boot Time**: ~15-20% faster system startup
 - **Application Launch**: ~10-15% faster application loading
-- **Audio Quality**: Significantly reduced stuttering and dropouts
-- **Responsiveness**: Improved interactive performance on multi-core systems
+- **Audio Quality**: Reduced stuttering and dropouts
+- **Responsiveness**: Better interactive performance on multi-core systems
 
 **Example Optimized Command:**
 ```bash
@@ -642,7 +642,7 @@ qemu-system-m68k -M q800,easc=on,audiodev=audio0 \
 
 ## 📁 File Sharing
 
-The `mac_disc_mounter.sh` script provides seamless file transfer between your Linux host and Mac VMs via shared disk images.
+The `mac_disc_mounter.sh` script lets you transfer files between your Linux host and Mac VMs via shared disk images.
 
 ### Basic Usage
 
@@ -990,12 +990,12 @@ Debug mode provides:
 
 ### Architecture Overview
 
-The codebase follows modern shell scripting best practices:
+The codebase follows good shell scripting practices:
 
-- **Modular Design**: Clear separation of concerns across specialized modules
-- **Error Handling**: Strict bash mode with comprehensive error checking
+- **Modular Design**: Clear separation across specialized modules
+- **Error Handling**: Strict bash mode with good error checking
 - **Security**: Input validation, secure command construction, proper quoting
-- **Documentation**: Standardized function headers and inline documentation
+- **Documentation**: Function headers and inline documentation
 - **Testing**: Manual testing procedures with debug support
 
 ### Code Standards
@@ -1028,11 +1028,11 @@ The codebase follows modern shell scripting best practices:
 ### 📋 Contributing Guidelines
 
 #### Code Quality Standards
-1. **Follow Code Standards**: Maintain consistent style and error handling
-2. **Security First**: Ensure proper input validation and secure practices
-3. **Test Thoroughly**: Verify functionality across different configurations and platforms
+1. **Follow Code Standards**: Keep consistent style and error handling
+2. **Security Practices**: Ensure proper input validation and secure practices
+3. **Test Changes**: Verify functionality across different configurations and platforms
 4. **Document Changes**: Update README.md, CLAUDE.md, and inline documentation
-5. **Maintain Compatibility**: Preserve existing configuration file compatibility
+5. **Keep Compatibility**: Preserve existing configuration file compatibility
 
 #### Development Workflow
 1. **Feature Branches**: Create feature branches from main
@@ -1105,7 +1105,7 @@ This project provides scripts for managing QEMU emulation. Users are responsible
 - **Software**: Ensuring proper licensing for emulated software
 - **Compliance**: Following all applicable copyright and licensing laws
 
-The scripts themselves are provided as-is for educational and personal use.
+The scripts are provided as-is for educational and personal use.
 
 ---
 
