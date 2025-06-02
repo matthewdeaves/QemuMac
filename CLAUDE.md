@@ -12,6 +12,7 @@ This project provides a modular set of shell scripts to simplify the setup and m
 - **`run68k.sh`**: Main orchestration script for QEMU Mac emulation
 - **`qemu-utils.sh`**: Shared utility functions and error handling
 - **`mac_disc_mounter.sh`**: Utility to mount/unmount shared disk images on Linux host
+- **`install-dependencies.sh`**: Cross-platform dependency installer
 
 ### Modular Components  
 - **`qemu-config.sh`**: Configuration loading and validation
@@ -22,6 +23,10 @@ This project provides a modular set of shell scripts to simplify the setup and m
 
 ### Configuration Files
 - **`*.conf`**: Configuration files defining specific Mac OS setups (e.g., `sys755-q800.conf`)
+
+### Additional Files
+- **`debug-pram.sh`**: PRAM analysis and debugging utility
+- **`QEMU_OPTIMIZATION_IMPLEMENTATION.md`**: Performance optimization implementation tracking
 
 ## Common Commands
 
@@ -42,6 +47,9 @@ This project provides a modular set of shell scripts to simplify the setup and m
 
 # Enable debug mode with detailed logging
 ./run68k.sh -C sys755-q800.conf -D
+
+# Use modern Passt networking (requires passt package)
+./run68k.sh -C sys755-q800.conf -N passt
 ```
 
 ### Platform-Specific Notes
@@ -51,8 +59,13 @@ brew install qemu bash  # Install dependencies first
 ./run68k.sh -C sys755-q800.conf  # Auto-uses User Mode networking
 
 # Linux - uses TAP networking by default
-sudo apt install qemu-system-m68k bridge-utils  # Install dependencies first  
+# Use automatic installer (recommended)
+./install-dependencies.sh
 ./run68k.sh -C sys755-q800.conf  # Auto-uses TAP networking
+
+# Or install manually
+sudo apt install qemu-system-m68k bridge-utils iproute2 passt hfsprogs
+./run68k.sh -C sys755-q800.conf
 ```
 
 ### File Sharing via Shared Disk
@@ -90,7 +103,9 @@ Each `.conf` file defines a complete Mac OS emulation setup with schema validati
 
 **Optional Variables:**
 - `QEMU_CPU`, `QEMU_HDD_SIZE`, `QEMU_SHARED_HDD_SIZE`
-- `BRIDGE_NAME`, `QEMU_TAP_IFACE`, `QEMU_MAC_ADDR`, `QEMU_USER_SMB_DIR`
+- `QEMU_CPU_MODEL`, `QEMU_TCG_THREAD_MODE`, `QEMU_TB_SIZE`, `QEMU_MEMORY_BACKEND` (Performance)
+- `QEMU_AUDIO_BACKEND`, `QEMU_AUDIO_LATENCY`, `QEMU_ASC_MODE` (Audio)
+- `BRIDGE_NAME`, `QEMU_TAP_IFACE`, `QEMU_MAC_ADDR`, `QEMU_USER_SMB_DIR` (Networking)
 
 ### Networking Modes
 - **TAP Mode (`-N tap`, Linux default)**: Bridged networking for VM-to-VM communication, requires sudo and Linux-specific tools
