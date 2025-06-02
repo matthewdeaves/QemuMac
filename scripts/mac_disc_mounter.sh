@@ -7,9 +7,8 @@
 #######################################
 
 # Source shared utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=qemu-utils.sh
-source "$SCRIPT_DIR/qemu-utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/qemu-utils.sh"
 
 # --- Script Variables ---
 CONFIG_FILE=""

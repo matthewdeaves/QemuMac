@@ -10,8 +10,8 @@ set -euo pipefail
 
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=qemu-utils.sh
-source "$SCRIPT_DIR/qemu-utils.sh"
+# shellcheck source=scripts/qemu-utils.sh
+source "$SCRIPT_DIR/scripts/qemu-utils.sh"
 
 #######################################
 # Display help information

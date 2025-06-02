@@ -18,6 +18,14 @@ if [ "${QEMU_UTILS_INITIALIZED:-false}" != true ]; then
     readonly DEFAULT_AUDIO_BACKEND="pa"
     readonly DEFAULT_AUDIO_LATENCY="50000"
     readonly DEFAULT_ASC_MODE="easc"
+    readonly DEFAULT_SCSI_CACHE_MODE="writethrough"
+    readonly DEFAULT_SCSI_AIO_MODE="threads"
+    readonly DEFAULT_SCSI_VENDOR="SEAGATE"
+    readonly DEFAULT_SCSI_SERIAL_PREFIX="QOS"
+    readonly DEFAULT_DISPLAY_DEVICE="built-in"
+    readonly DEFAULT_RESOLUTION_PRESET="mac_standard"
+    readonly DEFAULT_FLOPPY_READONLY="true"
+    readonly DEFAULT_FLOPPY_FORMAT="mac"
     readonly SUPPORTED_FILESYSTEMS=("hfs" "hfsplus")
     readonly QEMU_MAC_PREFIX="52:54:00"
 fi
@@ -429,6 +437,287 @@ validate_tb_size() {
     fi
     
     return 0
+}
+
+#######################################
+# Validate SCSI cache mode
+# Arguments:
+#   cache_mode: SCSI cache mode to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_scsi_cache_mode() {
+    local cache_mode="$1"
+    local valid_modes=("writethrough" "writeback" "none" "directsync")
+    
+    if [ -z "$cache_mode" ]; then
+        return 0  # Empty is valid (will use QEMU default)
+    fi
+    
+    for mode in "${valid_modes[@]}"; do
+        if [ "$cache_mode" = "$mode" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid SCSI cache mode '$cache_mode'" >&2
+    echo "Valid modes: ${valid_modes[*]}" >&2
+    echo "  writethrough: Safe, writes go through to disk" >&2
+    echo "  writeback: Fast, but requires proper VM shutdown" >&2
+    echo "  none: Safest, direct I/O to disk" >&2
+    echo "  directsync: Direct I/O with sync" >&2
+    return 1
+}
+
+#######################################
+# Validate SCSI AIO mode
+# Arguments:
+#   aio_mode: SCSI AIO mode to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_scsi_aio_mode() {
+    local aio_mode="$1"
+    local valid_modes=("threads" "native")
+    
+    if [ -z "$aio_mode" ]; then
+        return 0  # Empty is valid (will use QEMU default)
+    fi
+    
+    for mode in "${valid_modes[@]}"; do
+        if [ "$aio_mode" = "$mode" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid SCSI AIO mode '$aio_mode'" >&2
+    echo "Valid modes: ${valid_modes[*]}" >&2
+    echo "  threads: Multi-threaded AIO (default, works everywhere)" >&2
+    echo "  native: Native AIO (Linux only, better performance)" >&2
+    return 1
+}
+
+#######################################
+# Validate SCSI vendor string
+# Arguments:
+#   vendor: SCSI vendor string to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_scsi_vendor() {
+    local vendor="$1"
+    
+    if [ -z "$vendor" ]; then
+        return 0  # Empty is valid (will use QEMU default)
+    fi
+    
+    # SCSI vendor field is 8 characters max, alphanumeric and spaces
+    if [ ${#vendor} -gt 8 ]; then
+        echo "Error: SCSI vendor string '$vendor' too long (max 8 characters)" >&2
+        return 1
+    fi
+    
+    if ! [[ "$vendor" =~ ^[A-Z0-9\ ]+$ ]]; then
+        echo "Error: SCSI vendor string '$vendor' contains invalid characters" >&2
+        echo "Must contain only uppercase letters, numbers, and spaces" >&2
+        return 1
+    fi
+    
+    return 0
+}
+
+#######################################
+# Validate SCSI serial prefix
+# Arguments:
+#   serial_prefix: SCSI serial number prefix to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_scsi_serial_prefix() {
+    local serial_prefix="$1"
+    
+    if [ -z "$serial_prefix" ]; then
+        return 0  # Empty is valid (will use default)
+    fi
+    
+    # Serial prefix should be 3-4 characters, alphanumeric
+    if [ ${#serial_prefix} -lt 2 ] || [ ${#serial_prefix} -gt 4 ]; then
+        echo "Error: SCSI serial prefix '$serial_prefix' must be 2-4 characters" >&2
+        return 1
+    fi
+    
+    if ! [[ "$serial_prefix" =~ ^[A-Z0-9]+$ ]]; then
+        echo "Error: SCSI serial prefix '$serial_prefix' contains invalid characters" >&2
+        echo "Must contain only uppercase letters and numbers" >&2
+        return 1
+    fi
+    
+    return 0
+}
+
+#######################################
+# Validate display device type
+# Arguments:
+#   display_device: Display device type to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_display_device() {
+    local display_device="$1"
+    local valid_devices=("built-in" "nubus-macfb")
+    
+    if [ -z "$display_device" ]; then
+        return 0  # Empty is valid (will use default)
+    fi
+    
+    for device in "${valid_devices[@]}"; do
+        if [ "$display_device" = "$device" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid display device '$display_device'" >&2
+    echo "Valid devices: ${valid_devices[*]}" >&2
+    echo "  built-in: Standard Q800 built-in display" >&2
+    echo "  nubus-macfb: NuBus framebuffer device" >&2
+    return 1
+}
+
+#######################################
+# Validate resolution preset
+# Arguments:
+#   resolution_preset: Resolution preset name to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_resolution_preset() {
+    local resolution_preset="$1"
+    local valid_presets=("mac_standard" "vga" "svga" "xga" "sxga")
+    
+    if [ -z "$resolution_preset" ]; then
+        return 0  # Empty is valid (will use default)
+    fi
+    
+    for preset in "${valid_presets[@]}"; do
+        if [ "$resolution_preset" = "$preset" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid resolution preset '$resolution_preset'" >&2
+    echo "Valid presets: ${valid_presets[*]}" >&2
+    echo "  mac_standard: 1152x870x8 (Mac 21-inch)" >&2
+    echo "  vga: 640x480x8 (VGA)" >&2
+    echo "  svga: 800x600x8 (Super VGA)" >&2
+    echo "  xga: 1024x768x8 (Extended VGA)" >&2
+    echo "  sxga: 1280x1024x8 (Super XGA)" >&2
+    return 1
+}
+
+#######################################
+# Get resolution from preset name
+# Arguments:
+#   resolution_preset: Resolution preset name
+# Globals:
+#   None
+# Returns:
+#   Resolution string via stdout
+#######################################
+get_resolution_from_preset() {
+    local resolution_preset="$1"
+    
+    case "$resolution_preset" in
+        "mac_standard")
+            echo "1152x870x8"
+            ;;
+        "vga")
+            echo "640x480x8"
+            ;;
+        "svga")
+            echo "800x600x8"
+            ;;
+        "xga")
+            echo "1024x768x8"
+            ;;
+        "sxga")
+            echo "1280x1024x8"
+            ;;
+        *)
+            echo "1152x870x8"  # Default fallback
+            ;;
+    esac
+}
+
+#######################################
+# Validate floppy readonly setting
+# Arguments:
+#   readonly_mode: Floppy readonly mode to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_floppy_readonly() {
+    local readonly_mode="$1"
+    local valid_modes=("true" "false")
+    
+    if [ -z "$readonly_mode" ]; then
+        return 0  # Empty is valid (will use default)
+    fi
+    
+    for mode in "${valid_modes[@]}"; do
+        if [ "$readonly_mode" = "$mode" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid floppy readonly mode '$readonly_mode'" >&2
+    echo "Valid modes: ${valid_modes[*]}" >&2
+    echo "  true: Read-only access (safe, prevents data loss)" >&2
+    echo "  false: Read-write access (allows modifications)" >&2
+    return 1
+}
+
+#######################################
+# Validate floppy format
+# Arguments:
+#   floppy_format: Floppy format to validate
+# Globals:
+#   None
+# Returns:
+#   0 if valid, 1 if invalid
+#######################################
+validate_floppy_format() {
+    local floppy_format="$1"
+    local valid_formats=("mac" "pc")
+    
+    if [ -z "$floppy_format" ]; then
+        return 0  # Empty is valid (will use default)
+    fi
+    
+    for format in "${valid_formats[@]}"; do
+        if [ "$floppy_format" = "$format" ]; then
+            return 0
+        fi
+    done
+    
+    echo "Error: Invalid floppy format '$floppy_format'" >&2
+    echo "Valid formats: ${valid_formats[*]}" >&2
+    echo "  mac: Mac-formatted floppy disks" >&2
+    echo "  pc: PC-formatted floppy disks" >&2
+    return 1
 }
 
 # --- Security and Input Validation Functions ---

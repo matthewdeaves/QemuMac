@@ -10,77 +10,88 @@ This project provides a modular set of shell scripts to simplify the setup and m
 
 ### Core Scripts
 - **`run68k.sh`**: Main orchestration script for QEMU Mac emulation
-- **`qemu-utils.sh`**: Shared utility functions and error handling
-- **`mac_disc_mounter.sh`**: Utility to mount/unmount shared disk images on Linux host
 - **`install-dependencies.sh`**: Cross-platform dependency installer
 
-### Modular Components  
-- **`qemu-config.sh`**: Configuration loading and validation
-- **`qemu-storage.sh`**: Disk image and PRAM management
-- **`qemu-networking.sh`**: Network setup for different modes
-- **`qemu-display.sh`**: Display type detection and validation
-- **`qemu-tap-functions.sh`**: TAP networking implementation
+### Modular Components (in `scripts/` directory)
+- **`scripts/qemu-utils.sh`**: Shared utility functions and error handling
+- **`scripts/mac_disc_mounter.sh`**: Utility to mount/unmount shared disk images on Linux host
+- **`scripts/qemu-config.sh`**: Configuration loading and validation
+- **`scripts/qemu-storage.sh`**: Disk image and PRAM management
+- **`scripts/qemu-networking.sh`**: Network setup for different modes
+- **`scripts/qemu-display.sh`**: Display type detection and validation
+- **`scripts/qemu-tap-functions.sh`**: TAP networking implementation
 
-### Configuration Files
-- **`*.conf`**: Configuration files defining specific Mac OS setups (e.g., `sys755-q800.conf`)
+### Configuration Files (in `configs/` directory)
+- **Performance Variants**: Multiple optimized configurations for each Mac OS version
+  - `sys755-*`: Mac OS 7.5.5 configurations (directsync, fast, native, safest, ultimate)
+  - `sys761-*`: Mac OS 7.6.1 configurations (directsync, fast, native, safest, standard, ultimate)
+- **Legacy Configs**: `sys755-safe.conf`, `sys761-safe.conf` (root directory)
 
 ### Additional Files
-- **`debug-pram.sh`**: PRAM analysis and debugging utility
-- **`QEMU_OPTIMIZATION_IMPLEMENTATION.md`**: Performance optimization implementation tracking
+- **`scripts/debug-pram.sh`**: PRAM analysis and debugging utility
+- **ROM and Data Files**: `800.ROM`, Mac OS installation ISO files
+- **Version Directories**: `710/`, `755/`, `761/` containing disk images and PRAM files
 
 ## Common Commands
 
 ### Running Mac OS Emulation
 ```bash
 # Run existing Mac OS installation (auto-detects networking: TAP on Linux, User on macOS)
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-fast.conf
 
 # Run with specific networking mode
-./run68k.sh -C sys755-q800.conf -N user    # User Mode (internet access, macOS default)
-./run68k.sh -C sys755-q800.conf -N tap     # TAP Mode (VM-to-VM, Linux default)
+./run68k.sh -C configs/sys755-fast.conf -N user    # User Mode (internet access, macOS default)
+./run68k.sh -C configs/sys755-fast.conf -N tap     # TAP Mode (VM-to-VM, Linux default)
 
 # Boot from CD/ISO for OS installation
-./run68k.sh -C sys761-q800.conf -c /path/to/Mac_OS.iso -b
+./run68k.sh -C configs/sys761-standard.conf -c /path/to/Mac_OS.iso -b
 
 # Add additional hard drive image
-./run68k.sh -C sys755-q800.conf -a /path/to/additional.img
+./run68k.sh -C configs/sys755-fast.conf -a /path/to/additional.img
 
 # Enable debug mode with detailed logging
-./run68k.sh -C sys755-q800.conf -D
+./run68k.sh -C configs/sys755-fast.conf -D
 
 # Use modern Passt networking (requires passt package)
-./run68k.sh -C sys755-q800.conf -N passt
+./run68k.sh -C configs/sys755-fast.conf -N passt
+
+# Performance configurations available:
+./run68k.sh -C configs/sys755-safest.conf    # Most stable, lowest performance
+./run68k.sh -C configs/sys755-fast.conf      # Balanced performance/stability
+./run68k.sh -C configs/sys755-ultimate.conf  # Maximum performance
+./run68k.sh -C configs/sys761-native.conf    # Near-native CPU speed
+./run68k.sh -C configs/sys761-directsync.conf # Direct memory synchronization
 ```
 
 ### Platform-Specific Notes
 ```bash
 # macOS (Apple Silicon/Intel) - requires modern bash and uses User Mode by default
 brew install qemu bash  # Install dependencies first
-./run68k.sh -C sys755-q800.conf  # Auto-uses User Mode networking
+./run68k.sh -C configs/sys755-fast.conf  # Auto-uses User Mode networking
 
 # Linux - uses TAP networking by default
 # Use automatic installer (recommended)
 ./install-dependencies.sh
-./run68k.sh -C sys755-q800.conf  # Auto-uses TAP networking
+./run68k.sh -C configs/sys755-fast.conf  # Auto-uses TAP networking
 
 # Or install manually
 sudo apt install qemu-system-m68k bridge-utils iproute2 passt hfsprogs
-./run68k.sh -C sys755-q800.conf
+./run68k.sh -C configs/sys755-fast.conf
 ```
 
 ### File Sharing via Shared Disk
 ```bash
 # Mount shared disk image to Linux host (requires sudo)
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-fast.conf
 
 # Unmount shared disk
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -u
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-fast.conf -u
 
 # Check filesystem type
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -c
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-fast.conf -c
 
 # Repair filesystem
-sudo ./mac_disc_mounter.sh -C sys755-q800.conf -r
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-fast.conf -r
 ```
 
 ## Architecture
@@ -88,11 +99,11 @@ sudo ./mac_disc_mounter.sh -C sys755-q800.conf -r
 ### Modular Design
 The codebase follows a modular architecture with clear separation of concerns:
 
-- **Shared Utilities (`qemu-utils.sh`)**: Common functions for error handling, validation, configuration management, security, and logging
-- **Configuration Management (`qemu-config.sh`)**: Schema-based config validation and loading
-- **Storage Management (`qemu-storage.sh`)**: PRAM, HDD, and disk image preparation
-- **Network Management (`qemu-networking.sh`)**: TAP, user, and passt networking modes
-- **Display Management (`qemu-display.sh`)**: Auto-detection and validation of display types
+- **Shared Utilities (`scripts/qemu-utils.sh`)**: Common functions for error handling, validation, configuration management, security, and logging
+- **Configuration Management (`scripts/qemu-config.sh`)**: Schema-based config validation and loading
+- **Storage Management (`scripts/qemu-storage.sh`)**: PRAM, HDD, and disk image preparation
+- **Network Management (`scripts/qemu-networking.sh`)**: TAP, user, and passt networking modes
+- **Display Management (`scripts/qemu-display.sh`)**: Auto-detection and validation of display types
 
 ### Configuration System
 Each `.conf` file defines a complete Mac OS emulation setup with schema validation:
@@ -139,10 +150,13 @@ The project includes comprehensive dependency management:
 **Integration**: The main script (`run68k.sh`) automatically detects missing dependencies and suggests using the installer.
 
 ### File Structure Convention
-Config files create subdirectories containing:
-- `hdd_sys{version}.img`: Main OS disk image
-- `shared_{version}.img`: Shared disk for file transfer  
-- `pram_{version}_{machine}.img`: PRAM storage
+The project is organized with clear directory separation:
+- **`configs/`**: All configuration files with performance variants
+- **`scripts/`**: All modular shell scripts and utilities
+- **Version directories** (`710/`, `755/`, `761/`): Contains system-specific files:
+  - `hdd_sys{version}.img`: Main OS disk image
+  - `shared_{version}.img`: Shared disk for file transfer  
+  - `pram_{version}_{machine}.img`: PRAM storage
 
 ## Development Standards
 
@@ -173,8 +187,8 @@ Config files create subdirectories containing:
 ## Important Development Notes
 
 ### Script Dependencies
-- All modules depend on `qemu-utils.sh` for shared functionality
-- TAP networking requires `qemu-tap-functions.sh`
+- All modules depend on `scripts/qemu-utils.sh` for shared functionality
+- TAP networking requires `scripts/qemu-tap-functions.sh`
 - Version compatibility checking for QEMU (minimum 4.0)
 - Package installation helpers for required dependencies
 
@@ -197,7 +211,8 @@ Config files create subdirectories containing:
 - Debug logging available throughout all modules
 
 ### Extending the System
-- Add new networking modes in `qemu-networking.sh`
-- Extend configuration schema in `qemu-utils.sh`
-- Add new display types in `qemu-display.sh`
+- Add new networking modes in `scripts/qemu-networking.sh`
+- Extend configuration schema in `scripts/qemu-utils.sh`
+- Add new display types in `scripts/qemu-display.sh`
 - Use shared utilities for consistent error handling and validation
+- Create new performance configurations in `configs/` directory

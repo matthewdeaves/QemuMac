@@ -10,20 +10,20 @@
 
 # Source shared utilities and modules
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=qemu-utils.sh
-source "$SCRIPT_DIR/qemu-utils.sh"
-# shellcheck source=qemu-config.sh
-source "$SCRIPT_DIR/qemu-config.sh"
-# shellcheck source=qemu-storage.sh
-source "$SCRIPT_DIR/qemu-storage.sh"
-# shellcheck source=qemu-networking.sh
-source "$SCRIPT_DIR/qemu-networking.sh"
-# shellcheck source=qemu-display.sh
-source "$SCRIPT_DIR/qemu-display.sh"
+# shellcheck source=scripts/qemu-utils.sh
+source "$SCRIPT_DIR/scripts/qemu-utils.sh"
+# shellcheck source=scripts/qemu-config.sh
+source "$SCRIPT_DIR/scripts/qemu-config.sh"
+# shellcheck source=scripts/qemu-storage.sh
+source "$SCRIPT_DIR/scripts/qemu-storage.sh"
+# shellcheck source=scripts/qemu-networking.sh
+source "$SCRIPT_DIR/scripts/qemu-networking.sh"
+# shellcheck source=scripts/qemu-display.sh
+source "$SCRIPT_DIR/scripts/qemu-display.sh"
 
 # --- Script Constants ---
 readonly REQUIRED_QEMU_VERSION="4.0"
-readonly TAP_FUNCTIONS_SCRIPT="$SCRIPT_DIR/qemu-tap-functions.sh"
+readonly TAP_FUNCTIONS_SCRIPT="$SCRIPT_DIR/scripts/qemu-tap-functions.sh"
 
 # --- Configuration Variables (loaded from .conf file) ---
 CONFIG_NAME=""
@@ -48,6 +48,15 @@ QEMU_CPU_MODEL=""
 QEMU_TCG_THREAD_MODE=""
 QEMU_TB_SIZE=""
 QEMU_MEMORY_BACKEND=""
+QEMU_SCSI_CACHE_MODE=""
+QEMU_SCSI_AIO_MODE=""
+QEMU_SCSI_VENDOR=""
+QEMU_SCSI_SERIAL_PREFIX=""
+QEMU_DISPLAY_DEVICE=""
+QEMU_RESOLUTION_PRESET=""
+QEMU_FLOPPY_IMAGE=""
+QEMU_FLOPPY_READONLY=""
+QEMU_FLOPPY_FORMAT=""
 
 # --- Script Variables ---
 CONFIG_FILE=""
@@ -247,6 +256,53 @@ build_qemu_command() {
     validate_tb_size "$tb_size" || exit 1
     validate_memory_backend "$memory_backend" || exit 1
     
+    # Add SCSI configuration variables with defaults
+    local scsi_cache_mode="${QEMU_SCSI_CACHE_MODE:-$DEFAULT_SCSI_CACHE_MODE}"
+    local scsi_aio_mode="${QEMU_SCSI_AIO_MODE:-$DEFAULT_SCSI_AIO_MODE}"
+    local scsi_vendor="${QEMU_SCSI_VENDOR:-$DEFAULT_SCSI_VENDOR}"
+    local scsi_serial_prefix="${QEMU_SCSI_SERIAL_PREFIX:-$DEFAULT_SCSI_SERIAL_PREFIX}"
+    
+    # Validate SCSI configuration
+    validate_scsi_cache_mode "$scsi_cache_mode" || exit 1
+    validate_scsi_aio_mode "$scsi_aio_mode" || exit 1
+    validate_scsi_vendor "$scsi_vendor" || exit 1
+    validate_scsi_serial_prefix "$scsi_serial_prefix" || exit 1
+    
+    # Add display configuration variables with defaults
+    local display_device="${QEMU_DISPLAY_DEVICE:-$DEFAULT_DISPLAY_DEVICE}"
+    local resolution_preset="${QEMU_RESOLUTION_PRESET:-$DEFAULT_RESOLUTION_PRESET}"
+    
+    # Validate display configuration
+    validate_display_device "$display_device" || exit 1
+    validate_resolution_preset "$resolution_preset" || exit 1
+    
+    # Override QEMU_GRAPHICS if resolution preset is specified and differs from default
+    if [ "$resolution_preset" != "$DEFAULT_RESOLUTION_PRESET" ]; then
+        local preset_resolution
+        preset_resolution=$(get_resolution_from_preset "$resolution_preset")
+        if [ "$preset_resolution" != "$QEMU_GRAPHICS" ]; then
+            QEMU_GRAPHICS="$preset_resolution"
+            info_log "Using resolution from preset '$resolution_preset': $QEMU_GRAPHICS"
+        fi
+    fi
+    
+    # Add floppy configuration variables with defaults
+    local floppy_image="${QEMU_FLOPPY_IMAGE:-}"
+    local floppy_readonly="${QEMU_FLOPPY_READONLY:-$DEFAULT_FLOPPY_READONLY}"
+    local floppy_format="${QEMU_FLOPPY_FORMAT:-$DEFAULT_FLOPPY_FORMAT}"
+    
+    # Validate floppy configuration if image is specified
+    if [ -n "$floppy_image" ]; then
+        validate_floppy_readonly "$floppy_readonly" || exit 1
+        validate_floppy_format "$floppy_format" || exit 1
+        
+        # Validate floppy image file exists
+        if [ ! -f "$floppy_image" ]; then
+            echo "Error: Floppy image file '$floppy_image' not found" >&2
+            exit 1
+        fi
+    fi
+    
     # Add explicit CPU model if specified
     if [ -n "$cpu_model" ]; then
         qemu_args+=("-cpu" "$cpu_model")
@@ -275,20 +331,36 @@ build_qemu_command() {
     # Add network arguments using the networking module
     build_network_args "$NETWORK_TYPE" qemu_args
     
+    # Helper function to build drive cache parameters
+    build_drive_cache_params() {
+        local cache_mode="$1"
+        local aio_mode="$2"
+        local cache_params="cache=$cache_mode,aio=$aio_mode"
+        
+        # Native AIO requires cache.direct=on
+        if [ "$aio_mode" = "native" ]; then
+            cache_params="$cache_params,cache.direct=on"
+        fi
+        
+        echo "$cache_params"
+    }
+    
     # --- Add hard disks and CD-ROM ---
     # Boot order is controlled by PRAM for MacOS, bootindex is ignored by firmware.
     # SCSI IDs: 0=OS, 1=Shared, 2=CDROM, 3=Additional HDD
     
     # OS HDD (SCSI ID 0)
+    local drive_cache_params
+    drive_cache_params=$(build_drive_cache_params "$scsi_cache_mode" "$scsi_aio_mode")
     qemu_args+=(
-        "-device" "scsi-hd,scsi-id=0,drive=hd0,vendor=SEAGATE,product=QEMU_OS_DISK"
-        "-drive" "file=$QEMU_HDD,media=disk,format=raw,if=none,id=hd0"
+        "-device" "scsi-hd,scsi-id=0,drive=hd0,vendor=$scsi_vendor,product=QEMU_OS_DISK,serial=${scsi_serial_prefix}001"
+        "-drive" "file=$QEMU_HDD,media=disk,format=raw,if=none,id=hd0,$drive_cache_params"
     )
     
     # Shared HDD (SCSI ID 1)
     qemu_args+=(
-        "-device" "scsi-hd,scsi-id=1,drive=hd1,vendor=SEAGATE,product=QEMU_SHARED"
-        "-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=none,id=hd1"
+        "-device" "scsi-hd,scsi-id=1,drive=hd1,vendor=$scsi_vendor,product=QEMU_SHARED,serial=${scsi_serial_prefix}002"
+        "-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=none,id=hd1,$drive_cache_params"
     )
     
     # CD-ROM (SCSI ID 2) - Attach if specified
@@ -306,12 +378,36 @@ build_qemu_command() {
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
         echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 3)"
         qemu_args+=(
-            "-device" "scsi-hd,scsi-id=3,drive=hd_add,vendor=SEAGATE,product=QEMU_ADD_DISK"
-            "-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=none,id=hd_add"
+            "-device" "scsi-hd,scsi-id=3,drive=hd_add,vendor=$scsi_vendor,product=QEMU_ADD_DISK,serial=${scsi_serial_prefix}003"
+            "-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=none,id=hd_add,$drive_cache_params"
         )
     fi
     
-    echo "Display: $DISPLAY_TYPE"
+    # Add NuBus framebuffer device if specified
+    if [ "$display_device" = "nubus-macfb" ]; then
+        info_log "Adding NuBus framebuffer device"
+        qemu_args+=("-device" "nubus-macfb")
+    fi
+    
+    # Add SWIM floppy drive if image is specified
+    if [ -n "$floppy_image" ]; then
+        info_log "Adding SWIM floppy drive with image: $floppy_image"
+        local readonly_param=""
+        if [ "$floppy_readonly" = "true" ]; then
+            readonly_param=",readonly=on"
+        fi
+        
+        qemu_args+=(
+            "-device" "swim-drive,bus=swim-bus,drive=floppy0"
+            "-drive" "file=$floppy_image,format=raw,if=none,id=floppy0$readonly_param"
+        )
+        
+        echo "Floppy: $floppy_image (Format: $floppy_format, Read-only: $floppy_readonly)"
+    else
+        echo "No floppy disk specified"
+    fi
+    
+    echo "Display: $DISPLAY_TYPE (Device: $display_device, Resolution: $QEMU_GRAPHICS)"
     echo "Audio: $audio_backend (ASC: $asc_mode, Latency: ${audio_latency}μs)"
     echo "--------------------------"
 }
