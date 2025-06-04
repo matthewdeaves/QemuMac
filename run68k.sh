@@ -90,7 +90,7 @@ MAC_ADDRESS=""
 show_help() {
     echo "Usage: $0 -C <config_file.conf> [options]"
     echo "Required:"
-    echo "  -C FILE  Specify configuration file (e.g., sys755-q800.conf)"
+    echo "  -C FILE  Specify configuration file (e.g., sys753-q800.conf)"
     echo "           The config file defines machine, RAM, ROM, disks, PRAM, graphics, audio,"
     echo "           and optionally BRIDGE_NAME, QEMU_TAP_IFACE, QEMU_MAC_ADDR (for TAP),"
     echo "           QEMU_USER_SMB_DIR (for User mode SMB share), QEMU_AUDIO_BACKEND,"
@@ -353,13 +353,13 @@ build_qemu_command() {
     local drive_cache_params
     drive_cache_params=$(build_drive_cache_params "$scsi_cache_mode" "$scsi_aio_mode")
     qemu_args+=(
-        "-device" "scsi-hd,scsi-id=0,drive=hd0,vendor=$scsi_vendor,product=QEMU_OS_DISK,serial=${scsi_serial_prefix}001"
+        "-device" "scsi-hd,bus=scsi.0,scsi-id=0,drive=hd0,vendor=$scsi_vendor,product=QEMU_OS_DISK,serial=${scsi_serial_prefix}001"
         "-drive" "file=$QEMU_HDD,media=disk,format=raw,if=none,id=hd0,$drive_cache_params"
     )
     
     # Shared HDD (SCSI ID 1)
     qemu_args+=(
-        "-device" "scsi-hd,scsi-id=1,drive=hd1,vendor=$scsi_vendor,product=QEMU_SHARED,serial=${scsi_serial_prefix}002"
+        "-device" "scsi-hd,bus=scsi.0,scsi-id=1,drive=hd1,vendor=$scsi_vendor,product=QEMU_SHARED,serial=${scsi_serial_prefix}002"
         "-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=none,id=hd1,$drive_cache_params"
     )
     
@@ -367,7 +367,7 @@ build_qemu_command() {
     if [ -n "$CD_FILE" ]; then
         echo "CD-ROM: $CD_FILE (as SCSI ID 2)"
         qemu_args+=(
-            "-device" "scsi-cd,scsi-id=2,drive=cd0"
+            "-device" "scsi-cd,bus=scsi.0,scsi-id=2,drive=cd0,vendor=$scsi_vendor,product=CD-ROM,serial=${scsi_serial_prefix}004"
             "-drive" "file=$CD_FILE,format=raw,media=cdrom,if=none,id=cd0"
         )
     else
@@ -378,7 +378,7 @@ build_qemu_command() {
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
         echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 3)"
         qemu_args+=(
-            "-device" "scsi-hd,scsi-id=3,drive=hd_add,vendor=$scsi_vendor,product=QEMU_ADD_DISK,serial=${scsi_serial_prefix}003"
+            "-device" "scsi-hd,bus=scsi.0,scsi-id=3,drive=hd_add,vendor=$scsi_vendor,product=QEMU_ADD_DISK,serial=${scsi_serial_prefix}003"
             "-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=none,id=hd_add,$drive_cache_params"
         )
     fi

@@ -198,9 +198,9 @@ main() {
         echo "🎉 Installation successful!"
         echo ""
         echo "You can now run QEMU Mac emulation:"
-        echo "  ./run68k.sh -C sys755-q800.conf           # TAP networking (Linux)"
-        echo "  ./run68k.sh -C sys755-q800.conf -N user   # User mode networking"
-        echo "  ./run68k.sh -C sys755-q800.conf -N passt  # Passt networking"
+        echo "  ./run68k.sh -C sys753-q800.conf           # TAP networking (Linux)"
+        echo "  ./run68k.sh -C sys753-q800.conf -N user   # User mode networking"
+        echo "  ./run68k.sh -C sys753-q800.conf -N passt  # Passt networking"
     else
         echo ""
         echo "⚠️  Some dependencies may not have installed correctly."

@@ -1,0 +1,20 @@
+{
+  "cds": {
+    "marathon": {
+      "name": "Apple Legacy Software Recovery CD",
+      "description": "The October 1999 Apple Legacy Recovery disc is a bootable CD with Mac OS 7.6.1 and software for classic Apple computers and peripherals.",
+      "category": "Operating Systems",
+      "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/Garden/apps/Apple_Legacy_Recovery.iso_.zip",
+      "filename": "Apple Legacy Recovery.iso",
+      "md5": "817db4bd447e77706a64959070ded9c8"
+    }
+  },
+  "roms": {
+    "quadra800": {
+      "name": "Quadra 800 ROM",
+      "description": "ROM file for Quadra 800 emulation",
+      "filename": "800.ROM",
+      "url": "https://archive.org/download/800_20250604/800.ROM"
+    }
+  }
+}

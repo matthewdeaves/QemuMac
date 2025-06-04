@@ -7,7 +7,7 @@
 
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <pram_file>"
-    echo "Example: $0 755/pram_755_q800.img"
+    echo "Example: $0 753/pram_753_q800.img"
     exit 1
 fi
 
