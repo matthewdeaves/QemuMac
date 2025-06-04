@@ -106,6 +106,14 @@ sudo apt install qemu-system-m68k bridge-utils iproute2 passt hfsprogs
 ./run68k.sh -C configs/sys753-standard.conf
 ```
 
+### Known Issues and Limitations
+
+**Hard Drive Mounting When Booting from CD:**
+- When booting from CD-ROM (`-c` flag), formatted hard drives may not automatically mount
+- This affects both system and shared drives, even when properly formatted
+- **Workaround**: Use Drive Setup utility within Mac OS to manually mount drives when needed
+- **Note**: This behavior is consistent across all configurations and appears to be a Mac OS/QEMU interaction limitation
+
 ### File Sharing via Shared Disk
 ```bash
 # Mount shared disk image to Linux host (requires sudo)

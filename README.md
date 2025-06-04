@@ -1117,6 +1117,12 @@ Debug mode provides:
 - **CD-ROM Boot Precedence**: QEMU Q800 emulation always boots from CD when present, regardless of PRAM settings (QEMU limitation)
 - **PRAM Implementation**: Boot order values are correctly written per Laurent Vivier's specifications but QEMU doesn't always respect them
 
+#### Hard Drive Mounting When Booting from CD
+- **Issue**: When booting from CD-ROM (`-c` flag), formatted hard drives may not automatically mount
+- **Scope**: Affects both system and shared drives, even when properly formatted
+- **Workaround**: Use Drive Setup utility within Mac OS to manually mount drives when needed
+- **Note**: This behavior is consistent across all configurations and appears to be a Mac OS/QEMU interaction limitation
+
 #### Networking
 - **TAP Network Cleanup**: Interfaces are automatically cleaned up, but manual cleanup may be needed if scripts are forcefully terminated
 - **Passt Platform Support**: Linux-only; not available on macOS via Homebrew
