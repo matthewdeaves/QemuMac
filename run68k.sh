@@ -90,7 +90,7 @@ MAC_ADDRESS=""
 show_help() {
     echo "Usage: $0 -C <config_file.conf> [options]"
     echo "Required:"
-    echo "  -C FILE  Specify configuration file (e.g., sys755-q800.conf)"
+    echo "  -C FILE  Specify configuration file (e.g., sys753-q800.conf)"
     echo "           The config file defines machine, RAM, ROM, disks, PRAM, graphics, audio,"
     echo "           and optionally BRIDGE_NAME, QEMU_TAP_IFACE, QEMU_MAC_ADDR (for TAP),"
     echo "           QEMU_USER_SMB_DIR (for User mode SMB share), QEMU_AUDIO_BACKEND,"

@@ -31,7 +31,7 @@ CURRENT_USER=$(whoami)
 show_help() {
     echo "Usage: $0 -C <qemu_config_file.conf> [options]"
     echo "Required:"
-    echo "  -C FILE  Specify QEMU configuration file (e.g., sys755-q800.conf)"
+    echo "  -C FILE  Specify QEMU configuration file (e.g., sys753-q800.conf)"
     echo "           The script will use the QEMU_SHARED_HDD path from this file."
     echo "Options:"
     echo "  -m DIR   Specify mount point (default: $DEFAULT_MOUNT_POINT)"

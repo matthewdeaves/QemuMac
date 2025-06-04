@@ -10,12 +10,14 @@ This project provides a modular set of shell scripts to simplify the setup and m
 
 ### Core Scripts (Project Root)
 - **`run68k.sh`**: Main orchestration script for QEMU Mac emulation
+- **`mac-library.sh`**: Interactive software library manager with automatic downloads
 - **`install-dependencies.sh`**: Cross-platform dependency installer
-- **`sys755-safe.conf`**: Legacy root config for Mac OS 7.5.5 (comprehensive standard)
+- **`sys753-safe.conf`**: Legacy root config for Mac OS 7.5.3 (comprehensive standard)
 - **`sys761-safe.conf`**: Legacy root config for Mac OS 7.6.1 (comprehensive standard)
 
 ### Modular Components (`scripts/` directory)
 - **`scripts/qemu-utils.sh`**: Shared utility functions and error handling (core dependency)
+- **`scripts/qemu-menu.sh`**: Interactive menu system with colorful UI and download management
 - **`scripts/mac_disc_mounter.sh`**: File sharing via HFS/HFS+ disk mounting on Linux
 - **`scripts/qemu-config.sh`**: Configuration loading, validation, and schema checking
 - **`scripts/qemu-storage.sh`**: Disk image creation, PRAM management, boot order
@@ -27,14 +29,14 @@ This project provides a modular set of shell scripts to simplify the setup and m
 ### Configuration Files (`configs/` directory)
 **Performance-Optimized Variants**: Multiple configurations for different use cases
 
-**Mac OS 7.5.5 Configurations:**
-- `sys755-standard.conf`: Balanced default (writethrough cache, built-in display)
-- `sys755-fast.conf`: Speed-focused (writeback cache, built-in display) 
-- `sys755-ultimate.conf`: Maximum performance (writeback + native AIO, QUANTUM drives)
-- `sys755-safest.conf`: Maximum safety (no cache, built-in display)
-- `sys755-native.conf`: Linux-optimized (writethrough + native AIO)
-- `sys755-directsync.conf`: Direct I/O testing (directsync cache)
-- `sys755-authentic.conf`: Historical accuracy (NuBus framebuffer emulation)
+**Mac OS 7.5.3 Configurations:**
+- `sys753-standard.conf`: Balanced default (writethrough cache, built-in display)
+- `sys753-fast.conf`: Speed-focused (writeback cache, built-in display) 
+- `sys753-ultimate.conf`: Maximum performance (writeback + native AIO, QUANTUM drives)
+- `sys753-safest.conf`: Maximum safety (no cache, built-in display)
+- `sys753-native.conf`: Linux-optimized (writethrough + native AIO)
+- `sys753-directsync.conf`: Direct I/O testing (directsync cache)
+- `sys753-authentic.conf`: Historical accuracy (NuBus framebuffer emulation)
 
 **Mac OS 7.6.1 Configurations:**
 - `sys761-standard.conf`: Balanced default (writethrough cache, built-in display)
@@ -47,7 +49,10 @@ This project provides a modular set of shell scripts to simplify the setup and m
 
 ### Data Files and Directories
 - **ROM Files**: `800.ROM` (user-provided, legally obtained)
-- **Version Directories**: `710/`, `755/`, `761/` containing:
+- **Software Library**: `library/` containing:
+  - `software-database.json`: Software and ROM database with download URLs
+  - `downloads/`: Downloaded and processed software/ROM files
+- **Version Directories**: `710/`, `753/`, `761/` containing:
   - `hdd_sys{version}.img`: Main OS disk images
   - `shared_{version}.img`: Shared disk for file transfer
   - `pram_{version}_q800.img`: PRAM storage files
@@ -57,66 +62,80 @@ This project provides a modular set of shell scripts to simplify the setup and m
 ### Running Mac OS Emulation
 ```bash
 # Quick start with balanced defaults
-./run68k.sh -C configs/sys755-standard.conf    # Mac OS 7.5.5 balanced default
+./run68k.sh -C configs/sys753-standard.conf    # Mac OS 7.5.3 balanced default
 ./run68k.sh -C configs/sys761-standard.conf    # Mac OS 7.6.1 balanced default
 
 # Performance-focused configurations
-./run68k.sh -C configs/sys755-fast.conf        # Speed-focused 7.5.5
+./run68k.sh -C configs/sys753-fast.conf        # Speed-focused 7.5.3
 ./run68k.sh -C configs/sys761-ultimate.conf    # Maximum performance 7.6.1
 
 # Safety-focused configurations
-./run68k.sh -C configs/sys755-safest.conf      # Maximum data safety 7.5.5
+./run68k.sh -C configs/sys753-safest.conf      # Maximum data safety 7.5.3
 ./run68k.sh -C configs/sys761-safest.conf      # Maximum data safety 7.6.1
 
 # Historical accuracy
-./run68k.sh -C configs/sys755-authentic.conf   # NuBus graphics 7.5.5
+./run68k.sh -C configs/sys753-authentic.conf   # NuBus graphics 7.5.3
 ./run68k.sh -C configs/sys761-authentic.conf   # NuBus graphics 7.6.1
 
 # Network mode override (auto-detects by platform)
-./run68k.sh -C configs/sys755-standard.conf -N user    # Internet access
-./run68k.sh -C configs/sys755-standard.conf -N tap     # VM-to-VM (Linux)
-./run68k.sh -C configs/sys755-standard.conf -N passt   # Modern networking
+./run68k.sh -C configs/sys753-standard.conf -N user    # Internet access
+./run68k.sh -C configs/sys753-standard.conf -N tap     # VM-to-VM (Linux)
+./run68k.sh -C configs/sys753-standard.conf -N passt   # Modern networking
 
 # OS installation workflow
 ./run68k.sh -C configs/sys761-standard.conf -c /path/to/Mac_OS.iso -b  # Install
 ./run68k.sh -C configs/sys761-standard.conf                            # Run
 
 # Advanced options
-./run68k.sh -C configs/sys755-standard.conf -a /path/to/software.img -D
+./run68k.sh -C configs/sys753-standard.conf -a /path/to/software.img -D
 ```
 
 ### Platform-Specific Notes
 ```bash
 # macOS (Apple Silicon/Intel) - requires modern bash and uses User Mode by default
 brew install qemu bash  # Install dependencies first
-./run68k.sh -C configs/sys755-standard.conf  # Auto-uses User Mode networking
+./run68k.sh -C configs/sys753-standard.conf  # Auto-uses User Mode networking
 
 # Linux - uses TAP networking by default
 # Use automatic installer (recommended)
 ./install-dependencies.sh
-./run68k.sh -C configs/sys755-standard.conf  # Auto-uses TAP networking
+./run68k.sh -C configs/sys753-standard.conf  # Auto-uses TAP networking
 
 # Or install manually
 sudo apt install qemu-system-m68k bridge-utils iproute2 passt hfsprogs
-./run68k.sh -C configs/sys755-standard.conf
+./run68k.sh -C configs/sys753-standard.conf
 ```
 
 ### File Sharing via Shared Disk
 ```bash
 # Mount shared disk image to Linux host (requires sudo)
-sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys753-standard.conf
 
 # Unmount shared disk
-sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -u
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys753-standard.conf -u
 
 # Check filesystem type
-sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -c
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys753-standard.conf -c
 
 # Repair filesystem
-sudo ./scripts/mac_disc_mounter.sh -C configs/sys755-standard.conf -r
+sudo ./scripts/mac_disc_mounter.sh -C configs/sys753-standard.conf -r
 
 # Advanced mounting options
 sudo ./scripts/mac_disc_mounter.sh -C configs/sys761-standard.conf -m /custom/mount/point
+```
+
+### Mac Library Manager
+```bash
+# Interactive software library with colorful UI
+./mac-library.sh
+
+# Command line interface
+./mac-library.sh list                           # List available software
+./mac-library.sh download marathon              # Download specific software  
+./mac-library.sh launch marathon sys753-standard.conf  # Launch with config
+
+# Example integrated workflow
+./mac-library.sh  # Select "Apple Legacy Recovery CD" → Select "Mac OS 7.5.3" → Auto-launch
 ```
 
 ## Architecture
@@ -203,7 +222,7 @@ The project follows a clean, organized directory structure:
 **Root Directory:**
 - `run68k.sh`: Main script
 - `install-dependencies.sh`: Dependency installer
-- `sys755-safe.conf`, `sys761-safe.conf`: Legacy comprehensive configs
+- `sys753-safe.conf`, `sys761-safe.conf`: Legacy comprehensive configs
 - `800.ROM`: User-provided ROM file
 
 **`scripts/` Directory (all utilities):**
@@ -217,7 +236,7 @@ The project follows a clean, organized directory structure:
 - Built-in display (fast) vs NuBus display (authentic) variants
 
 **Version Directories** (auto-created by configs):
-- `710/`, `755/`, `761/`: Contains system-specific disk images:
+- `710/`, `753/`, `761/`: Contains system-specific disk images:
   - `hdd_sys{version}.img`: Main OS disk image
   - `shared_{version}.img`: Shared disk for file transfer  
   - `pram_{version}_q800.img`: PRAM storage with boot order settings
@@ -253,7 +272,9 @@ The project follows a clean, organized directory structure:
 ### Script Dependencies and Architecture
 **Dependency Hierarchy:**
 - `run68k.sh` → Main orchestrator, sources all required modules
+- `mac-library.sh` → Software library manager, sources `qemu-menu.sh`
 - `scripts/qemu-utils.sh` → Core dependency for all other scripts
+- `scripts/qemu-menu.sh` → Interactive menu system with download management
 - `scripts/qemu-config.sh` → Configuration validation and loading
 - `scripts/qemu-storage.sh` → Disk and PRAM management
 - `scripts/qemu-networking.sh` → Network mode setup
@@ -266,6 +287,9 @@ The project follows a clean, organized directory structure:
 - Linux: Full feature support (TAP, Passt, file mounting)
 - macOS: User mode networking only (TAP requires Linux tools)
 - Bash 4.0+ required (macOS needs `brew install bash`)
+- Optional: `jq` for enhanced JSON parsing in Mac Library Manager
+- Download tools: `wget` or `curl` for software downloads
+- Archive tools: `unzip` for ZIP file extraction
 
 ### Security and Permissions
 - TAP mode requires sudo for network bridge/interface management
@@ -287,7 +311,7 @@ The project follows a clean, organized directory structure:
 
 ### Extending the System
 **Adding New Performance Configurations:**
-1. Copy existing config: `cp configs/sys755-standard.conf configs/sys755-custom.conf`
+1. Copy existing config: `cp configs/sys753-standard.conf configs/sys753-custom.conf`
 2. Modify only SCSI performance variables (cache mode, AIO mode, vendor)
 3. Update CONFIG_NAME and comments to describe the variant
 4. Test thoroughly with both installation and runtime scenarios

@@ -1,10 +1,11 @@
-Apple Legacy Recovery.iso
-Mac OS 9.toast
+# Library - track database but not downloads
+library/downloads/
+library/cache/
 
 800.ROM
 1.6.rom
 710
-755
+753
 761
 
 # macOS system files
