@@ -118,13 +118,10 @@ prepare_config_disk_images() {
 }
 
 #######################################
-# Set the boot device SCSI ID in the PRAM file using Laurent Vivier's algorithm
-# The PRAM (Parameter RAM) stores boot preferences.
-# Based on Laurent's analysis: Boot order stored as 16-bit RefNum at offset 0x7A (122)
-# Format: (byte) DriveId{for slots} | (byte) PartitionId | (word) RefNum
-# SCSI ID calculation: ~RefNum - 32
+# Set the boot device SCSI ID in the PRAM file.
+# This ensures the "Startup Disk" control panel in Mac OS shows the correct device.
 # Arguments:
-#   device_type: "hdd" for hard disk (SCSI ID 0) or "cdrom" for CD-ROM (SCSI ID 2)
+#   scsi_id: The SCSI ID of the device to set as the boot drive.
 # Globals:
 #   QEMU_PRAM, DEBUG_MODE
 # Returns:
@@ -133,73 +130,42 @@ prepare_config_disk_images() {
 #   1 if PRAM file not found or write fails
 #######################################
 set_pram_boot_order() {
-    local device_type="$1"
+    local scsi_id="$1"
     local pram_file="$QEMU_PRAM"
-    local offset_78=120  # 0x78 in decimal - DriveId/PartitionId location
     local offset_7a=122  # 0x7A in decimal - RefNum location (main boot order)
     
     # Validate arguments
-    if [ -z "$device_type" ]; then
-        echo "Error: Device type is required for PRAM boot order setting" >&2
+    if [ -z "$scsi_id" ]; then
+        echo "Error: SCSI ID is required for PRAM boot order setting" >&2
         exit 1
     fi
     
-    # Ensure PRAM file exists (should have been created by prepare_pram)
+    # Ensure PRAM file exists
     validate_file_exists "$pram_file" "PRAM file" || exit 1
     
-    local scsi_id refnum_value byte1 byte2 drive_partition_byte
-    case "$device_type" in
-        "hdd")
-            scsi_id=0
-            # Calculate RefNum using Laurent's formula: ~(scsi_id + 32)
-            refnum_value=$((~(scsi_id + 32) & 0xFFFF))
-            drive_partition_byte='\xff'  # DriveId/PartitionId for HDD
-            info_log "Setting PRAM to boot from HDD (SCSI ID $scsi_id, RefNum: 0x$(printf '%04x' $refnum_value))"
-            ;;
-        "cdrom")
-            scsi_id=2
-            # Calculate RefNum using Laurent's formula: ~(scsi_id + 32)
-            refnum_value=$((~(scsi_id + 32) & 0xFFFF))
-            drive_partition_byte='\xff'  # DriveId/PartitionId for CD-ROM
-            info_log "Setting PRAM to boot from CD-ROM (SCSI ID $scsi_id, RefNum: 0x$(printf '%04x' $refnum_value))"
-            ;;
-        *)
-            echo "Error: Invalid device type '$device_type' for PRAM boot order" >&2
-            echo "Valid types: hdd, cdrom" >&2
-            exit 1
-            ;;
-    esac
+    # Calculate RefNum using Laurent Vivier's formula: ~(scsi_id + 32)
+    local refnum_value=$((~($scsi_id + 32) & 0xFFFF))
+    
+    info_log "Setting PRAM to boot from SCSI ID $scsi_id (RefNum: 0x$(printf '%04x' $refnum_value))"
     
     # Convert RefNum to bytes (little-endian format)
-    byte1=$(printf '\\x%02x' $((refnum_value & 0xFF)))
-    byte2=$(printf '\\x%02x' $(((refnum_value >> 8) & 0xFF)))
+    local byte1=$(printf '\\x%02x' $((refnum_value & 0xFF)))
+    local byte2=$(printf '\\x%02x' $(((refnum_value >> 8) & 0xFF)))
     
-    # Debug output showing calculations
-    debug_log "PRAM Boot Order Calculation:"
-    debug_log "  SCSI ID: $scsi_id"
-    debug_log "  RefNum calculation: ~($scsi_id + 32) = $refnum_value (0x$(printf '%04x' $refnum_value))"
-    debug_log "  Byte1 (LSB): 0x$(printf '%02x' $((refnum_value & 0xFF)))"
-    debug_log "  Byte2 (MSB): 0x$(printf '%02x' $(((refnum_value >> 8) & 0xFF)))"
-    
-    # Write DriveId/PartitionId byte at offset 0x78 (may not be critical but following Laurent's observation)
-    printf "%b" "$drive_partition_byte" | dd of="$pram_file" bs=1 seek="$offset_78" count=1 conv=notrunc status=none 2>/dev/null
-    
-    # Write the RefNum (16-bit value) at offset 0x7A in little-endian format
+    # Write the RefNum (16-bit value) at offset 0x7A
     printf "%b%b" "$byte1" "$byte2" | dd of="$pram_file" bs=1 seek="$offset_7a" count=2 conv=notrunc status=none
     check_exit_status $? "Failed to write boot order to PRAM file '$pram_file'"
     
     # Enhanced debug output
     if [ "${DEBUG_MODE:-false}" = true ] || [ "${BOOT_DEBUG:-false}" = true ]; then
         echo "PRAM Boot Order Debug Information:"
-        echo "  Target Device: $device_type (SCSI ID $scsi_id)"
+        echo "  Target SCSI ID: $scsi_id"
         echo "  RefNum Value: 0x$(printf '%04x' $refnum_value)"
-        echo "  PRAM bytes at offset 0x78 (DriveId/PartitionId):"
-        hexdump -C -s 120 -n 1 "$pram_file" | sed 's/^/    /'
         echo "  PRAM bytes at offset 0x7A (RefNum - boot order):"
         hexdump -C -s 122 -n 2 "$pram_file" | sed 's/^/    /'
-        echo "  Verification - SCSI ID from RefNum: $((~refnum_value - 32))"
     fi
 }
+
 
 #######################################
 # Validate additional hard drive file if specified

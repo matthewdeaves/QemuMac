@@ -98,7 +98,7 @@ show_help() {
     echo "Options:"
     echo "  -c FILE  Specify CD-ROM image file (if not specified, no CD will be attached)"
     echo "  -a FILE  Specify an additional hard drive image file (e.g., mydrive.hda or mydrive.img)"
-    echo "  -b       Boot from CD-ROM (requires -c option, modifies PRAM)"
+    echo "  -b       Boot from CD-ROM (for OS installation)"
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
     echo "  -N TYPE  Specify network type: 'tap' (Linux default), 'user' (macOS default, NAT), or 'passt' (slirp alternative)"
     echo "  -D       Enable debug mode (set -x, show PRAM before launch)"
@@ -346,39 +346,47 @@ build_qemu_command() {
     }
     
     # --- Add hard disks and CD-ROM ---
-    # Boot order is controlled by PRAM for MacOS, bootindex is ignored by firmware.
-    # SCSI IDs: 0=OS, 1=Shared, 2=CDROM, 3=Additional HDD
+    # Static SCSI ID assignment. OS HDD must be highest for drives to mount correctly.
+    # In install mode, we swap the IDs to boot from the CD.
+    # SCSI IDs: 6=OS, 5=Shared, 4=Additional HDD, 3=CDROM
     
-    # OS HDD (SCSI ID 0)
+    local hdd_scsi_id=6
+    local cdrom_scsi_id=3
+    if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
+        hdd_scsi_id=0
+        cdrom_scsi_id=6
+    fi
+
+    # OS HDD (SCSI ID 6)
     local drive_cache_params
     drive_cache_params=$(build_drive_cache_params "$scsi_cache_mode" "$scsi_aio_mode")
     qemu_args+=(
-        "-device" "scsi-hd,bus=scsi.0,scsi-id=0,drive=hd0,vendor=$scsi_vendor,product=QEMU_OS_DISK,serial=${scsi_serial_prefix}001"
+        "-device" "scsi-hd,bus=scsi.0,scsi-id=${hdd_scsi_id},drive=hd0,vendor=$scsi_vendor,product=QEMU_OS_DISK,serial=${scsi_serial_prefix}001"
         "-drive" "file=$QEMU_HDD,media=disk,format=raw,if=none,id=hd0,$drive_cache_params"
     )
     
-    # Shared HDD (SCSI ID 1)
+    # Shared HDD (SCSI ID 5)
     qemu_args+=(
-        "-device" "scsi-hd,bus=scsi.0,scsi-id=1,drive=hd1,vendor=$scsi_vendor,product=QEMU_SHARED,serial=${scsi_serial_prefix}002"
+        "-device" "scsi-hd,bus=scsi.0,scsi-id=5,drive=hd1,vendor=$scsi_vendor,product=QEMU_SHARED,serial=${scsi_serial_prefix}002"
         "-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=none,id=hd1,$drive_cache_params"
     )
     
-    # CD-ROM (SCSI ID 2) - Attach if specified
+    # CD-ROM (SCSI ID 3) - Attach if specified
     if [ -n "$CD_FILE" ]; then
-        echo "CD-ROM: $CD_FILE (as SCSI ID 2)"
+        echo "CD-ROM: $CD_FILE (as SCSI ID ${cdrom_scsi_id})"
         qemu_args+=(
-            "-device" "scsi-cd,bus=scsi.0,scsi-id=2,drive=cd0,vendor=$scsi_vendor,product=CD-ROM,serial=${scsi_serial_prefix}004"
+            "-device" "scsi-cd,bus=scsi.0,scsi-id=${cdrom_scsi_id},drive=cd0,vendor=$scsi_vendor,product=CD-ROM,serial=${scsi_serial_prefix}004"
             "-drive" "file=$CD_FILE,format=raw,media=cdrom,if=none,id=cd0"
         )
     else
         echo "No CD-ROM specified"
     fi
     
-    # Additional HDD (SCSI ID 3) - Attach if specified via -a flag
+    # Additional HDD (SCSI ID 4) - Attach if specified via -a flag
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
-        echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 3)"
+        echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 4)"
         qemu_args+=(
-            "-device" "scsi-hd,bus=scsi.0,scsi-id=3,drive=hd_add,vendor=$scsi_vendor,product=QEMU_ADD_DISK,serial=${scsi_serial_prefix}003"
+            "-device" "scsi-hd,bus=scsi.0,scsi-id=4,drive=hd_add,vendor=$scsi_vendor,product=QEMU_ADD_DISK,serial=${scsi_serial_prefix}003"
             "-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=none,id=hd_add,$drive_cache_params"
         )
     fi
@@ -535,15 +543,15 @@ main() {
     # Prepare storage
     prepare_config_disk_images
     
-    # Set boot order in PRAM
+    # Set boot order in PRAM for guest OS consistency
     if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
-        set_pram_boot_order "cdrom"
-    elif [ "$BOOT_FROM_CD" = true ] && [ -z "$CD_FILE" ]; then
-        warning_log "-b specified but no CD image provided with -c. Setting PRAM to HDD boot."
-        set_pram_boot_order "hdd"
+        set_pram_boot_order 3 # Set PRAM to CD-ROM (SCSI ID 3)
     else
-        # Default boot is from HDD
-        set_pram_boot_order "hdd"
+        # Default boot is from HDD, or CD boot was requested without a CD file
+        if [ "$BOOT_FROM_CD" = true ] && [ -z "$CD_FILE" ]; then
+            warning_log "-b specified but no CD image provided with -c. Setting PRAM to HDD boot."
+        fi
+        set_pram_boot_order 6 # Set PRAM to HDD (SCSI ID 6)
     fi
     
     # Determine display type

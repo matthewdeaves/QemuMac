@@ -1114,14 +1114,14 @@ Debug mode provides:
 ### 🐛 Known Issues
 
 #### Boot and PRAM
-- **CD-ROM Boot Precedence**: QEMU Q800 emulation always boots from CD when present, regardless of PRAM settings (QEMU limitation)
-- **PRAM Implementation**: Boot order values are correctly written per Laurent Vivier's specifications but QEMU doesn't always respect them
+- **CD-ROM Boot Precedence**: QEMU's q800 firmware has a hardcoded boot order that scans SCSI IDs from 6 down to 0. This makes it impossible to boot from a CD-ROM (at a lower SCSI ID) when a bootable hard drive is present at a higher ID.
+- **PRAM Implementation**: The PRAM settings for boot devices are ignored by the q800 firmware in favor of the SCSI ID scan.
+
+**Workaround:** The `-b` flag now enables an OS installation mode. When this flag is used, the script will dynamically swap the SCSI IDs of the OS HDD and the CD-ROM, allowing the CD-ROM to be booted. For normal use, do not use this flag.
 
 #### Hard Drive Mounting When Booting from CD
-- **Issue**: When booting from CD-ROM (`-c` flag), formatted hard drives may not automatically mount
-- **Scope**: Affects both system and shared drives, even when properly formatted
-- **Workaround**: Use Drive Setup utility within Mac OS to manually mount drives when needed
-- **Note**: This behavior is consistent across all configurations and appears to be a Mac OS/QEMU interaction limitation
+- **Issue**: When booting from a CD-ROM using the `-b` flag, the hard drives will not be mounted on the desktop.
+- **Workaround**: During the OS installation process, the hard drives will be visible in the "Drive Setup" utility, which is all that is needed to format and install the OS. After installation, the VM should be restarted without the `-b` flag, and the drives will mount correctly.
 
 #### Networking
 - **TAP Network Cleanup**: Interfaces are automatically cleaned up, but manual cleanup may be needed if scripts are forcefully terminated
