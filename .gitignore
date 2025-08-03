@@ -2,11 +2,14 @@
 library/downloads/
 library/cache/
 
+# ROM files are user-provided and tracked
 800.ROM
 1.6.rom
+
+# Disk images are user data and not tracked
+m68k/images/
+ppc/images/
 710
-753
-761
 
 # macOS system files
 .DS_Store
