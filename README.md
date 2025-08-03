@@ -478,32 +478,9 @@ The Mac Library Manager provides an interactive interface for browsing, download
 
 ### 🗂️ Software Database
 
-The library uses a JSON database (`library/software-database.json`) containing:
+The library uses a JSON database (`library/software-database.json`) containing a listing of CDs and ROMS that can be configured to allow for expansion.
 
-```json
-{
-  "cds": {
-    "marathon": {
-      "name": "Apple Legacy Software Recovery CD",
-      "description": "Recovery disc with Mac OS 7.6.1 and utilities",
-      "category": "Operating Systems",
-      "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/...",
-      "filename": "Apple Legacy Recovery.iso",
-      "md5": "817db4bd447e77706a64959070ded9c8"
-    }
-  },
-  "roms": {
-    "quadra800": {
-      "name": "Quadra 800 ROM",
-      "description": "ROM file for Quadra 800 emulation",
-      "filename": "800.ROM",
-      "url": "https://archive.org/download/800_20250604/800.ROM"
-    }
-  }
-}
-```
-
-### 🎯 Workflow Example
+### 🎯 Usage Example
 
 ```bash
 # 1. Launch the interactive manager
@@ -538,26 +515,6 @@ library/
 - **CDs/Software**: Downloaded to `library/downloads/` (ready for `-c` flag)
 - **ROM Files**: Downloaded directly to project root (e.g., `800.ROM`)
 - **ZIP Handling**: Automatically extracted and cleaned up
-
-### 🔧 Technical Features
-
-**Download Engine:**
-- ✅ **Progress Tracking**: Real-time download progress with bars/spinners
-- ✅ **MD5 Verification**: Automatic integrity checking
-- ✅ **ZIP Extraction**: Detects and extracts `.zip` files automatically
-- ✅ **Resume Support**: Handles interrupted downloads gracefully
-- ✅ **Cleanup**: Removes temporary ZIP files after extraction
-
-**Smart Integration:**
-- ✅ **Config Detection**: Auto-discovers available system configurations
-- ✅ **Version Mapping**: Maps software to compatible Mac OS versions
-- ✅ **Cache Management**: Prevents duplicate downloads
-- ✅ **Error Handling**: Comprehensive error reporting and recovery
-
-**Platform Support:**
-- ✅ **JSON Parsing**: Uses `jq` when available, fallback parsing otherwise
-- ✅ **Download Tools**: Supports both `wget` and `curl`
-- ✅ **Cross-Platform**: Works on Linux and macOS
 
 ### 🎨 User Experience
 
