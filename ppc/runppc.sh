@@ -167,7 +167,7 @@ parse_arguments() {
     
     # Validate Network Type early
     if [[ "$NETWORK_TYPE" != "tap" && "$NETWORK_TYPE" != "user" && "$NETWORK_TYPE" != "passt" ]]; then
-        echo "Error: Invalid network type specified with -N. Use 'tap', 'user', or 'passt'.\" >&2
+        echo "Error: Invalid network type specified with -N. Use 'tap', 'user', or 'passt'." >&2
         show_help
     fi
     
@@ -198,20 +198,20 @@ prepare_disk_images() {
     
     # Create OS hard disk image if it doesn't exist
     if [ ! -f "$QEMU_HDD" ]; then
-        info_log "PowerPC OS hard disk image '$QEMU_HDD' not found. Creating (${hdd_size})..."
+        info_log "PowerPC OS hard disk image '$QEMU_HDD' not found. Creating ${hdd_size}..."
         qemu-img create -f raw "$QEMU_HDD" "$hdd_size"
         check_exit_status $? "Failed to create PowerPC OS hard disk image '$QEMU_HDD'"
-        echo "Empty PowerPC OS hard disk image created. Proceeding with boot (likely from CD for install)."
+        echo "Empty PowerPC OS hard disk image created. Proceeding with boot likely from CD for install."
         echo "Note: Format this drive with Mac OS Disk Utility during installation."
     fi
     
     # Create shared disk image if it doesn't exist
     if [ ! -f "$QEMU_SHARED_HDD" ]; then
-        info_log "PowerPC shared disk image '$QEMU_SHARED_HDD' not found. Creating ($shared_size)..."
+        info_log "PowerPC shared disk image '$QEMU_SHARED_HDD' not found. Creating ${shared_size}..."
         qemu-img create -f raw "$QEMU_SHARED_HDD" "$shared_size"
         check_exit_status $? "Failed to create PowerPC shared disk image '$QEMU_SHARED_HDD'"
         echo "Empty PowerPC shared disk image created. Format it within the emulator."
-        echo "To share files with the PowerPC VM (Linux example):"
+        echo "To share files with the PowerPC VM - Linux example:"
         echo "  1. Format as HFS+ in Mac OS first"
         echo "  2. sudo mount -t hfsplus -o loop \"$QEMU_SHARED_HDD\" /mnt"
         echo "  3. Copy files"
@@ -302,7 +302,7 @@ build_qemu_command() {
     
     if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
         # When booting from CD, put CD on primary master for boot priority
-        echo "CD-ROM: $CD_FILE (as Primary Master for boot)"
+        echo "CD-ROM: $CD_FILE as Primary Master for boot"
         qemu_args+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=ide,index=0,id=cd0")
         # Put OS drive on primary slave when booting from CD
         qemu_args+=("-drive" "file=$QEMU_HDD,media=disk,format=raw,if=ide,index=1,id=hd0,$drive_cache_params")
@@ -312,7 +312,7 @@ build_qemu_command() {
         
         # CD-ROM on primary slave if specified
         if [ -n "$CD_FILE" ]; then
-            echo "CD-ROM: $CD_FILE (as Primary Slave)"
+            echo "CD-ROM: $CD_FILE as Primary Slave"
             qemu_args+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=ide,index=1,id=cd0")
         else
             echo "No CD-ROM specified"
@@ -324,7 +324,7 @@ build_qemu_command() {
     
     # Secondary Slave - Additional HDD if specified via -a flag
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
-        echo "Additional HDD: $ADDITIONAL_HDD_FILE (as Secondary Slave)"
+        echo "Additional HDD: $ADDITIONAL_HDD_FILE as Secondary Slave"
         qemu_args+=("-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=ide,index=3,id=hd_add,$drive_cache_params")
     fi
     
@@ -338,9 +338,9 @@ build_qemu_command() {
         )
     fi
     
-    echo "Display: $DISPLAY_TYPE (Resolution: $QEMU_GRAPHICS)"
-    echo "Audio: $audio_backend (Device: $sound_device, Latency: ${audio_latency}μs)"
-    echo "Storage: IDE (Cache: $ide_cache_mode, AIO: $ide_aio_mode)"
+    echo "Display: $DISPLAY_TYPE Resolution: $QEMU_GRAPHICS"
+    echo "Audio: $audio_backend Device: $sound_device, Latency: ${audio_latency}μs"
+    echo "Storage: IDE Cache: $ide_cache_mode, AIO: $ide_aio_mode"
     echo "--------------------------"
 }
 
