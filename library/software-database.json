@@ -4,6 +4,7 @@
       "name": "Apple Legacy Software Recovery CD",
       "description": "The October 1999 Apple Legacy Recovery disc is a bootable CD with Mac OS 7.6.1 and software for classic Apple computers and peripherals.",
       "category": "Operating Systems",
+      "architectures": ["m68k", "ppc"],
       "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/Garden/apps/Apple_Legacy_Recovery.iso_.zip",
       "filename": "Apple Legacy Recovery.iso",
       "md5": "817db4bd447e77706a64959070ded9c8"
@@ -12,6 +13,7 @@
       "name": "Marathon Trilogy",
       "description": "Classic sci-fi first-person shooter trilogy by Bungie - Marathon, Marathon 2: Durandal, and Marathon Infinity.",
       "category": "Games",
+      "architectures": ["m68k"],
       "url": "ftp://mirror:mirror@ftp.macintosh.garden/games/marathontrilogy.zip",
       "filename": "Marathon Trilogy.iso",
       "md5": "ec4b56162044b9a34e0c60cc859f073f"
@@ -20,6 +22,7 @@
       "name": "Game Pack 2",
       "description": "Classic LucasArts adventure games: The Secret of Monkey Island, Monkey Island 2: LeChuck's Revenge, and Indiana Jones and the Fate of Atlantis. All games have copy protection removed for easy play.",
       "category": "Games",
+      "architectures": ["m68k"],
       "url": "https://archive.org/download/lucasarts-mac-game-pack-2/game-pack-2.iso",
       "filename": "game-pack-2.iso",
       "md5": "e3b17eb417f8dd93d699773c5ab14bba"
@@ -28,9 +31,19 @@
       "name": "Myst",
       "description": "Myst, the surrealistic adventure that becomes your world, offers a first-person perspective, stunning 3-D photorealistic graphics and an original sound track as players seek to untangle a web of deceit.",
       "category": "Games",
+      "architectures": ["m68k"],
       "url": "ftp://mirror:mirror@ftp.macintosh.garden/games/Myst.iso",
       "filename": "Myst.iso",
       "md5": "df4c079f227412ee6f09a6ec341f9ba8"
+    },
+    "macos_x_tiger": {
+      "name": "Mac OS X Tiger 10.4",
+      "description": "Mac OS X 10.4 Tiger installation disc - the last version of Mac OS X to support PowerPC Macs.",
+      "category": "Operating Systems",
+      "architectures": ["ppc"],
+      "url": "https://archive.org/download/mac-osx.-4/MacOSX.4.iso",
+      "filename": "MacOSX.4.iso",
+      "md5": ""
     }
   },
   "roms": {

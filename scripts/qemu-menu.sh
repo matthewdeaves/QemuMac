@@ -230,18 +230,64 @@ get_cd_additional_files() {
 }
 
 #######################################
-# Get list of available config files
+# Get CD architectures as array
 # Arguments:
-#   None
+#   cd_key: Key of the CD in database
+# Globals:
+#   DATABASE_FILE
+# Returns:
+#   Architectures array elements via stdout (one per line)
+#######################################
+get_cd_architectures() {
+    local cd_key="$1"
+    
+    if command -v jq &> /dev/null; then
+        jq -r ".cds.\"$cd_key\".architectures[]? // empty" "$DATABASE_FILE" 2>/dev/null
+    else
+        # Fallback: simple grep-based parsing for architectures array
+        grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep -A5 "architectures" | grep -o '"[^"]*"' | tr -d '"' | grep -E '^(m68k|ppc)$'
+    fi
+}
+
+#######################################
+# Get list of available config files, optionally filtered by architectures
+# Arguments:
+#   architectures: Optional space-separated list of architectures to filter by
 # Globals:
 #   CONFIGS_DIR
 # Returns:
 #   Config filenames via stdout
 #######################################
 get_config_list() {
-    find "$CONFIGS_DIR/m68k/configs" "$CONFIGS_DIR/ppc/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do
-        basename "$config"
-    done | sort
+    local filter_architectures="$1"
+    
+    # If no filter specified, return all configs
+    if [ -z "$filter_architectures" ]; then
+        find "$CONFIGS_DIR/m68k/configs" "$CONFIGS_DIR/ppc/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do
+            basename "$config"
+        done | sort
+        return
+    fi
+    
+    # Filter configs based on architectures
+    local configs=()
+    
+    # Check if m68k is in the filter
+    if echo "$filter_architectures" | grep -q "m68k"; then
+        while IFS= read -r config; do
+            [ -n "$config" ] && configs+=("$config")
+        done < <(find "$CONFIGS_DIR/m68k/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do basename "$config"; done)
+    fi
+    
+    # Check if ppc is in the filter
+    if echo "$filter_architectures" | grep -q "ppc"; then
+        while IFS= read -r config; do
+            [ -n "$config" ] && configs+=("$config")
+        done < <(find "$CONFIGS_DIR/ppc/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do basename "$config"; done)
+    fi
+    
+    # Output sorted unique configs
+    printf '%s\n' "${configs[@]}" | sort -u
 }
 
 #######################################
@@ -707,8 +753,15 @@ handle_cd_selection() {
         fi
     fi
     
+    # Get architectures supported by this CD
+    local cd_architectures
+    cd_architectures=$(get_cd_architectures "$cd_key" | tr '\n' ' ' | sed 's/ $//')
+    
     # Show system selection
     echo -e "${WHITE}${BOLD}Select Mac OS System:${NC}"
+    if [ -n "$cd_architectures" ]; then
+        echo -e "${DIM}Showing configurations compatible with: $cd_architectures${NC}"
+    fi
     echo
     
     local configs=()
@@ -729,7 +782,7 @@ handle_cd_selection() {
         
         printf "%b%2d)%b %s %b(%s)%b\n" "$GREEN" $i "$NC" "$system_name" "$DIM" "$config" "$NC"
         ((i++))
-    done < <(get_config_list)
+    done < <(get_config_list "$cd_architectures")
     
     echo
     echo -e "${GREEN}b)${NC} 🔙 Back to CD selection"
