@@ -70,7 +70,7 @@ show_spinner() {
         i=$(((i+1) % ${#spin}))
         sleep 0.1
     done
-    printf "\b${GREEN}✓${NC}\n"
+    printf "\b%b✓%b\n" "$GREEN" "$NC"
 }
 
 #######################################
@@ -567,9 +567,9 @@ show_cd_menu() {
                 local status="${DIM}Not downloaded${NC}"
             fi
             
-            printf "${GREEN}%2d)${NC} ${BOLD}%s${NC}\n" $i "$name"
-            printf "     ${DIM}%s${NC}\n" "$description"
-            printf "     Status: %s\n" "$status"
+            printf "%b%2d)%b %b%s%b\n" "$GREEN" $i "$NC" "$BOLD" "$name" "$NC"
+            printf "     %b%s%b\n" "$DIM" "$description" "$NC"
+            printf "     Status: %b\n" "$status"
             echo
             
             ((i++))
@@ -651,7 +651,7 @@ handle_cd_selection() {
             *) system_name="$(basename "$config" .conf)" ;;
         esac
         
-        printf "${GREEN}%2d)${NC} %s ${DIM}(%s)${NC}\n" $i "$system_name" "$config"
+        printf "%b%2d)%b %s %b(%s)%b\n" "$GREEN" $i "$NC" "$system_name" "$DIM" "$config" "$NC"
         ((i++))
     done < <(get_config_list)
     
@@ -756,9 +756,9 @@ show_rom_menu() {
                     local status="${DIM}Not installed${NC}"
                 fi
                 
-                printf "${GREEN}%2d)${NC} ${BOLD}%s${NC}\n" $i "$name"
+                printf "%b%2d)%b %b%s%b\n" "$GREEN" $i "$NC" "$BOLD" "$name" "$NC"
                 printf "     File: %s\n" "$filename"
-                printf "     Status: %s\n" "$status"
+                printf "     Status: %b\n" "$status"
                 echo
                 
                 ((i++))
@@ -859,7 +859,7 @@ show_downloads() {
                 local size_mb=$((size / 1024 / 1024))
                 total_size=$((total_size + size))
                 
-                printf "${GREEN}•${NC} ${BOLD}%s${NC} ${DIM}(%d MB)${NC}\n" "$(basename "$file")" "$size_mb"
+                printf "%b•%b %b%s%b %b(%d MB)%b\n" "$GREEN" "$NC" "$BOLD" "$(basename "$file")" "$NC" "$DIM" "$size_mb" "$NC"
             fi
         done < <(find "$DOWNLOADS_DIR" -type f 2>/dev/null)
         
