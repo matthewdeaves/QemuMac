@@ -198,7 +198,7 @@ prepare_disk_images() {
     
     # Create OS hard disk image if it doesn't exist
     if [ ! -f "$QEMU_HDD" ]; then
-        info_log "PowerPC OS hard disk image '$QEMU_HDD' not found. Creating ($hdd_size)..."
+        info_log "PowerPC OS hard disk image '$QEMU_HDD' not found. Creating (${hdd_size})..."
         qemu-img create -f raw "$QEMU_HDD" "$hdd_size"
         check_exit_status $? "Failed to create PowerPC OS hard disk image '$QEMU_HDD'"
         echo "Empty PowerPC OS hard disk image created. Proceeding with boot (likely from CD for install)."

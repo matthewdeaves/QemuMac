@@ -201,6 +201,9 @@ get_rom_info() {
             "url")
                 grep -A20 "\"$rom_key\"" "$DATABASE_FILE" | grep "\"url\"" | cut -d'"' -f4
                 ;;
+            "md5")
+                grep -A20 "\"$rom_key\"" "$DATABASE_FILE" | grep "\"md5\"" | cut -d'"' -f4
+                ;;
         esac
     fi
 }
@@ -236,7 +239,7 @@ get_cd_additional_files() {
 #   Config filenames via stdout
 #######################################
 get_config_list() {
-    find "$CONFIGS_DIR" -maxdepth 2 -name "*.conf" -type f | while read -r config; do
+    find "$CONFIGS_DIR/m68k/configs" "$CONFIGS_DIR/ppc/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do
         basename "$config"
     done | sort
 }
@@ -761,11 +764,11 @@ launch_vm() {
     local cd_path="$2"
     local config_path
     
-    # Find the full path to config file
-    if [ -f "$CONFIGS_DIR/$config_file" ]; then
-        config_path="$CONFIGS_DIR/$config_file"
-    elif [ -f "$CONFIGS_DIR/configs/$config_file" ]; then
-        config_path="$CONFIGS_DIR/configs/$config_file"
+    # Find the full path to config file in architecture-specific directories
+    if [ -f "$CONFIGS_DIR/m68k/configs/$config_file" ]; then
+        config_path="m68k/configs/$config_file"
+    elif [ -f "$CONFIGS_DIR/ppc/configs/$config_file" ]; then
+        config_path="ppc/configs/$config_file"
     else
         echo -e "${RED}Error: Config file not found: $config_file${NC}" >&2
         echo -e "Press Enter to continue..."
@@ -784,9 +787,9 @@ launch_vm() {
     echo -e "${YELLOW}Starting in 3 seconds...${NC}"
     sleep 3
     
-    # Launch the VM
+    # Launch the VM using unified dispatcher
     cd "$CONFIGS_DIR" || return
-    ./run68k.sh -C "$config_path" -c "$cd_path"
+    ./runmac.sh -C "$config_path" -c "$cd_path"
     
     echo
     echo -e "${GREEN}VM session ended. Press Enter to continue...${NC}"
@@ -822,8 +825,10 @@ show_rom_menu() {
                 local name=$(get_rom_info "$rom_key" "name")
                 local filename=$(get_rom_info "$rom_key" "filename")
                 
-                # Check if ROM already exists in root directory
-                if [ -f "$CONFIGS_DIR/$filename" ]; then
+                # Check if ROM already exists in m68k directory (PPC uses built-in BIOS)
+                local rom_path="$CONFIGS_DIR/m68k/$filename"
+                
+                if [ -n "$rom_path" ] && [ -f "$rom_path" ]; then
                     local status="${GREEN}✓ Installed${NC}"
                 else
                     local status="${DIM}Not installed${NC}"
@@ -876,26 +881,33 @@ handle_rom_download() {
     local name=$(get_rom_info "$rom_key" "name")
     local filename=$(get_rom_info "$rom_key" "filename")
     local url=$(get_rom_info "$rom_key" "url")
+    local md5=$(get_rom_info "$rom_key" "md5")
     
     print_header
     echo -e "${WHITE}${BOLD}Selected: $name${NC}"
     echo
     
-    # Check if ROM already exists
-    if [ -f "$CONFIGS_DIR/$filename" ]; then
-        echo -e "${GREEN}✓ ROM already exists: $CONFIGS_DIR/$filename${NC}"
+    # ROM files are only needed for 68k architecture (PPC uses built-in BIOS)
+    local rom_path="$CONFIGS_DIR/m68k/$filename"
+    
+    # Check if ROM already exists in architecture-specific location
+    if [ -f "$rom_path" ]; then
+        echo -e "${GREEN}✓ ROM already exists: $rom_path${NC}"
         echo -e "Press Enter to continue..."
         read -r
         return
     fi
     
-    # Download ROM to root directory
+    # Download ROM to m68k directory (68k architecture only)
     echo -e "${YELLOW}ROM not found. Downloading now...${NC}"
     echo
     
-    if download_file "$url" "$CONFIGS_DIR/$filename"; then
+    # Ensure target directory exists
+    mkdir -p "$(dirname "$rom_path")"
+    
+    if download_file "$url" "$rom_path" "$md5"; then
         echo -e "${GREEN}✓ ROM downloaded successfully!${NC}"
-        echo -e "${GREEN}✓ Saved to: $CONFIGS_DIR/$filename${NC}"
+        echo -e "${GREEN}✓ Saved to: $rom_path${NC}"
     else
         echo -e "${RED}✗ ROM download failed${NC}"
     fi

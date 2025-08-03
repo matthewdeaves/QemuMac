@@ -10,20 +10,20 @@
 
 # Source shared utilities and modules
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/qemu-utils.sh
-source "$SCRIPT_DIR/scripts/qemu-utils.sh"
-# shellcheck source=scripts/qemu-config.sh
-source "$SCRIPT_DIR/scripts/qemu-config.sh"
-# shellcheck source=scripts/qemu-storage.sh
-source "$SCRIPT_DIR/scripts/qemu-storage.sh"
-# shellcheck source=scripts/qemu-networking.sh
-source "$SCRIPT_DIR/scripts/qemu-networking.sh"
-# shellcheck source=scripts/qemu-display.sh
-source "$SCRIPT_DIR/scripts/qemu-display.sh"
+# shellcheck source=../scripts/qemu-utils.sh
+source "$SCRIPT_DIR/../scripts/qemu-utils.sh"
+# shellcheck source=../scripts/qemu-config.sh
+source "$SCRIPT_DIR/../scripts/qemu-config.sh"
+# shellcheck source=../scripts/qemu-storage.sh
+source "$SCRIPT_DIR/../scripts/qemu-storage.sh"
+# shellcheck source=../scripts/qemu-networking.sh
+source "$SCRIPT_DIR/../scripts/qemu-networking.sh"
+# shellcheck source=../scripts/qemu-display.sh
+source "$SCRIPT_DIR/../scripts/qemu-display.sh"
 
 # --- Script Constants ---
 readonly REQUIRED_QEMU_VERSION="4.0"
-readonly TAP_FUNCTIONS_SCRIPT="$SCRIPT_DIR/scripts/qemu-tap-functions.sh"
+readonly TAP_FUNCTIONS_SCRIPT="$SCRIPT_DIR/../scripts/qemu-tap-functions.sh"
 
 # --- Configuration Variables (loaded from .conf file) ---
 CONFIG_NAME=""

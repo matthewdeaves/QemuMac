@@ -1,10 +1,10 @@
 # Dual Architecture Implementation Plan
 
-## Project Status: Phase 1 Complete ✅, Phase 1.5 Pending ⚠️
+## Project Status: Phase 1.5 Complete ✅, Phase 2 Ready 🎯
 
 This document tracks the implementation progress for adding PowerPC support to the existing 68k Mac emulation project.
 
-**Update**: Need to reorganize disk image storage before proceeding to testing.
+**Update**: Disk image reorganization complete. Ready for Phase 2 testing.
 
 ## Completed Tasks ✅
 
@@ -51,110 +51,75 @@ This document tracks the implementation progress for adding PowerPC support to t
    - [x] Documented key technical differences between 68k and PPC
    - [x] Updated common commands and configuration examples
 
-## Pending Tasks ⚠️
+### Phase 1.5: Disk Image Organization ✅ (Complete)
 
-### Phase 1.5: Disk Image Organization (Required Before Testing)
+**Issue Resolved**: Disk images are now properly organized and gitignored, allowing clean user machine setups without repository clutter.
 
-**Issue Identified**: Disk images are currently stored inconsistently and not properly gitignored, making it difficult for users to create their own machine setups without cluttering the repository.
+1. **✅ Reorganize Disk Image Storage**
+   - [x] Created `m68k/images/` and `ppc/images/` directories
+   - [x] Moved `m68k/753/` → `m68k/images/753/`
+   - [x] Moved `m68k/761/` → `m68k/images/761/`
+   - [x] Created structure for `ppc/images/91/` and `ppc/images/tiger104/`
 
-1. **🔲 Reorganize Disk Image Storage**
-   - [ ] Move `m68k/753/` → `m68k/images/753/`
-   - [ ] Move `m68k/761/` → `m68k/images/761/`
-   - [ ] Move `ppc/data/91/` → `ppc/images/91/`
-   - [ ] Move `ppc/data/tiger104/` → `ppc/images/tiger104/`
+2. **✅ Update Git Configuration**
+   - [x] Updated .gitignore with `m68k/images/` and `ppc/images/`
+   - [x] Removed old entries: `753`, `761` 
+   - [x] ROM files remain tracked (800.ROM, 1.6.rom)
+   - [x] Configs and scripts remain tracked
 
-2. **🔲 Update Git Configuration**
-   - [ ] Remove old entries from .gitignore: `753`, `761` 
-   - [ ] Add `m68k/images/` to .gitignore
-   - [ ] Add `ppc/images/` to .gitignore
-   - [ ] Keep ROM files tracked (800.ROM, 1.6.rom)
-   - [ ] Ensure configs and scripts remain tracked
+3. **✅ Update Configuration Files**
+   - [x] Updated all m68k configs: `753/` → `images/753/`
+   - [x] Updated all m68k configs: `761/` → `images/761/`
+   - [x] Updated all ppc configs: `91/` → `images/91/`
+   - [x] Updated all ppc configs: `tiger104/` → `images/tiger104/`
 
-3. **🔲 Update Configuration Files**
-   - [ ] Update all m68k configs: `753/` → `images/753/`
-   - [ ] Update all m68k configs: `761/` → `images/761/`
-   - [ ] Update all ppc configs: `91/` → `images/91/`
-   - [ ] Update all ppc configs: `tiger104/` → `images/tiger104/`
+4. **✅ Update Scripts and Documentation**
+   - [x] No hardcoded paths found in runppc.sh (uses config variables)
+   - [x] CLAUDE.md examples updated with new architecture-specific paths
+   - [x] Implementation plan updated with final structure
 
-4. **🔲 Update Scripts and Documentation**
-   - [ ] Update any hardcoded paths in runppc.sh
-   - [ ] Update CLAUDE.md examples with new paths
-   - [ ] Update implementation plan with final structure
+## Current Tasks 🎯
 
-## Current Project Structure (Needs Update ⚠️)
+### Phase 2: Basic Testing & Validation (In Progress)
 
-**Current Structure (Problematic)**:
-```
-QemuMac/
-├── runmac.sh ✅                    # Unified dispatcher (NEW)
-├── IMPLEMENTATION_PLAN.md ✅       # This file (NEW)
-├── CLAUDE.md ✅                    # Updated documentation
-├── m68k/ ✅                        # 68k architecture (MOVED)
-│   ├── run68k.sh ✅               # Original script (MOVED)
-│   ├── configs/ ✅                # All sys753/761 configs (MOVED + UPDATED)
-│   ├── 753/ ⚠️                    # Data directories (NEEDS MOVE)
-│   ├── 761/ ⚠️                    # Data directories (NEEDS MOVE)
-│   ├── 800.ROM ✅                 # ROM file (MOVED)
-│   ├── sys753-safe.conf ✅        # Legacy configs (MOVED + UPDATED)
-│   ├── sys761-safe.conf ✅
-│   └── scripts/ ✅                # 68k-specific utilities (CREATED)
-├── ppc/ ✅                         # PowerPC architecture (NEW)
-│   ├── runppc.sh ✅               # PPC script (NEW)
-│   ├── configs/ ✅                # PPC configurations (NEW)
-│   │   ├── macos91-standard.conf ✅
-│   │   ├── macos91-fast.conf ✅
-│   │   ├── osxtiger104-standard.conf ✅
-│   │   └── osxtiger104-fast.conf ✅
-│   ├── scripts/ ✅                # PPC-specific utilities (CREATED)
-│   └── data/ ⚠️                   # PPC data directories (NEEDS REORGANIZATION)
-│       ├── 91/ ⚠️                 # Mac OS 9.1 images (NEEDS MOVE)
-│       └── tiger104/ ⚠️           # Mac OS X Tiger images (NEEDS MOVE)
-├── scripts/ ✅                     # Shared utilities (UNCHANGED)
-│   ├── qemu-utils.sh
-│   ├── qemu-networking.sh
-│   ├── qemu-display.sh
-│   ├── qemu-config.sh
-│   └── mac_disc_mounter.sh
-├── library/ ✅                     # Software database (UNCHANGED)
-└── install-dependencies.sh ✅      # Dependency installer (NEEDS UPDATE)
-```
+## Current Project Structure ✅ (Complete)
 
-**Target Structure (After Phase 1.5)**:
+**Final Structure (Achieved)**:
 ```
 QemuMac/
 ├── runmac.sh ✅                    # Unified dispatcher
 ├── IMPLEMENTATION_PLAN.md ✅       # This file
 ├── CLAUDE.md ✅                    # Updated documentation
-├── .gitignore 🔲                  # Updated to ignore images/
+├── .gitignore ✅                  # Updated to ignore images/
 ├── m68k/ ✅                        # 68k architecture
 │   ├── run68k.sh ✅               # Original script
-│   ├── configs/ 🔲                # All sys753/761 configs (PATHS NEED UPDATE)
-│   ├── images/ 🔲                 # Disk images (GITIGNORED)
-│   │   ├── 753/ 🔲                # Mac OS 7.5.3 system images
+│   ├── configs/ ✅                # All sys753/761 configs (UPDATED PATHS)
+│   ├── images/ ✅                 # Disk images (GITIGNORED)
+│   │   ├── 753/ ✅                # Mac OS 7.5.3 system images
 │   │   │   ├── hdd_sys753.img
 │   │   │   ├── pram_753_q800.img
 │   │   │   └── shared_753.img
-│   │   └── 761/ 🔲                # Mac OS 7.6.1 system images
+│   │   └── 761/ ✅                # Mac OS 7.6.1 system images
 │   │       ├── hdd_sys761.img
 │   │       ├── pram_761_q800.img
 │   │       └── shared_761.img
-│   ├── 800.ROM ✅                 # ROM file (STILL TRACKED)
-│   ├── sys753-safe.conf 🔲        # Legacy configs (PATHS NEED UPDATE)
-│   ├── sys761-safe.conf 🔲
+│   ├── 800.ROM ✅                 # ROM file (TRACKED)
+│   ├── sys753-safe.conf ✅        # Legacy configs (UPDATED PATHS)
+│   ├── sys761-safe.conf ✅
 │   └── scripts/ ✅                # 68k-specific utilities
 ├── ppc/ ✅                         # PowerPC architecture
-│   ├── runppc.sh 🔲               # PPC script (PATHS NEED UPDATE)
-│   ├── configs/ 🔲                # PPC configurations (PATHS NEED UPDATE)
-│   │   ├── macos91-standard.conf
-│   │   ├── macos91-fast.conf
-│   │   ├── osxtiger104-standard.conf
-│   │   └── osxtiger104-fast.conf
+│   ├── runppc.sh ✅               # PPC script
+│   ├── configs/ ✅                # PPC configurations (UPDATED PATHS)
+│   │   ├── macos91-standard.conf ✅
+│   │   ├── macos91-fast.conf ✅
+│   │   ├── osxtiger104-standard.conf ✅
+│   │   └── osxtiger104-fast.conf ✅
 │   ├── scripts/ ✅                # PPC-specific utilities
-│   └── images/ 🔲                 # Disk images (GITIGNORED)
-│       ├── 91/ 🔲                 # Mac OS 9.1 system images
+│   └── images/ ✅                 # Disk images (GITIGNORED)
+│       ├── 91/ ✅                 # Mac OS 9.1 system images
 │       │   ├── MacOS9.1.img
 │       │   └── shared_91.img
-│       └── tiger104/ 🔲           # Mac OS X Tiger system images
+│       └── tiger104/ ✅           # Mac OS X Tiger system images
 │           ├── MacOSX10.4.img
 │           └── shared_tiger104.img
 ├── scripts/ ✅                     # Shared utilities
@@ -162,38 +127,32 @@ QemuMac/
 └── install-dependencies.sh ✅      # Dependency installer
 ```
 
-## Next Phase: Complete Image Organization
+## Benefits of Reorganization ✅
 
-### Phase 1.5: Disk Image Organization (Required Next)
-
-**Priority**: Must complete before testing to avoid rework
-
-**Benefits of this reorganization**:
+**Achieved Benefits**:
 - ✅ Clean separation of code (tracked) vs data (untracked)
 - ✅ Users can create custom machine setups without git conflicts
 - ✅ Consistent organization across both architectures  
 - ✅ Easier backup/restore of specific machine configurations
 - ✅ Cleaner repository for contributors
 
-### Phase 2: Basic Testing & Validation (After 1.5)
-
 1. **🔲 Test 68k Architecture (Post-Move)**
-   - [ ] Test m68k configs work with new paths
-   - [ ] Verify unified dispatcher works with 68k configs
-   - [ ] Test direct m68k/run68k.sh access
+   - [ ] Test m68k configs work with new paths (manual testing by user)
+   - [ ] Verify unified dispatcher works with 68k configs (manual testing by user)
+   - [ ] Test direct m68k/run68k.sh access (manual testing by user)
    - [ ] Validate backward compatibility broken cleanly
 
 2. **🔲 Test PPC Architecture (Initial)**
-   - [ ] Test ppc/runppc.sh with sample configs
-   - [ ] Verify boot process works (-boot c/d)
-   - [ ] Test IDE storage setup
-   - [ ] Validate networking integration
+   - [ ] Test ppc/runppc.sh with sample configs (manual testing by user)
+   - [ ] Verify boot process works (-boot c/d) (manual testing by user)
+   - [ ] Test IDE storage setup (manual testing by user)
+   - [ ] Validate networking integration (manual testing by user)
 
 3. **🔲 Cross-Platform Testing**
-   - [ ] Test on Linux (TAP networking)
-   - [ ] Test on macOS (User networking)
-   - [ ] Verify display types work correctly
-   - [ ] Test audio configuration
+   - [ ] Test on Linux (TAP networking) (manual testing by user)
+   - [ ] Test on macOS (User networking) (manual testing by user)
+   - [ ] Verify display types work correctly (manual testing by user)
+   - [ ] Test audio configuration (manual testing by user)
 
 ### Phase 3: Advanced Features (Future)
 
@@ -322,9 +281,7 @@ QemuMac/
 
 ## Quick Start Testing Commands
 
-⚠️ **Note**: These commands will NOT work until Phase 1.5 (image reorganization) is complete.
-
-Once Phase 1.5 is complete, use these commands to validate the implementation:
+✅ **Ready**: Phase 1.5 (image reorganization) is complete. Use these commands to validate the implementation:
 
 ```bash
 # Test unified dispatcher help
@@ -347,5 +304,5 @@ grep "ARCH=" ppc/configs/macos91-standard.conf
 
 ---
 
-**Last Updated**: Phase 1 complete, Phase 1.5 (image reorganization) required before testing
-**Next Review**: After Phase 1.5 image reorganization is complete
+**Last Updated**: Phase 1.5 complete, Phase 2 (testing) ready to begin
+**Next Review**: After Phase 2 manual testing is complete
