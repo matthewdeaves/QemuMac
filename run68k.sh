@@ -97,7 +97,7 @@ show_help() {
     echo "           QEMU_AUDIO_LATENCY, and QEMU_ASC_MODE (for audio configuration)."
     echo "Options:"
     echo "  -c FILE  Specify CD-ROM image file (if not specified, no CD will be attached)"
-    echo "  -a FILE  Specify an additional hard drive image file (e.g., mydrive.hda or mydrive.img)"
+    echo "  -a FILE  Specify an additional hard drive image file (must be properly formatted Mac HFS/HFS+ image with valid partition)"
     echo "  -b       Boot from CD-ROM (for OS installation)"
     echo "  -d TYPE  Force display type (sdl, gtk, cocoa)"
     echo "  -N TYPE  Specify network type: 'tap' (Linux default), 'user' (macOS default, NAT), or 'passt' (slirp alternative)"
@@ -383,6 +383,7 @@ build_qemu_command() {
     fi
     
     # Additional HDD (SCSI ID 4) - Attach if specified via -a flag
+    # NOTE: Image must be a properly formatted Mac hard drive (HFS/HFS+) with valid partition table
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
         echo "Additional HDD: $ADDITIONAL_HDD_FILE (as SCSI ID 4)"
         qemu_args+=(

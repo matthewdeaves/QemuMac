@@ -87,7 +87,7 @@ This project provides a modular set of shell scripts to simplify the setup and m
 ./run68k.sh -C configs/sys761-standard.conf                            # Run
 
 # Advanced options
-./run68k.sh -C configs/sys753-standard.conf -a /path/to/software.img -D
+./run68k.sh -C configs/sys753-standard.conf -a /path/to/software.img -D  # Attach additional HDD
 ```
 
 ### Platform-Specific Notes
@@ -131,6 +131,26 @@ sudo ./scripts/mac_disc_mounter.sh -C configs/sys753-standard.conf -r
 # Advanced mounting options
 sudo ./scripts/mac_disc_mounter.sh -C configs/sys761-standard.conf -m /custom/mount/point
 ```
+
+### Additional Hard Drive Attachment
+The `-a` flag allows attaching an extra hard drive image, but it must be a properly formatted Mac hard drive image with a valid partition:
+
+```bash
+# Additional drive requirements
+./run68k.sh -C configs/sys753-standard.conf -a /path/to/formatted_drive.img
+
+# The .img file must be:
+# - A properly formatted Mac hard drive image (HFS/HFS+)
+# - Contain a valid Mac partition table
+# - Formatted within Mac OS or using Mac disk utilities
+# - Raw disk image format (not compressed or proprietary formats)
+```
+
+**Important Notes:**
+- The additional drive appears as SCSI ID 4 in the Mac OS
+- Drive must be pre-formatted with Mac OS Disk Utility or equivalent
+- Unformatted or PC-formatted drives will not be recognized
+- Use Mac OS Drive Setup utility if the drive doesn't appear automatically
 
 ### Mac Library Manager
 ```bash
