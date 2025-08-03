@@ -39,6 +39,7 @@ show_help() {
     echo "  - qemu-utils        (QEMU utilities)"
     echo "  - coreutils         (Core system utilities)"
     echo "  - bsdmainutils      (BSD utilities like hexdump)"
+    echo "  - jq                (JSON processor for mac-library tool)"
     echo ""
     echo "Networking Dependencies:"
     echo "  - bridge-utils      (TAP networking support)"
@@ -75,6 +76,7 @@ check_dependencies() {
         "dd:Core utilities"
         "printf:Core utilities"
         "hexdump:BSD utilities"
+        "jq:JSON processor (mac-library tool)"
     )
     
     # Add Linux-specific networking dependencies

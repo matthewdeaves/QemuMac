@@ -118,21 +118,16 @@ init_library() {
 }
 
 #######################################
-# Parse JSON database and extract CD information
+# Parse JSON database and extract CD information sorted by category then name
 # Arguments:
 #   None
 # Globals:
 #   DATABASE_FILE
 # Returns:
-#   Prints CD keys to stdout
+#   Prints CD keys to stdout, sorted by category (Operating Systems first, then Games) and then alphabetically by name
 #######################################
 get_cd_list() {
-    if command -v jq &> /dev/null; then
-        jq -r '.cds | keys[]' "$DATABASE_FILE" 2>/dev/null
-    else
-        # Fallback parsing without jq
-        grep -o '"[^"]*"[[:space:]]*:' "$DATABASE_FILE" | grep -A1 '"cds"' | grep -o '"[^"]*"' | tr -d '"' | grep -v cds
-    fi
+    jq -r '.cds | to_entries | sort_by(.value.category, .value.name) | .[].key' "$DATABASE_FILE" 2>/dev/null
 }
 
 #######################################
@@ -615,13 +610,14 @@ show_main_menu() {
 show_cd_menu() {
     while true; do
         print_header
-        echo -e "${WHITE}${BOLD}📀 Software CDs:${NC}"
+        echo -e "${WHITE}${BOLD}📀 Software Library:${NC}"
         echo
         
         local cd_keys=()
         local i=1
+        local current_category=""
         
-        # Read CD list into array
+        # Read CD list into array with category headers
         while IFS= read -r cd_key; do
             [ -n "$cd_key" ] || continue
             cd_keys+=("$cd_key")
@@ -629,6 +625,27 @@ show_cd_menu() {
             local name=$(get_cd_info "$cd_key" "name")
             local description=$(get_cd_info "$cd_key" "description")
             local filename=$(get_cd_info "$cd_key" "filename")
+            local category=$(get_cd_info "$cd_key" "category")
+            
+            # Display category header when category changes
+            if [ "$category" != "$current_category" ]; then
+                if [ -n "$current_category" ]; then
+                    echo  # Add spacing between categories
+                fi
+                case "$category" in
+                    "Operating Systems")
+                        echo -e "${CYAN}${BOLD}📀 Operating Systems:${NC}"
+                        ;;
+                    "Games")
+                        echo -e "${MAGENTA}${BOLD}🎮 Games:${NC}"
+                        ;;
+                    *)
+                        echo -e "${YELLOW}${BOLD}📁 $category:${NC}"
+                        ;;
+                esac
+                echo
+                current_category="$category"
+            fi
             
             # Check if already downloaded
             if is_downloaded "$filename"; then

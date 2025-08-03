@@ -867,6 +867,7 @@ install_qemu_dependencies() {
             "qemu-utils"            # QEMU utilities (qemu-img, etc.)
             "coreutils"             # Core utilities (dd, printf, etc.)
             "bsdmainutils"          # BSD utilities (hexdump, etc.)
+            "jq"                    # JSON processor (for mac-library tool)
         )
         
         local networking_packages=(
@@ -894,6 +895,7 @@ install_qemu_dependencies() {
         local brew_packages=(
             "qemu"                  # QEMU (includes m68k support)
             "bash"                  # Modern bash (macOS default is old)
+            "jq"                    # JSON processor (for mac-library tool)
         )
         
         echo "Installing packages via Homebrew..."
@@ -926,6 +928,7 @@ install_qemu_dependencies() {
             "iproute"
             "passt"
             "hfsprogs"
+            "jq"
         )
         
         echo "Installing packages via dnf..."

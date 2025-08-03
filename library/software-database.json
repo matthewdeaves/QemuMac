@@ -38,12 +38,21 @@
     },
     "macos_x_tiger": {
       "name": "Mac OS X Tiger 10.4",
-      "description": "Mac OS X 10.4 Tiger installation disc - the last version of Mac OS X to support PowerPC Macs.",
+      "description": "Mac OS X 10.4 Tiger installation disc.",
       "category": "Operating Systems",
       "architectures": ["ppc"],
       "url": "https://archive.org/download/mac-osx.-4/MacOSX.4.iso",
       "filename": "MacOSX.4.iso",
       "md5": ""
+    },
+    "macos_x_leopard": {
+      "name": "Mac OS X Leopard 10.5.6",
+      "description": "Mac OS X 10.5.6 Leopard installation disc - the last version of Mac OS X to support PowerPC Macs.",
+      "category": "Operating Systems",
+      "architectures": ["ppc"],
+      "url": "ftp://mirror:mirror@ftp.macintosh.garden/apps/Mac_OS_X_Leopard_10.5.6.iso",
+      "filename": "Mac_OS_X_Leopard_10.5.6.iso",
+      "md5": "a1fe29041127623a92610c2572dd63bc"
     }
   },
   "roms": {
