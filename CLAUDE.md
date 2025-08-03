@@ -171,7 +171,7 @@ Each `.conf` file defines a complete Mac OS emulation setup with comprehensive s
 
 **Performance Variables (tuning variants):**
 - `QEMU_CPU_MODEL`: Explicit CPU model (m68040)
-- `QEMU_TCG_THREAD_MODE`: Threading mode (single/multi)
+- `QEMU_TCG_THREAD_MODE`: Threading mode (single=stable/multi=faster with warnings)
 - `QEMU_TB_SIZE`: Translation block cache size
 - `QEMU_MEMORY_BACKEND`: Memory backend type (ram/file/memfd)
 - `QEMU_SCSI_CACHE_MODE`: Storage caching (writethrough/writeback/none/directsync)
@@ -201,6 +201,24 @@ Each `.conf` file defines a complete Mac OS emulation setup with comprehensive s
 **Platform Defaults:**
 - **Linux**: TAP Mode (supports all networking tools)
 - **macOS**: User Mode (TAP requires Linux-specific iproute2/bridge-utils)
+
+### TCG Threading Modes
+The project uses different TCG (Tiny Code Generator) threading modes for optimal user experience:
+
+**Default Mode (Single-threaded):**
+- Used in all standard, fast, safest, native, directsync, and authentic configurations
+- Provides stable, reliable emulation without warnings
+- Slightly lower performance but completely compatible
+
+**Multi-threaded Mode:**
+- Used only in `*-ultimate.conf` configurations for maximum performance
+- Shows "Guest not yet converted to MTTCG" warning (expected, not an error)
+- Provides better performance on multi-core hosts
+- m68k architecture support for MTTCG is still in development
+
+**When to Use Each:**
+- **Single-threaded**: Recommended for most users, clean experience, reliable
+- **Multi-threaded**: Only for performance enthusiasts who want maximum speed and don't mind warnings
 
 ### Dependency Management
 The project includes comprehensive dependency management:

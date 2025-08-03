@@ -1,12 +1,20 @@
 {
   "cds": {
-    "marathon": {
+    "apple_legacy_recovery": {
       "name": "Apple Legacy Software Recovery CD",
       "description": "The October 1999 Apple Legacy Recovery disc is a bootable CD with Mac OS 7.6.1 and software for classic Apple computers and peripherals.",
       "category": "Operating Systems",
       "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/Garden/apps/Apple_Legacy_Recovery.iso_.zip",
       "filename": "Apple Legacy Recovery.iso",
       "md5": "817db4bd447e77706a64959070ded9c8"
+    },
+    "marathon_trilogy": {
+      "name": "Marathon Trilogy",
+      "description": "Classic sci-fi first-person shooter trilogy by Bungie - Marathon, Marathon 2: Durandal, and Marathon Infinity.",
+      "category": "Games",
+      "url": "ftp://mirror:mirror@ftp.macintosh.garden/games/marathontrilogy.zip",
+      "filename": "Marathon Trilogy.iso",
+      "md5": "ec4b56162044b9a34e0c60cc859f073f"
     }
   },
   "roms": {
