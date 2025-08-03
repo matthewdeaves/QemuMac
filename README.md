@@ -766,14 +766,6 @@ QEMU_AUDIO_LATENCY="50000"    # 50ms latency
 - ✅ **Configurable Latency**: Tunable audio performance
 - ✅ **Multiple Backend Support**: PulseAudio, ALSA, SDL, etc.
 
-### 📊 Performance Impact
-
-**Performance Improvements:**
-- **Boot Time**: ~15-20% faster system startup
-- **Application Launch**: ~10-15% faster application loading
-- **Audio Quality**: Reduced stuttering and dropouts
-- **Responsiveness**: Better interactive performance on multi-core systems
-
 **Example Optimized Command:**
 ```bash
 qemu-system-m68k -M q800,easc=on,audiodev=audio0 \

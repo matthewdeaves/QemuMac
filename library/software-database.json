@@ -15,6 +15,22 @@
       "url": "ftp://mirror:mirror@ftp.macintosh.garden/games/marathontrilogy.zip",
       "filename": "Marathon Trilogy.iso",
       "md5": "ec4b56162044b9a34e0c60cc859f073f"
+    },
+    "game_pack_2": {
+      "name": "Game Pack 2",
+      "description": "Classic LucasArts adventure games: The Secret of Monkey Island, Monkey Island 2: LeChuck's Revenge, and Indiana Jones and the Fate of Atlantis. All games have copy protection removed for easy play.",
+      "category": "Games",
+      "url": "https://archive.org/download/lucasarts-mac-game-pack-2/game-pack-2.iso",
+      "filename": "game-pack-2.iso",
+      "md5": "e3b17eb417f8dd93d699773c5ab14bba"
+    },
+    "myst": {
+      "name": "Myst",
+      "description": "Myst, the surrealistic adventure that becomes your world, offers a first-person perspective, stunning 3-D photorealistic graphics and an original sound track as players seek to untangle a web of deceit.",
+      "category": "Games",
+      "url": "ftp://mirror:mirror@ftp.macintosh.garden/games/Myst.iso",
+      "filename": "Myst.iso",
+      "md5": "df4c079f227412ee6f09a6ec341f9ba8"
     }
   },
   "roms": {

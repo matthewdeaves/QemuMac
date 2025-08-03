@@ -206,6 +206,27 @@ get_rom_info() {
 }
 
 #######################################
+# Get additional files for a CD
+# Arguments:
+#   cd_key: Key of the CD in database
+# Globals:
+#   DATABASE_FILE
+# Returns:
+#   Array of additional files via stdout (one per line)
+#######################################
+get_cd_additional_files() {
+    local cd_key="$1"
+    
+    if command -v jq &> /dev/null; then
+        jq -r ".cds.\"$cd_key\".additional_files[]? | \"\(.filename)|\(.description // .filename)\"" "$DATABASE_FILE" 2>/dev/null
+    else
+        # Fallback: look for additional_files section
+        # This is a simple implementation - could be enhanced
+        grep -A50 "\"$cd_key\"" "$DATABASE_FILE" | grep -A20 "additional_files" | grep "filename" | cut -d'"' -f4
+    fi
+}
+
+#######################################
 # Get list of available config files
 # Arguments:
 #   None
@@ -288,8 +309,8 @@ extract_zip() {
     mkdir -p "$temp_dir"
     
     if unzip -q "$zip_file" -d "$temp_dir"; then
-        # Move extracted files to downloads directory
-        find "$temp_dir" -name "*.iso" -o -name "*.img" -o -name "*.dmg" | while read -r file; do
+        # Move extracted files to downloads directory (case-insensitive)
+        find "$temp_dir" -iname "*.iso" -o -iname "*.img" -o -iname "*.dmg" | while read -r file; do
             mv "$file" "$extract_dir/"
             echo -e "${GREEN}✓ Extracted: $(basename "$file")${NC}"
         done
@@ -631,6 +652,58 @@ handle_cd_selection() {
         echo
     fi
     
+    # Check for multiple ISO files and let user choose
+    local selected_filename="$filename"
+    local additional_files_info
+    additional_files_info=$(get_cd_additional_files "$cd_key")
+    
+    if [ -n "$additional_files_info" ]; then
+        # Build list of available files
+        local available_files=()
+        local file_descriptions=()
+        
+        # Add main file if it exists
+        if [ -f "$DOWNLOADS_DIR/$filename" ]; then
+            available_files+=("$filename")
+            file_descriptions+=("Main Game/Software")
+        fi
+        
+        # Add additional files if they exist
+        while IFS='|' read -r add_filename add_description; do
+            [ -n "$add_filename" ] || continue
+            if [ -f "$DOWNLOADS_DIR/$add_filename" ]; then
+                available_files+=("$add_filename")
+                file_descriptions+=("$add_description")
+            fi
+        done <<< "$additional_files_info"
+        
+        # If multiple files available, show selection menu
+        if [ ${#available_files[@]} -gt 1 ]; then
+            echo -e "${WHITE}${BOLD}Multiple disc images found:${NC}"
+            echo
+            
+            local i=1
+            for idx in "${!available_files[@]}"; do
+                printf "%b%2d)%b %s %b(%s)%b\n" "$GREEN" $i "$NC" "${file_descriptions[$idx]}" "$DIM" "${available_files[$idx]}" "$NC"
+                ((i++))
+            done
+            
+            echo
+            echo -e -n "${YELLOW}Which disc would you like to boot? [1-${#available_files[@]}]: ${NC}"
+            
+            read -r disc_choice
+            
+            if [[ "$disc_choice" =~ ^[0-9]+$ ]] && [ "$disc_choice" -ge 1 ] && [ "$disc_choice" -le "${#available_files[@]}" ]; then
+                selected_filename="${available_files[$((disc_choice-1))]}"
+                echo -e "${GREEN}✓ Selected: $selected_filename${NC}"
+            else
+                echo -e "${RED}Invalid selection, using default: $filename${NC}"
+                selected_filename="$filename"
+            fi
+            echo
+        fi
+    fi
+    
     # Show system selection
     echo -e "${WHITE}${BOLD}Select Mac OS System:${NC}"
     echo
@@ -666,7 +739,7 @@ handle_cd_selection() {
         return
     elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#configs[@]}" ]; then
         local selected_config="${configs[$((choice-1))]}"
-        launch_vm "$selected_config" "$DOWNLOADS_DIR/$filename"
+        launch_vm "$selected_config" "$DOWNLOADS_DIR/$selected_filename"
     else
         echo -e "\n${RED}Invalid selection. Press Enter to continue...${NC}"
         read -r
