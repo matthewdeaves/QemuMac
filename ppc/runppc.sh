@@ -420,7 +420,7 @@ main() {
     parse_arguments "$@"
     
     # Load and validate configuration
-    load_config "$CONFIG_FILE"
+    load_and_validate_config "$CONFIG_FILE" "$NETWORK_TYPE"
     
     # Validate essential files exist
     if [ -n "$CD_FILE" ]; then
