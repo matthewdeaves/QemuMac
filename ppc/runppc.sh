@@ -223,6 +223,60 @@ prepare_disk_images() {
 }
 
 #######################################
+# Build PPC-specific network arguments (simplified vs 68k)
+# Arguments:
+#   network_type: Type of networking (tap, user, passt)
+#   qemu_args_ref: Reference to qemu_args array
+# Globals:
+#   BRIDGE_NAME, QEMU_USER_SMB_DIR
+# Returns:
+#   None
+#######################################
+build_ppc_network_args() {
+    local network_type="$1"
+    local -n qemu_args_ref=$2
+    
+    case "$network_type" in
+        "tap")
+            # Simplified TAP for PPC - use rtl8139 which is more compatible
+            echo "Network: TAP mode (simplified for PPC)"
+            qemu_args_ref+=(
+                "-netdev" "tap,id=net0"
+                "-device" "rtl8139,netdev=net0"
+            )
+            ;;
+        "user")
+            echo "Network: User Mode Networking"
+            local user_opts="user,id=net0"
+            if [ -n "${QEMU_USER_SMB_DIR:-}" ] && [ -d "$QEMU_USER_SMB_DIR" ]; then
+                user_opts+=",smb=$QEMU_USER_SMB_DIR"
+                echo "SMB share: $QEMU_USER_SMB_DIR"
+            fi
+            qemu_args_ref+=(
+                "-netdev" "$user_opts"
+                "-device" "rtl8139,netdev=net0"
+            )
+            ;;
+        "passt")
+            # Check if passt is available
+            if ! command -v passt &> /dev/null; then
+                echo "Error: passt command not found. Install passt or use -N user" >&2
+                exit 1
+            fi
+            echo "Network: Passt backend"
+            qemu_args_ref+=(
+                "-netdev" "stream,id=net0,server=off,addr.type=unix,addr.path=/tmp/passt.socket"
+                "-device" "rtl8139,netdev=net0"
+            )
+            ;;
+        *)
+            echo "Error: Unknown network type '$network_type'" >&2
+            exit 1
+            ;;
+    esac
+}
+
+#######################################
 # Build the QEMU command line arguments (PPC version)
 # Arguments:
 #   None
@@ -284,8 +338,8 @@ build_qemu_command() {
         qemu_args+=("-accel" "$tcg_opts")
     fi
     
-    # Add network arguments using the shared networking module
-    build_network_args "$NETWORK_TYPE" qemu_args
+    # Add network arguments using PPC-specific networking
+    build_ppc_network_args "$NETWORK_TYPE" qemu_args
     
     # Build drive cache parameters
     local drive_cache_params="cache=$ide_cache_mode,aio=$ide_aio_mode"
