@@ -232,6 +232,13 @@ Options:
 # Workaround: Use pre-installed Mac OS 9 disk images if available
 ```
 
+**No sound on PowerPC systems (Known Issue)**
+```bash
+# Audio is currently not working on PowerPC emulation
+# This is being actively worked on - 68k audio works fine
+# The configurations include audio settings but they need further tuning
+```
+
 **"ROM file not found" (68k only)**
 ```bash
 # Option 1: Use mac-library to download automatically
