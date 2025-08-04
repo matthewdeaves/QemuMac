@@ -32,17 +32,15 @@ show_help() {
     echo "  -c, --check    Check dependencies without installing"
     echo "  -f, --force    Force installation even if dependencies exist"
     echo ""
-    echo "This script installs all dependencies required for QEMU m68k Mac emulation:"
+    echo "This script installs all dependencies required for QEMU Mac emulation:"
     echo ""
     echo "Core Dependencies:"
     echo "  - qemu-system-m68k  (QEMU m68k emulation)"
+    echo "  - qemu-system-ppc   (QEMU PowerPC emulation)"
     echo "  - qemu-utils        (QEMU utilities)"
     echo "  - coreutils         (Core system utilities)"
     echo "  - bsdmainutils      (BSD utilities like hexdump)"
     echo "  - jq                (JSON processor for mac-library tool)"
-    echo ""
-    echo "Networking Dependencies:"
-    echo "  - iproute2          (IP networking tools)"
     echo ""
     echo "Filesystem Dependencies:"
     echo "  - hfsprogs          (HFS+ filesystem support)"
@@ -77,11 +75,6 @@ check_dependencies() {
         "jq:JSON processor (mac-library tool)"
     )
     
-    # Add Linux-specific networking dependencies
-    if [[ "$(uname)" != "Darwin" ]]; then
-        # No specific user-mode networking dependencies to check here
-        :
-    fi
     
     echo "Core Dependencies:"
     for dep_info in "${deps_to_check[@]}"; do
@@ -110,8 +103,8 @@ check_dependencies() {
     
     # Platform-specific notes
     if [[ "$(uname)" == "Darwin" ]]; then
-        echo "📝 macOS Notes:"
-        echo "  - User-mode networking is used by default."
+        echo "📝 Networking Notes:"
+        echo "  - User-mode networking is used by default (no additional setup required)."
         echo ""
     fi
     

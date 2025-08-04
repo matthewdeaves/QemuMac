@@ -618,6 +618,15 @@ build_ppc_qemu_command() {
         "-display" "$DISPLAY_TYPE"
         "-m" "$QEMU_RAM"
     )
+
+    # Add graphics resolution from config file
+    if [ -n "$QEMU_GRAPHICS" ]; then
+        qemu_args+=("-g" "$QEMU_GRAPHICS")
+    fi
+
+    # Add a capable VGA device with EDID to allow the guest OS to detect more resolutions.
+    # This is often necessary for Mac OS X.
+    qemu_args+=("-device" "VGA,edid=on")
     
     # Add CPU type if specified
     if [ -n "$QEMU_CPU" ]; then
@@ -744,6 +753,20 @@ run_emulation() {
     else
         qemu_binary="qemu-system-ppc"
     fi
+
+    # Prepare the command for printing, ensuring proper quoting for copy-pasting.
+    # The '%q' format specifier quotes the string in a way that is reusable by the shell.
+    local cmd_to_print
+    printf -v cmd_to_print "%q " "$qemu_binary" "${qemu_args[@]}"
+
+    # Display the full, copy-pasteable command to the user.
+    echo ""
+    echo "========================================================"
+    echo " QEMU LAUNCH COMMAND (copy/paste)"
+    echo "--------------------------------------------------------"
+    echo "$cmd_to_print"
+    echo "--------------------------------------------------------"
+    echo ""
     
     echo "--- Starting QEMU $ARCH ---"
     debug_log "QEMU command: $qemu_binary ${qemu_args[*]}"

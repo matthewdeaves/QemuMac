@@ -468,16 +468,11 @@ install_qemu_dependencies() {
         echo "Detected Debian/Ubuntu system (apt)"
         local core_packages=(
             "qemu-system-m68k"      # QEMU m68k emulation
+            "qemu-system-ppc"       # QEMU PowerPC emulation
             "qemu-utils"            # QEMU utilities (qemu-img, etc.)
             "coreutils"             # Core utilities (dd, printf, etc.)
             "bsdmainutils"          # BSD utilities (hexdump, etc.)
             "jq"                    # JSON processor (for mac-library tool)
-        )
-        
-        local networking_packages=(
-            "bridge-utils"          # Bridge utilities (brctl)
-            "iproute2"              # IP route utilities
-            
         )
         
         local filesystem_packages=(
@@ -487,9 +482,6 @@ install_qemu_dependencies() {
         
         echo "Installing core QEMU packages..."
         install_packages "${core_packages[@]}"
-        
-        echo "Installing networking packages..."
-        install_packages "${networking_packages[@]}"
         
         echo "Installing filesystem packages..."
         install_packages "${filesystem_packages[@]}"
@@ -515,22 +507,16 @@ install_qemu_dependencies() {
         done
         
         echo ""
-        echo "macOS Networking Notes:"
-        echo "  - TAP networking requires Linux-specific tools and is not available on macOS"
-        
-        echo "  - Use User Mode networking (-N user) for internet access on macOS"
-        echo "  - Bridge utilities and iproute2 are Linux-specific"
-        echo ""
-        echo "Recommended network mode for macOS: ./run68k.sh -C config.conf -N user"
+        echo "macOS Notes:"
+        echo "  - User-mode networking is used by default (no additional setup required)"
+        echo "  - Supports both m68k and PowerPC Mac emulation"
         
     elif command -v dnf &> /dev/null; then
         echo "Detected Fedora/RHEL system (dnf)"
         local fedora_packages=(
             "qemu-system-m68k"
+            "qemu-system-ppc"
             "qemu-img"
-            "bridge-utils"
-            "iproute"
-
             "hfsprogs"
             "jq"
         )
@@ -544,16 +530,14 @@ install_qemu_dependencies() {
     else
         echo "Error: Unsupported package manager. Please manually install:" >&2
         echo "  - qemu-system-m68k (QEMU m68k emulation)" >&2
+        echo "  - qemu-system-ppc (QEMU PowerPC emulation)" >&2
         echo "  - qemu-utils (QEMU utilities)" >&2
-        echo "  - bridge-utils (for TAP networking)" >&2
-        echo "  - iproute2 (for TAP networking)" >&2
-        
         echo "  - hfsprogs (HFS+ support)" >&2
         return 1
     fi
     
     echo "Dependency installation completed successfully!"
-    echo "You can now run QEMU Mac emulation with all networking modes supported."
+    echo "You can now run QEMU Mac emulation with user-mode networking."
 }
 
 #######################################
