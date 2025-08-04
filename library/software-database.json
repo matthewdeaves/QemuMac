@@ -45,6 +45,15 @@
       "filename": "SC4.iso",
       "md5": ""
     },
+    "simcity3000": {
+      "name": "SimCity 3000",
+      "description": "A city-building simulation game allowing players to sculpt landscapes and build and manage an entire region of interconnected cities. Needs PPC and Mac OS 7.6.1 to 9.x",
+      "category": "Games",
+      "architectures": ["ppc"],
+      "url": "https://archive.org/download/sim-city-3000_202508/SimCity3000.toast",
+      "filename": "SimCity3000.toast",
+      "md5": ""
+    },
     "macos_x_tiger": {
       "name": "Mac OS X Tiger 10.4",
       "description": "Mac OS X 10.4 Tiger installation disc.",
@@ -63,6 +72,15 @@
       "filename": "Mac OS X Leopard Install DVD Version 10.5 (2Z691-6037-A) (Apple, Inc.)(2007).iso",
       "md5": "39131217782d060d72c9cb7688b2b26d",
       "nice_filename": "MacOSXLeopard10.5.iso"
+    },
+    "macos922": {
+      "name": "Mac OS 9.2",
+      "description": "Mac OS 9.2 for G4 Power Mac",
+      "category": "Operating Systems",
+      "architectures": ["ppc"],
+      "url": "https://download.macintoshgarden.org/apps/Power_Mac_G4_Install_9.2.toast_.zip",
+      "filename": "Power Mac G4 Install 9.2.toast",
+      "md5": ""
     }
   },
   "roms": {

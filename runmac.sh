@@ -321,7 +321,7 @@ build_network_args() {
         network_device="$QEMU_NETWORK_DEVICE"
     elif [ "$ARCH" = "ppc" ]; then
         # For PowerPC, virtio-net is a good default
-        network_device="virtio-net"
+        network_device="sungem"
     else
         # For 68k, use dp83932 which is a common choice for older systems
         network_device="dp83932"
@@ -635,13 +635,13 @@ build_ppc_qemu_command() {
     
     # Add SMP support if specified and greater than 1
     # Note: PowerPC mac99 machine only supports 1 CPU maximum
-    if [ -n "$QEMU_SMP_CORES" ] && [ "$QEMU_SMP_CORES" -gt 1 ]; then
+    if [ -n "${QEMU_SMP_CORES:-}" ] && [ "$QEMU_SMP_CORES" -gt 1 ]; then
         qemu_args+=("-smp" "$QEMU_SMP_CORES")
     fi
     
     # Add TCG acceleration with threading and translation block cache settings
     local accel_opts
-    accel_opts=$(build_tcg_acceleration "$QEMU_TCG_THREAD_MODE" "$QEMU_TB_SIZE")
+    accel_opts=$(build_tcg_acceleration "${QEMU_TCG_THREAD_MODE:-}" "${QEMU_TB_SIZE:-}")
     qemu_args+=("-accel" "$accel_opts")
     
     # Add boot order - PPC uses simple -boot flag instead of PRAM
@@ -655,7 +655,7 @@ build_ppc_qemu_command() {
     local drive_opts=""
     
     # Build IDE performance options using common function
-    if [ -n "$QEMU_IDE_CACHE_MODE" ] || [ -n "$QEMU_IDE_AIO_MODE" ]; then
+    if [ -n "${QEMU_IDE_CACHE_MODE:-}" ] || [ -n "${QEMU_IDE_AIO_MODE:-}" ]; then
         local cache_mode="${QEMU_IDE_CACHE_MODE:-writethrough}"
         local aio_mode="${QEMU_IDE_AIO_MODE:-threads}"
         drive_opts=$(build_drive_cache_params "$cache_mode" "$aio_mode")
@@ -694,30 +694,30 @@ build_ppc_qemu_command() {
     
     # --- Audio settings ---
     # Add audio backend first, then link sound device to it
-    if [ -n "$QEMU_AUDIO_BACKEND" ]; then
+    if [ -n "${QEMU_AUDIO_BACKEND:-}" ]; then
         local audio_opts="driver=${QEMU_AUDIO_BACKEND}"
-        if [ -n "$QEMU_AUDIO_LATENCY" ]; then
+        if [ -n "${QEMU_AUDIO_LATENCY:-}" ]; then
             audio_opts="${audio_opts},timer-period=${QEMU_AUDIO_LATENCY}"
         fi
         qemu_args+=("-audiodev" "$audio_opts,id=audio0")
         
         # Add sound device linked to the audio backend
-        if [ -n "$QEMU_SOUND_DEVICE" ]; then
+        if [ -n "${QEMU_SOUND_DEVICE:-}" ]; then
             qemu_args+=("-device" "$QEMU_SOUND_DEVICE,audiodev=audio0")
         fi
     fi
     
     # --- USB support ---
-    if [ "$QEMU_USB_ENABLED" = "true" ]; then
-        qemu_args+=("-usb")
+    if [ "${QEMU_USB_ENABLED:-}" = "true" ]; then
+        qemu_args+=("-usb" "-device" "usb-tablet") # Add tablet for better mouse
     fi
     
     # --- Network arguments using shared networking module ---
     build_network_args qemu_args
     
     echo "Display: $DISPLAY_TYPE"
-    echo "Performance: CPU=$QEMU_CPU, SMP=$QEMU_SMP_CORES, TCG=$QEMU_TCG_THREAD_MODE, TB=$QEMU_TB_SIZE"
-    echo "Storage: Cache=$QEMU_IDE_CACHE_MODE, AIO=$QEMU_IDE_AIO_MODE"
+    echo "Performance: CPU=${QEMU_CPU:-default}, SMP=${QEMU_SMP_CORES:-1}, TCG=${QEMU_TCG_THREAD_MODE:-multi}, TB=${QEMU_TB_SIZE:-default}"
+    echo "Storage: Cache=${QEMU_IDE_CACHE_MODE:-default}, AIO=${QEMU_IDE_AIO_MODE:-default}"
     echo "-------------------------------------------------------"
 }
 
