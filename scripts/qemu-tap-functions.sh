@@ -120,11 +120,13 @@ setup_tap() {
     
     # Check if TAP device already exists (maybe from a crashed previous run)
     if ip link show "$tap_name" &> /dev/null; then
-        warning_log "TAP device '$tap_name' already exists. Trying to reuse/reconfigure."
-        # Ensure it's down before potential deletion or reconfiguration
+        warning_log "TAP device '$tap_name' already exists. Cleaning up before creating new one."
+        # Ensure it's down before deletion
         sudo ip link set "$tap_name" down &> /dev/null
         # Attempt to remove from bridge just in case it's stuck
         sudo brctl delif "$bridge_name" "$tap_name" &> /dev/null || true
+        # Delete the existing TAP device
+        sudo ip tuntap del dev "$tap_name" mode tap &> /dev/null || true
     fi
     
     echo "Creating TAP device '$tap_name'..."
@@ -245,11 +247,12 @@ setup_nat_and_dhcp_for_bridge() {
     info_log "Starting dnsmasq for DHCP on bridge '$bridge_name'..."
     local dnsmasq_pid_file
     dnsmasq_pid_file="/tmp/qemu-dnsmasq-$$.pid"
-    sudo dnsmasq 
-        --interface="$bridge_name" 
-        --bind-interfaces 
-        --dhcp-range="$dhcp_range" 
-        --except-interface=lo 
+    sudo dnsmasq \
+        --interface="$bridge_name" \
+        --bind-interfaces \
+        --dhcp-range="$dhcp_range" \
+        --except-interface=lo \
+        --port=0 \
         --pid-file="$dnsmasq_pid_file"
     check_exit_status $? "Failed to start dnsmasq."
     local dnsmasq_pid
