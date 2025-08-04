@@ -174,17 +174,11 @@ declare -A OPTIONAL_CONFIG_VARS=(
     ["QEMU_CPU"]="CPU type override"
     ["QEMU_HDD_SIZE"]="Hard disk size (default: $DEFAULT_HDD_SIZE)"
     ["QEMU_SHARED_HDD_SIZE"]="Shared disk size (default: $DEFAULT_SHARED_HDD_SIZE)"
-    ["BRIDGE_NAME"]="Network bridge name (default: $DEFAULT_BRIDGE_NAME)"
-    ["QEMU_TAP_IFACE"]="TAP interface name"
-    ["QEMU_MAC_ADDR"]="MAC address"
-    ["QEMU_USER_SMB_DIR"]="SMB share directory for user mode"
-    ["QEMU_AUDIO_BACKEND"]="Audio backend (pa, alsa, sdl, none)"
+    ["QEMU_AUDIO_BACKEND"]="Audio backend (pa, alsa, none)"
     ["QEMU_AUDIO_LATENCY"]="Audio latency in microseconds"
     ["QEMU_ASC_MODE"]="Apple Sound Chip mode (easc or asc)"
-    ["QEMU_CPU_MODEL"]="Explicit CPU model (m68000-m68060)"
     ["QEMU_TCG_THREAD_MODE"]="TCG threading mode (single or multi)"
     ["QEMU_TB_SIZE"]="Translation block cache size"
-    ["QEMU_MEMORY_BACKEND"]="Memory backend type (ram, file, memfd)"
 )
 
 #######################################
@@ -268,363 +262,29 @@ validate_config_filename() {
     return 0
 }
 
-#######################################
-# Validate audio backend configuration
-# Arguments:
-#   audio_backend: Audio backend to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_audio_backend() {
-    local audio_backend="$1"
-    local valid_backends=("pa" "alsa" "sdl" "oss" "none" "wav" "spice" "dbus" "pipewire")
-    
-    if [ -z "$audio_backend" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for backend in "${valid_backends[@]}"; do
-        if [ "$audio_backend" = "$backend" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid audio backend '$audio_backend'" >&2
-    echo "Valid backends: ${valid_backends[*]}" >&2
-    return 1
-}
+# Audio backend validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate ASC mode configuration
-# Arguments:
-#   asc_mode: ASC mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_asc_mode() {
-    local asc_mode="$1"
-    local valid_modes=("easc" "asc")
-    
-    if [ -z "$asc_mode" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$asc_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid ASC mode '$asc_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    return 1
-}
+# ASC mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate CPU model for m68k emulation
-# Arguments:
-#   cpu_model: CPU model to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_cpu_model() {
-    local cpu_model="$1"
-    local valid_models=("m68000" "m68010" "m68020" "m68030" "m68040" "m68060")
-    
-    if [ -z "$cpu_model" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for model in "${valid_models[@]}"; do
-        if [ "$cpu_model" = "$model" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid CPU model '$cpu_model'" >&2
-    echo "Valid m68k CPU models: ${valid_models[*]}" >&2
-    return 1
-}
+# CPU model validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate TCG thread mode
-# Arguments:
-#   thread_mode: TCG threading mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_tcg_thread_mode() {
-    local thread_mode="$1"
-    local valid_modes=("single" "multi")
-    
-    if [ -z "$thread_mode" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$thread_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid TCG thread mode '$thread_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    return 1
-}
+# TCG thread mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate memory backend type
-# Arguments:
-#   backend_type: Memory backend type to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_memory_backend() {
-    local backend_type="$1"
-    local valid_backends=("ram" "file" "memfd")
-    
-    if [ -z "$backend_type" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for backend in "${valid_backends[@]}"; do
-        if [ "$backend_type" = "$backend" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid memory backend type '$backend_type'" >&2
-    echo "Valid backends: ${valid_backends[*]}" >&2
-    return 1
-}
+# Memory backend validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate translation block cache size
-# Arguments:
-#   tb_size: Translation block cache size to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_tb_size() {
-    local tb_size="$1"
-    
-    if [ -z "$tb_size" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    # Check if it's a positive integer
-    if ! [[ "$tb_size" =~ ^[0-9]+$ ]] || [ "$tb_size" -le 0 ]; then
-        echo "Error: Invalid translation block cache size '$tb_size'" >&2
-        echo "Must be a positive integer (recommended: 64-1024)" >&2
-        return 1
-    fi
-    
-    # Warn for unusual values
-    if [ "$tb_size" -lt 64 ] || [ "$tb_size" -gt 1024 ]; then
-        warning_log "TB cache size '$tb_size' is outside recommended range (64-1024)"
-    fi
-    
-    return 0
-}
+# Translation block cache size validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI cache mode
-# Arguments:
-#   cache_mode: SCSI cache mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_cache_mode() {
-    local cache_mode="$1"
-    local valid_modes=("writethrough" "writeback" "none" "directsync")
-    
-    if [ -z "$cache_mode" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$cache_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid SCSI cache mode '$cache_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    echo "  writethrough: Safe, writes go through to disk" >&2
-    echo "  writeback: Fast, but requires proper VM shutdown" >&2
-    echo "  none: Safest, direct I/O to disk" >&2
-    echo "  directsync: Direct I/O with sync" >&2
-    return 1
-}
+# SCSI cache mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI AIO mode
-# Arguments:
-#   aio_mode: SCSI AIO mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_aio_mode() {
-    local aio_mode="$1"
-    local valid_modes=("threads" "native")
-    
-    if [ -z "$aio_mode" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$aio_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid SCSI AIO mode '$aio_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    echo "  threads: Multi-threaded AIO (default, works everywhere)" >&2
-    echo "  native: Native AIO (Linux only, better performance)" >&2
-    return 1
-}
+# SCSI AIO mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI vendor string
-# Arguments:
-#   vendor: SCSI vendor string to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_vendor() {
-    local vendor="$1"
-    
-    if [ -z "$vendor" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    # SCSI vendor field is 8 characters max, alphanumeric and spaces
-    if [ ${#vendor} -gt 8 ]; then
-        echo "Error: SCSI vendor string '$vendor' too long (max 8 characters)" >&2
-        return 1
-    fi
-    
-    if ! [[ "$vendor" =~ ^[A-Z0-9\ ]+$ ]]; then
-        echo "Error: SCSI vendor string '$vendor' contains invalid characters" >&2
-        echo "Must contain only uppercase letters, numbers, and spaces" >&2
-        return 1
-    fi
-    
-    return 0
-}
+# SCSI vendor validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI serial prefix
-# Arguments:
-#   serial_prefix: SCSI serial number prefix to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_serial_prefix() {
-    local serial_prefix="$1"
-    
-    if [ -z "$serial_prefix" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    # Serial prefix should be 3-4 characters, alphanumeric
-    if [ ${#serial_prefix} -lt 2 ] || [ ${#serial_prefix} -gt 4 ]; then
-        echo "Error: SCSI serial prefix '$serial_prefix' must be 2-4 characters" >&2
-        return 1
-    fi
-    
-    if ! [[ "$serial_prefix" =~ ^[A-Z0-9]+$ ]]; then
-        echo "Error: SCSI serial prefix '$serial_prefix' contains invalid characters" >&2
-        echo "Must contain only uppercase letters and numbers" >&2
-        return 1
-    fi
-    
-    return 0
-}
+# SCSI serial prefix validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate display device type
-# Arguments:
-#   display_device: Display device type to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_display_device() {
-    local display_device="$1"
-    local valid_devices=("built-in" "nubus-macfb")
-    
-    if [ -z "$display_device" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for device in "${valid_devices[@]}"; do
-        if [ "$display_device" = "$device" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid display device '$display_device'" >&2
-    echo "Valid devices: ${valid_devices[*]}" >&2
-    echo "  built-in: Standard Q800 built-in display" >&2
-    echo "  nubus-macfb: NuBus framebuffer device" >&2
-    return 1
-}
+# Display device validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate resolution preset
-# Arguments:
-#   resolution_preset: Resolution preset name to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_resolution_preset() {
-    local resolution_preset="$1"
-    local valid_presets=("mac_standard" "vga" "svga" "xga" "sxga")
-    
-    if [ -z "$resolution_preset" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for preset in "${valid_presets[@]}"; do
-        if [ "$resolution_preset" = "$preset" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid resolution preset '$resolution_preset'" >&2
-    echo "Valid presets: ${valid_presets[*]}" >&2
-    echo "  mac_standard: 1152x870x8 (Mac 21-inch)" >&2
-    echo "  vga: 640x480x8 (VGA)" >&2
-    echo "  svga: 800x600x8 (Super VGA)" >&2
-    echo "  xga: 1024x768x8 (Extended VGA)" >&2
-    echo "  sxga: 1280x1024x8 (Super XGA)" >&2
-    return 1
-}
+# Resolution preset validation removed - simplified configs use trusted defaults
 
 #######################################
 # Get resolution from preset name
@@ -660,65 +320,9 @@ get_resolution_from_preset() {
     esac
 }
 
-#######################################
-# Validate floppy readonly setting
-# Arguments:
-#   readonly_mode: Floppy readonly mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_floppy_readonly() {
-    local readonly_mode="$1"
-    local valid_modes=("true" "false")
-    
-    if [ -z "$readonly_mode" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$readonly_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid floppy readonly mode '$readonly_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    echo "  true: Read-only access (safe, prevents data loss)" >&2
-    echo "  false: Read-write access (allows modifications)" >&2
-    return 1
-}
+# Floppy readonly validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate floppy format
-# Arguments:
-#   floppy_format: Floppy format to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_floppy_format() {
-    local floppy_format="$1"
-    local valid_formats=("mac" "pc")
-    
-    if [ -z "$floppy_format" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for format in "${valid_formats[@]}"; do
-        if [ "$floppy_format" = "$format" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid floppy format '$floppy_format'" >&2
-    echo "Valid formats: ${valid_formats[*]}" >&2
-    echo "  mac: Mac-formatted floppy disks" >&2
-    echo "  pc: PC-formatted floppy disks" >&2
-    return 1
-}
+# Floppy format validation removed - simplified configs use trusted defaults
 
 # --- Security and Input Validation Functions ---
 
@@ -873,7 +477,7 @@ install_qemu_dependencies() {
         local networking_packages=(
             "bridge-utils"          # Bridge utilities (brctl)
             "iproute2"              # IP route utilities
-            "passt"                 # Modern userspace networking
+            
         )
         
         local filesystem_packages=(
@@ -913,7 +517,7 @@ install_qemu_dependencies() {
         echo ""
         echo "macOS Networking Notes:"
         echo "  - TAP networking requires Linux-specific tools and is not available on macOS"
-        echo "  - Passt networking is Linux-only and not available via Homebrew"
+        
         echo "  - Use User Mode networking (-N user) for internet access on macOS"
         echo "  - Bridge utilities and iproute2 are Linux-specific"
         echo ""
@@ -926,7 +530,7 @@ install_qemu_dependencies() {
             "qemu-img"
             "bridge-utils"
             "iproute"
-            "passt"
+
             "hfsprogs"
             "jq"
         )
@@ -943,7 +547,7 @@ install_qemu_dependencies() {
         echo "  - qemu-utils (QEMU utilities)" >&2
         echo "  - bridge-utils (for TAP networking)" >&2
         echo "  - iproute2 (for TAP networking)" >&2
-        echo "  - passt (modern networking)" >&2
+        
         echo "  - hfsprogs (HFS+ support)" >&2
         return 1
     fi
@@ -982,9 +586,7 @@ check_and_offer_install() {
         missing_deps+=("iproute2")
     fi
     
-    if ! command -v passt &> /dev/null; then
-        missing_deps+=("passt")
-    fi
+    
     
     # If dependencies are missing, offer to install
     if [ ${#missing_deps[@]} -gt 0 ]; then
