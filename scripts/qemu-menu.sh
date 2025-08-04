@@ -812,7 +812,7 @@ handle_cd_selection() {
         return
     elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#configs[@]}" ]; then
         local selected_config="${configs[$((choice-1))]}"
-        launch_vm "$selected_config" "$DOWNLOADS_DIR/$selected_filename"
+        launch_vm "$selected_config" "$DOWNLOADS_DIR/$selected_filename" "$cd_key"
     else
         echo -e "\n${RED}Invalid selection. Press Enter to continue...${NC}"
         read -r
@@ -832,6 +832,7 @@ handle_cd_selection() {
 launch_vm() {
     local config_file="$1"
     local cd_path="$2"
+    local cd_key="$3"
     local config_path
     
     # Find the full path to config file in architecture-specific directories
@@ -846,10 +847,23 @@ launch_vm() {
         return
     fi
     
+    # Check if this is an installation disc (Operating Systems category)
+    local cd_category=$(get_cd_info "$cd_key" "category")
+    local boot_flag=""
+    if [ "$cd_category" = "Operating Systems" ]; then
+        boot_flag="-b"
+        echo -e "${CYAN}Detected installation disc - will boot from CD${NC}"
+    else
+        echo -e "${CYAN}Detected application disc - will boot from hard disk${NC}"
+    fi
+    
     echo
     echo -e "${CYAN}${BOLD}Launching Virtual Machine...${NC}"
     echo -e "${WHITE}Config: $config_file${NC}"
     echo -e "${WHITE}CD: $(basename "$cd_path")${NC}"
+    echo
+    echo -e "${GREEN}Manual command (for testing):${NC}"
+    echo -e "${DIM}./runmac.sh -C \"$config_path\" -c \"$cd_path\" $boot_flag${NC}"
     echo
     echo -e "${DIM}Press Ctrl+Alt+G to release mouse, Ctrl+Alt+F to toggle fullscreen${NC}"
     echo -e "${DIM}Close QEMU window to return to menu${NC}"
@@ -857,9 +871,9 @@ launch_vm() {
     echo -e "${YELLOW}Starting in 3 seconds...${NC}"
     sleep 3
     
-    # Launch the VM using unified dispatcher
+    # Launch the VM using unified dispatcher with appropriate boot flag
     cd "$CONFIGS_DIR" || return
-    ./runmac.sh -C "$config_path" -c "$cd_path"
+    ./runmac.sh -C "$config_path" -c "$cd_path" $boot_flag
     
     echo
     echo -e "${GREEN}VM session ended. Press Enter to continue...${NC}"

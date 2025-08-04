@@ -33,6 +33,7 @@ QEMU_SHARED_HDD=""
 QEMU_SHARED_HDD_SIZE=""
 QEMU_GRAPHICS=""
 QEMU_CPU=""
+QEMU_SMP_CORES=""
 QEMU_HDD_SIZE=""
 BRIDGE_NAME=""
 QEMU_TAP_IFACE=""
@@ -56,11 +57,11 @@ CD_FILE=""
 ADDITIONAL_HDD_FILE=""
 BOOT_FROM_CD=false
 DISPLAY_TYPE=""
-# Auto-detect network type based on OS (TAP requires Linux, User mode for macOS)
+# Auto-detect network type based on OS (User mode is simpler for PPC)
 if [[ "$(uname)" == "Darwin" ]]; then
     NETWORK_TYPE="user"  # Default to user mode on macOS (TAP requires Linux tools)
 else
-    NETWORK_TYPE="tap"   # Default to TAP on Linux
+    NETWORK_TYPE="user"  # Default to user mode on Linux for PPC (simpler than TAP)
 fi
 DEBUG_MODE=false
 
@@ -185,8 +186,8 @@ parse_arguments() {
 #   None
 #######################################
 prepare_disk_images() {
-    local hdd_size="${QEMU_HDD_SIZE:-2G}"
-    local shared_size="${QEMU_SHARED_HDD_SIZE:-200M}"
+    local hdd_size="${QEMU_HDD_SIZE:-15G}"
+    local shared_size="${QEMU_SHARED_HDD_SIZE:-1G}"
     
     # Create data directory if it doesn't exist
     local data_dir
@@ -201,7 +202,7 @@ prepare_disk_images() {
         info_log "PowerPC OS hard disk image '$QEMU_HDD' not found. Creating ${hdd_size}..."
         qemu-img create -f raw "$QEMU_HDD" "$hdd_size"
         check_exit_status $? "Failed to create PowerPC OS hard disk image '$QEMU_HDD'"
-        echo "Empty PowerPC OS hard disk image created. Proceeding with boot likely from CD for install."
+        echo "Empty PowerPC OS hard disk image created (${hdd_size}). Proceeding with boot likely from CD for install."
         echo "Note: Format this drive with Mac OS Disk Utility during installation."
     fi
     
@@ -210,7 +211,7 @@ prepare_disk_images() {
         info_log "PowerPC shared disk image '$QEMU_SHARED_HDD' not found. Creating ${shared_size}..."
         qemu-img create -f raw "$QEMU_SHARED_HDD" "$shared_size"
         check_exit_status $? "Failed to create PowerPC shared disk image '$QEMU_SHARED_HDD'"
-        echo "Empty PowerPC shared disk image created. Format it within the emulator."
+        echo "Empty PowerPC shared disk image created (${shared_size}). Format it within the emulator."
         echo "To share files with the PowerPC VM - Linux example:"
         echo "  1. Format as HFS+ in Mac OS first"
         echo "  2. sudo mount -t hfsplus -o loop \"$QEMU_SHARED_HDD\" /mnt"
@@ -289,24 +290,34 @@ build_qemu_command() {
     # Initialize the array
     qemu_args=()
     
-    # Set defaults if not specified
-    local audio_backend="${QEMU_AUDIO_BACKEND:-pa}"
-    local audio_latency="${QEMU_AUDIO_LATENCY:-50000}"
-    local sound_device="${QEMU_SOUND_DEVICE:-es1370}"
-    local tcg_thread_mode="${QEMU_TCG_THREAD_MODE:-single}"
-    local tb_size="${QEMU_TB_SIZE:-256}"
-    local ide_cache_mode="${QEMU_IDE_CACHE_MODE:-writethrough}"
-    local ide_aio_mode="${QEMU_IDE_AIO_MODE:-threads}"
-    local usb_enabled="${QEMU_USB_ENABLED:-false}"
-    
-    # Base arguments - PPC uses -L pc-bios instead of ROM file
+    # Base machine arguments
     qemu_args+=(
         "-L" "pc-bios"
         "-M" "$QEMU_MACHINE"
-        "-m" "$QEMU_RAM"
         "-display" "$DISPLAY_TYPE"
-        "-g" "$QEMU_GRAPHICS"
+        "-m" "$QEMU_RAM"
     )
+    
+    # Add CPU type if specified
+    if [ -n "$QEMU_CPU" ]; then
+        qemu_args+=("-cpu" "$QEMU_CPU")
+    fi
+    
+    # Add SMP support if specified and greater than 1
+    # Note: PowerPC mac99 machine only supports 1 CPU maximum
+    if [ -n "$QEMU_SMP_CORES" ] && [ "$QEMU_SMP_CORES" -gt 1 ]; then
+        qemu_args+=("-smp" "$QEMU_SMP_CORES")
+    fi
+    
+    # Add TCG acceleration with threading and translation block cache settings
+    local accel_opts="tcg"
+    if [ -n "$QEMU_TCG_THREAD_MODE" ] && [ "$QEMU_TCG_THREAD_MODE" != "single" ]; then
+        accel_opts="${accel_opts},thread=${QEMU_TCG_THREAD_MODE}"
+    fi
+    if [ -n "$QEMU_TB_SIZE" ]; then
+        accel_opts="${accel_opts},tb-size=${QEMU_TB_SIZE}"
+    fi
+    qemu_args+=("-accel" "$accel_opts")
     
     # Add boot order - PPC uses simple -boot flag instead of PRAM
     if [ "$BOOT_FROM_CD" = true ]; then
@@ -315,87 +326,86 @@ build_qemu_command() {
         qemu_args+=("-boot" "c")  # Boot from hard disk
     fi
     
-    # Add audio configuration if not disabled
-    if [ "$audio_backend" != "none" ]; then
-        qemu_args+=("-audiodev" "$audio_backend,id=audio0,in.latency=$audio_latency,out.latency=$audio_latency")
-        qemu_args+=("-device" "$sound_device,audiodev=audio0")
+    # --- Storage drives with performance settings ---
+    local drive_opts=""
+    
+    # Build IDE performance options
+    if [ -n "$QEMU_IDE_CACHE_MODE" ]; then
+        drive_opts="cache=${QEMU_IDE_CACHE_MODE}"
     fi
-    
-    # Add CPU if specified in config (optional)
-    if [ -n "${QEMU_CPU:-}" ]; then
-        qemu_args+=("-cpu" "$QEMU_CPU")
-    fi
-    
-    # Add TCG optimizations if specified
-    if [ -n "$tcg_thread_mode" ] || [ -n "$tb_size" ]; then
-        local tcg_opts="tcg"
-        if [ -n "$tcg_thread_mode" ]; then
-            tcg_opts="$tcg_opts,thread=$tcg_thread_mode"
-        fi
-        if [ -n "$tb_size" ]; then
-            tcg_opts="$tcg_opts,tb-size=$tb_size"
-        fi
-        qemu_args+=("-accel" "$tcg_opts")
-    fi
-    
-    # Add network arguments using PPC-specific networking
-    build_ppc_network_args "$NETWORK_TYPE" qemu_args
-    
-    # Build drive cache parameters
-    local drive_cache_params="cache=$ide_cache_mode,aio=$ide_aio_mode"
-    if [ "$ide_aio_mode" = "native" ]; then
-        drive_cache_params="$drive_cache_params,cache.direct=on"
-    fi
-    
-    # --- Add drives using IDE channels (simpler than 68k SCSI) ---
-    # IDE Channel assignment for PowerPC Macs:
-    # Primary Master (index=0): OS hard drive OR CD-ROM (when booting from CD)
-    # Primary Slave (index=1): CD-ROM OR OS hard drive (when booting from CD)  
-    # Secondary Master (index=2): Shared hard drive
-    # Secondary Slave (index=3): Additional hard drive (when specified)
-    
-    if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
-        # When booting from CD, put CD on primary master for boot priority
-        echo "CD-ROM: $CD_FILE as Primary Master for boot"
-        qemu_args+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=ide,index=0,id=cd0")
-        # Put OS drive on primary slave when booting from CD
-        qemu_args+=("-drive" "file=$QEMU_HDD,media=disk,format=raw,if=ide,index=1,id=hd0,$drive_cache_params")
-    else
-        # Normal operation - OS drive on primary master
-        qemu_args+=("-drive" "file=$QEMU_HDD,media=disk,format=raw,if=ide,index=0,id=hd0,$drive_cache_params")
-        
-        # CD-ROM on primary slave if specified
-        if [ -n "$CD_FILE" ]; then
-            echo "CD-ROM: $CD_FILE as Primary Slave"
-            qemu_args+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=ide,index=1,id=cd0")
+    if [ -n "$QEMU_IDE_AIO_MODE" ]; then
+        if [ -n "$drive_opts" ]; then
+            drive_opts="${drive_opts},aio=${QEMU_IDE_AIO_MODE}"
         else
-            echo "No CD-ROM specified"
+            drive_opts="aio=${QEMU_IDE_AIO_MODE}"
+        fi
+        
+        # Add cache.direct=on when using native AIO (required by QEMU)
+        if [ "$QEMU_IDE_AIO_MODE" = "native" ]; then
+            if [ -n "$drive_opts" ]; then
+                drive_opts="${drive_opts},cache.direct=on"
+            else
+                drive_opts="cache.direct=on"
+            fi
         fi
     fi
     
-    # Secondary Master - Shared HDD
-    qemu_args+=("-drive" "file=$QEMU_SHARED_HDD,media=disk,format=raw,if=ide,index=2,id=hd1,$drive_cache_params")
+    # Add CD-ROM first if specified
+    if [ -n "$CD_FILE" ]; then
+        echo "CD-ROM: $CD_FILE"
+        qemu_args+=("-drive" "file=$CD_FILE,format=raw,media=cdrom")
+    fi
     
-    # Secondary Slave - Additional HDD if specified via -a flag
+    # Add main HDD with performance options
+    local main_hdd_drive="file=$QEMU_HDD,format=raw,media=disk"
+    if [ -n "$drive_opts" ]; then
+        main_hdd_drive="${main_hdd_drive},${drive_opts}"
+    fi
+    qemu_args+=("-drive" "$main_hdd_drive")
+    
+    # Add shared drive with performance options
+    echo "Shared HDD: $QEMU_SHARED_HDD"
+    local shared_hdd_drive="file=$QEMU_SHARED_HDD,format=raw,media=disk"
+    if [ -n "$drive_opts" ]; then
+        shared_hdd_drive="${shared_hdd_drive},${drive_opts}"
+    fi
+    qemu_args+=("-drive" "$shared_hdd_drive")
+    
+    # Add additional HDD if specified via -a flag
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
-        echo "Additional HDD: $ADDITIONAL_HDD_FILE as Secondary Slave"
-        qemu_args+=("-drive" "file=$ADDITIONAL_HDD_FILE,media=disk,format=raw,if=ide,index=3,id=hd_add,$drive_cache_params")
+        echo "Additional HDD: $ADDITIONAL_HDD_FILE"
+        local additional_hdd_drive="file=$ADDITIONAL_HDD_FILE,format=raw,media=disk"
+        if [ -n "$drive_opts" ]; then
+            additional_hdd_drive="${additional_hdd_drive},${drive_opts}"
+        fi
+        qemu_args+=("-drive" "$additional_hdd_drive")
     fi
     
-    # Add USB support if enabled (for Mac OS X)
-    if [ "$usb_enabled" = "true" ]; then
-        info_log "Adding USB support for Mac OS X"
-        qemu_args+=(
-            "-device" "pci-ohci,id=ohci"
-            "-device" "usb-kbd,bus=ohci.0"
-            "-device" "usb-mouse,bus=ohci.0"
-        )
+    # --- Audio settings ---
+    # Add audio backend first, then link sound device to it
+    if [ -n "$QEMU_AUDIO_BACKEND" ]; then
+        local audio_opts="driver=${QEMU_AUDIO_BACKEND}"
+        if [ -n "$QEMU_AUDIO_LATENCY" ]; then
+            audio_opts="${audio_opts},timer-period=${QEMU_AUDIO_LATENCY}"
+        fi
+        qemu_args+=("-audiodev" "$audio_opts,id=audio0")
+        
+        # Add sound device linked to the audio backend
+        if [ -n "$QEMU_SOUND_DEVICE" ]; then
+            qemu_args+=("-device" "$QEMU_SOUND_DEVICE,audiodev=audio0")
+        fi
     fi
     
-    echo "Display: $DISPLAY_TYPE Resolution: $QEMU_GRAPHICS"
-    echo "Audio: $audio_backend Device: $sound_device, Latency: ${audio_latency}μs"
-    echo "Storage: IDE Cache: $ide_cache_mode, AIO: $ide_aio_mode"
-    echo "--------------------------"
+    # --- USB support ---
+    if [ "$QEMU_USB_ENABLED" = "true" ]; then
+        qemu_args+=("-usb")
+    fi
+    
+    echo "Display: $DISPLAY_TYPE"
+    echo "Performance: CPU=$QEMU_CPU, SMP=$QEMU_SMP_CORES, TCG=$QEMU_TCG_THREAD_MODE, TB=$QEMU_TB_SIZE"
+    echo "Storage: Cache=$QEMU_IDE_CACHE_MODE, AIO=$QEMU_IDE_AIO_MODE"
+    echo "Generated QEMU command: qemu-system-ppc ${qemu_args[*]}"
+    echo "-------------------------------------------------------"
 }
 
 #######################################
@@ -421,6 +431,7 @@ run_emulation() {
     
     # Execute QEMU using the secure array
     echo "--- Starting QEMU PowerPC ---"
+    echo "QEMU command: qemu-system-ppc ${qemu_args[*]}"
     debug_log "QEMU command: qemu-system-ppc ${qemu_args[*]}"
     
     qemu-system-ppc "${qemu_args[@]}"

@@ -43,7 +43,7 @@
       "architectures": ["ppc"],
       "url": "https://archive.org/download/mac-osx.-4/MacOSX.4.iso",
       "filename": "MacOSX.4.iso",
-      "md5": ""
+      "md5": "4764d50fecb9f9370b626fc146f09954"
     },
     "macos_x_leopard": {
       "name": "Mac OS X Leopard 10.5.6",
