@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 
+
 #######################################
 # QEMU Mac Library Menu System
 # Interactive menu with colors and download management
 #######################################
 
+
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/qemu-utils.sh
 source "$SCRIPT_DIR/qemu-utils.sh"
+
 
 # --- Colors and UI ---
 readonly RED='\033[0;31m'
@@ -22,11 +25,13 @@ readonly BOLD='\033[1m'
 readonly DIM='\033[2m'
 readonly NC='\033[0m' # No Color
 
+
 # --- Constants ---
 readonly LIBRARY_DIR="$SCRIPT_DIR/../library"
 readonly DATABASE_FILE="$LIBRARY_DIR/software-database.json"
 readonly DOWNLOADS_DIR="$LIBRARY_DIR/downloads"
 readonly CONFIGS_DIR="$SCRIPT_DIR/.."
+
 
 #######################################
 # Print colored header with ASCII art
@@ -47,6 +52,7 @@ print_header() {
     echo -e "${NC}"
     echo
 }
+
 
 #######################################
 # Show animated spinner during operations
@@ -73,6 +79,7 @@ show_spinner() {
     printf "\b%b✓%b\n" "$GREEN" "$NC"
 }
 
+
 #######################################
 # Show download progress bar
 # Arguments:
@@ -96,6 +103,7 @@ show_progress() {
     printf "] ${percent}%%${NC}"
 }
 
+
 #######################################
 # Initialize library directories
 # Arguments:
@@ -117,6 +125,7 @@ init_library() {
     fi
 }
 
+
 #######################################
 # Parse JSON database and extract CD information sorted by category then name
 # Arguments:
@@ -129,6 +138,7 @@ init_library() {
 get_cd_list() {
     jq -r '.cds | to_entries | sort_by(.value.category, .value.name) | .[].key' "$DATABASE_FILE" 2>/dev/null
 }
+
 
 #######################################
 # Get CD information by key
@@ -158,6 +168,9 @@ get_cd_info() {
             "filename")
                 grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep "\"filename\"" | cut -d'"' -f4
                 ;;
+            "nice_filename") # Add fallback for nice_filename
+                grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep "\"nice_filename\"" | cut -d'"' -f4
+                ;;
             "url")
                 grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep "\"url\"" | cut -d'"' -f4
                 ;;
@@ -167,6 +180,7 @@ get_cd_info() {
         esac
     fi
 }
+
 
 #######################################
 # Get ROM information by key
@@ -203,6 +217,7 @@ get_rom_info() {
     fi
 }
 
+
 #######################################
 # Get additional files for a CD
 # Arguments:
@@ -224,6 +239,7 @@ get_cd_additional_files() {
     fi
 }
 
+
 #######################################
 # Get CD architectures as array
 # Arguments:
@@ -243,6 +259,7 @@ get_cd_architectures() {
         grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep -A5 "architectures" | grep -o '"[^"]*"' | tr -d '"' | grep -E '^(m68k|ppc)$'
     fi
 }
+
 
 #######################################
 # Get list of available config files, optionally filtered by architectures
@@ -285,6 +302,7 @@ get_config_list() {
     printf '%s\n' "${configs[@]}" | sort -u
 }
 
+
 #######################################
 # Verify MD5 checksum of a file
 # Arguments:
@@ -326,6 +344,7 @@ verify_md5() {
         return 1
     fi
 }
+
 
 #######################################
 # Extract ZIP file and clean up
@@ -370,6 +389,7 @@ extract_zip() {
         return 1
     fi
 }
+
 
 #######################################
 # Download file with real-time progress tracking, verification, and extraction
@@ -480,6 +500,7 @@ download_file() {
     return 0
 }
 
+
 #######################################
 # Check if file is already downloaded
 # Arguments:
@@ -516,6 +537,7 @@ is_downloaded() {
     
     return 1
 }
+
 
 #######################################
 # Find actual downloaded filename
@@ -555,6 +577,7 @@ find_downloaded_file() {
     # No file found
     return 1
 }
+
 
 #######################################
 # Display main menu and handle user selection
@@ -598,6 +621,7 @@ show_main_menu() {
     done
 }
 
+
 #######################################
 # Display CD selection menu
 # Arguments:
@@ -624,7 +648,10 @@ show_cd_menu() {
             
             local name=$(get_cd_info "$cd_key" "name")
             local description=$(get_cd_info "$cd_key" "description")
-            local filename=$(get_cd_info "$cd_key" "filename")
+            # --- MODIFIED ---
+            # Use the helper function to get the correct local filename
+            local effective_filename
+            effective_filename=$(_get_local_filename "$cd_key")
             local category=$(get_cd_info "$cd_key" "category")
             
             # Display category header when category changes
@@ -647,11 +674,13 @@ show_cd_menu() {
                 current_category="$category"
             fi
             
-            # Check if already downloaded
-            if is_downloaded "$filename"; then
-                local status="${GREEN}✓ Downloaded${NC}"
+            # --- MODIFIED ---
+            # Check status using the effective filename
+            local status
+            if is_downloaded "$effective_filename"; then
+                status="${GREEN}✓ Downloaded${NC}"
             else
-                local status="${DIM}Not downloaded${NC}"
+                status="${DIM}Not downloaded${NC}"
             fi
             
             printf "%b%2d)%b %b%s%b\n" "$GREEN" $i "$NC" "$BOLD" "$name" "$NC"
@@ -680,6 +709,7 @@ show_cd_menu() {
     done
 }
 
+
 #######################################
 # Handle CD selection and system choice
 # Arguments:
@@ -692,7 +722,10 @@ show_cd_menu() {
 handle_cd_selection() {
     local cd_key="$1"
     local name=$(get_cd_info "$cd_key" "name")
-    local filename=$(get_cd_info "$cd_key" "filename")
+    # --- MODIFIED ---
+    # Use helper function for the filename throughout this function
+    local effective_filename
+    effective_filename=$(_get_local_filename "$cd_key")
     local url=$(get_cd_info "$cd_key" "url")
     local md5=$(get_cd_info "$cd_key" "md5")
     
@@ -700,12 +733,13 @@ handle_cd_selection() {
     echo -e "${WHITE}${BOLD}Selected: $name${NC}"
     echo
     
-    # Download if not already downloaded
-    if ! is_downloaded "$filename"; then
+    # --- MODIFIED ---
+    # Download if not already downloaded, using the effective filename
+    if ! is_downloaded "$effective_filename"; then
         echo -e "${YELLOW}CD not downloaded. Downloading now...${NC}"
         echo
         
-        if download_file "$url" "$DOWNLOADS_DIR/$filename" "$md5"; then
+        if download_file "$url" "$DOWNLOADS_DIR/$effective_filename" "$md5"; then
             echo -e "${GREEN}✓ Download completed!${NC}"
         else
             echo -e "${RED}✗ Download failed. Press Enter to continue...${NC}"
@@ -718,8 +752,9 @@ handle_cd_selection() {
         echo
     fi
     
-    # Check for multiple ISO files and let user choose
-    local selected_filename="$filename"
+    # --- MODIFIED ---
+    # The default selected filename is now the effective_filename
+    local selected_filename="$effective_filename"
     local additional_files_info
     additional_files_info=$(get_cd_additional_files "$cd_key")
     
@@ -728,13 +763,14 @@ handle_cd_selection() {
         local available_files=()
         local file_descriptions=()
         
-        # Add main file if it exists
-        if [ -f "$DOWNLOADS_DIR/$filename" ]; then
-            available_files+=("$filename")
+        # --- MODIFIED ---
+        # Add main file if it exists, using the effective filename
+        if [ -f "$DOWNLOADS_DIR/$effective_filename" ]; then
+            available_files+=("$effective_filename")
             file_descriptions+=("Main Game/Software")
         fi
         
-        # Add additional files if they exist
+        # Add additional files if they exist (this logic remains the same)
         while IFS='|' read -r add_filename add_description; do
             [ -n "$add_filename" ] || continue
             if [ -f "$DOWNLOADS_DIR/$add_filename" ]; then
@@ -763,8 +799,10 @@ handle_cd_selection() {
                 selected_filename="${available_files[$((disc_choice-1))]}"
                 echo -e "${GREEN}✓ Selected: $selected_filename${NC}"
             else
-                echo -e "${RED}Invalid selection, using default: $filename${NC}"
-                selected_filename="$filename"
+                # --- MODIFIED ---
+                # Fallback to the effective filename
+                echo -e "${RED}Invalid selection, using default: $effective_filename${NC}"
+                selected_filename="$effective_filename"
             fi
             echo
         fi
@@ -818,6 +856,7 @@ handle_cd_selection() {
         read -r
     fi
 }
+
 
 #######################################
 # Launch VM with selected config and CD
@@ -879,6 +918,7 @@ launch_vm() {
     echo -e "${GREEN}VM session ended. Press Enter to continue...${NC}"
     read -r
 }
+
 
 #######################################
 # Show ROM download menu
@@ -951,6 +991,7 @@ show_rom_menu() {
     done
 }
 
+
 #######################################
 # Handle ROM download to root directory
 # Arguments:
@@ -1001,6 +1042,7 @@ handle_rom_download() {
     read -r
 }
 
+
 #######################################
 # Show downloaded files
 # Arguments:
@@ -1043,6 +1085,7 @@ show_downloads() {
     echo -e -n "${YELLOW}Press 'b' for back or Enter to continue: ${NC}"
     read -r choice
 }
+
 
 #######################################
 # Show system information

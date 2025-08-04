@@ -93,13 +93,29 @@ show_help() {
 }
 
 #######################################
-# List available software (command line mode)
+# Determines the effective local filename for a software entry.
+# It prioritizes "nice_filename" from the database if it exists,
+# otherwise it falls back to the "filename" field.
 # Arguments:
-#   None
-# Globals:
-#   Various from menu system
+#   cd_key: The key of the software entry.
 # Returns:
-#   None
+#   The effective local filename via stdout.
+#######################################
+_get_local_filename() {
+    local cd_key="$1"
+    local nice_filename
+    nice_filename=$(get_cd_info "$cd_key" "nice_filename")
+
+    if [ -n "$nice_filename" ]; then
+        echo "$nice_filename"
+    else
+        # Fallback to the original filename if nice_filename is not defined
+        get_cd_info "$cd_key" "filename"
+    fi
+}
+
+#######################################
+# List available software (command line mode)
 #######################################
 list_software() {
     echo "Available Software CDs:"
@@ -108,18 +124,23 @@ list_software() {
     while IFS= read -r cd_key; do
         [ -n "$cd_key" ] || continue
         
-        local name=$(get_cd_info "$cd_key" "name")
-        local description=$(get_cd_info "$cd_key" "description")
-        local filename=$(get_cd_info "$cd_key" "filename")
+        local name
+        name=$(get_cd_info "$cd_key" "name")
+        local description
+        description=$(get_cd_info "$cd_key" "description")
+        # NEW: Use helper to get the effective local filename
+        local effective_filename
+        effective_filename=$(_get_local_filename "$cd_key")
         
-        if is_downloaded "$filename"; then
-            local status="[Downloaded]"
+        local status
+        if is_downloaded "$effective_filename"; then
+            status="[Downloaded]"
         else
-            local status="[Not Downloaded]"
+            status="[Not Downloaded]"
         fi
         
         printf "%-20s %-15s %s\n" "$cd_key" "$status" "$name"
-        printf "%-20s %-15s %s\n" "" "" "$description"
+        printf "%-20s %-15s %s (%s)\n" "" "" "$description" "$effective_filename"
         echo
     done < <(get_cd_list)
     
@@ -130,61 +151,55 @@ list_software() {
     done < <(get_config_list)
 }
 
+
 #######################################
 # Download software (command line mode)
-# Arguments:
-#   software_key: Key of software to download
-# Globals:
-#   Various from menu system
-# Returns:
-#   None
-# Exits:
-#   1 if download fails
 #######################################
 download_software() {
     local cd_key="$1"
-    local name=$(get_cd_info "$cd_key" "name")
-    local filename=$(get_cd_info "$cd_key" "filename")
-    local url=$(get_cd_info "$cd_key" "url")
+    local name
+    name=$(get_cd_info "$cd_key" "name")
+    # NEW: Use helper to get the effective local filename
+    local effective_filename
+    effective_filename=$(_get_local_filename "$cd_key")
+    local url
+    url=$(get_cd_info "$cd_key" "url")
     
     if [ -z "$name" ]; then
         echo "Error: Software '$cd_key' not found in database" >&2
         exit 1
     fi
     
-    echo "Downloading: $name"
-    
-    if is_downloaded "$filename"; then
-        echo "Already downloaded: $filename"
+    if is_downloaded "$effective_filename"; then
+        echo "Already downloaded: $effective_filename"
         return 0
     fi
     
-    if download_file "$url" "$DOWNLOADS_DIR/$filename"; then
-        echo "Download completed: $filename"
+    echo "Downloading: $name"
+    # NEW: Download directly to the clean filename
+    if download_file "$url" "$DOWNLOADS_DIR/$effective_filename"; then
+        echo "Download completed: $effective_filename"
     else
         echo "Download failed" >&2
+        # Clean up partial download
+        rm -f "$DOWNLOADS_DIR/$effective_filename"
         exit 1
     fi
 }
 
 #######################################
 # Launch software (command line mode)
-# Arguments:
-#   software_key: Key of software to launch
-#   config_file: Configuration file to use
-# Globals:
-#   Various from menu system
-# Returns:
-#   None
-# Exits:
-#   1 if launch fails
 #######################################
 launch_software() {
     local cd_key="$1"
     local config_file="$2"
-    local name=$(get_cd_info "$cd_key" "name")
-    local filename=$(get_cd_info "$cd_key" "filename")
-    local url=$(get_cd_info "$cd_key" "url")
+    local name
+    name=$(get_cd_info "$cd_key" "name")
+    # NEW: Use helper to get the effective local filename
+    local effective_filename
+    effective_filename=$(_get_local_filename "$cd_key")
+    local url
+    url=$(get_cd_info "$cd_key" "url")
     
     if [ -z "$name" ]; then
         echo "Error: Software '$cd_key' not found in database" >&2
@@ -192,10 +207,12 @@ launch_software() {
     fi
     
     # Download if needed
-    if ! is_downloaded "$filename"; then
+    if ! is_downloaded "$effective_filename"; then
         echo "Software not downloaded. Downloading now..."
-        if ! download_file "$url" "$DOWNLOADS_DIR/$filename"; then
+        # NEW: Download to the clean filename
+        if ! download_file "$url" "$DOWNLOADS_DIR/$effective_filename"; then
             echo "Download failed" >&2
+            rm -f "$DOWNLOADS_DIR/$effective_filename" # Clean up
             exit 1
         fi
     fi
@@ -213,10 +230,12 @@ launch_software() {
     
     echo "Launching: $name with $config_file"
     
-    # Launch VM
+    # Launch VM using the clean, effective filename
     cd "$SCRIPT_DIR" || exit 1
-    ./run68k.sh -C "$config_path" -c "$DOWNLOADS_DIR/$filename"
+    # Note: Ensure you are calling your unified runmac.sh script here
+    ./runmac.sh -C "$config_path" -c "$DOWNLOADS_DIR/$effective_filename"
 }
+
 
 # --- Script Entry Point ---
 main "$@"

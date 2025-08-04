@@ -61,7 +61,8 @@
       "architectures": ["ppc"],
       "url": "https://archive.org/download/Mac_OS_X_Leopard_Install_DVD_Version_10.5_2Z691-6037-A_Apple_Inc._2007/Mac%20OS%20X%20Leopard%20Install%20DVD%20Version%2010.5%20%282Z691-6037-A%29%20%28Apple%2C%20Inc.%29%282007%29.iso",
       "filename": "Mac OS X Leopard Install DVD Version 10.5 (2Z691-6037-A) (Apple, Inc.)(2007).iso",
-      "md5": "39131217782d060d72c9cb7688b2b26d"
+      "md5": "39131217782d060d72c9cb7688b2b26d",
+      "nice_filename": "MacOSXLeopard10.5.iso"
     }
   },
   "roms": {
