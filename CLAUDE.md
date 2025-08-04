@@ -282,3 +282,36 @@ Software database includes:
 - Validate performance variants work correctly
 
 This dual-architecture design provides clean separation while maintaining a unified user interface and shared infrastructure for common functionality.
+
+## Change Management and Documentation
+
+### Changelog Maintenance
+**IMPORTANT**: When making any changes to this project, you MUST update the `CHANGELOG.md` file with:
+
+1. **What Changed**: Describe the specific changes made
+2. **Why Changed**: Explain the reasoning and motivation behind the change
+3. **Impact Assessment**: Document what areas are affected and any performance/compatibility implications
+4. **Breaking Changes**: Note any changes that might break existing workflows or configurations
+
+### Documentation Requirements
+- All major features must be documented in the relevant subdirectory's `CLAUDE.md` file
+- Configuration changes must be reflected in both the main `CLAUDE.md` and architecture-specific documentation
+- New scripts or utilities must include comprehensive function documentation
+- Breaking changes require migration guides or compatibility notes
+
+### Changelog Categories
+Use these categories in `CHANGELOG.md`:
+- **Added**: New features, configurations, or capabilities  
+- **Changed**: Modifications to existing functionality
+- **Deprecated**: Features being phased out
+- **Removed**: Deleted features or files
+- **Fixed**: Bug fixes and corrections
+- **Security**: Security-related improvements
+
+### Why We Maintain Detailed Changelogs
+- **Prevent Regressions**: Understanding why specific approaches were chosen helps prevent accidental reversions to problematic solutions
+- **Design Context**: Future developers (including AI assistants) need context about design decisions
+- **Impact Tracking**: Performance and compatibility changes need to be tracked over time
+- **Debugging Aid**: When issues arise, the changelog helps identify when and why changes were made
+
+**Remember**: The changelog is not just a list of changes—it's a record of the reasoning behind design decisions that helps maintain project quality and prevents repeating past mistakes.

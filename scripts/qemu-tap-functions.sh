@@ -51,6 +51,7 @@ generate_tap_name() {
 # Creates the bridge if it doesn't exist and ensures it's up
 # Arguments:
 #   bridge_name: Name of the bridge to create/configure
+#   bridge_ip: The IP address to assign to the bridge (e.g., 192.168.99.1/24)
 # Globals:
 #   None
 # Returns:
@@ -60,9 +61,10 @@ generate_tap_name() {
 #######################################
 setup_bridge() {
     local bridge_name="$1"
+    local bridge_ip="$2"
     
-    if [ -z "$bridge_name" ]; then
-        echo "Error: Bridge name is required" >&2
+    if [ -z "$bridge_name" ] || [ -z "$bridge_ip" ]; then
+        echo "Error: Bridge name and IP address are required" >&2
         exit 1
     fi
     
@@ -73,22 +75,18 @@ setup_bridge() {
         echo "Bridge '$bridge_name' not found. Creating..."
         sudo ip link add name "$bridge_name" type bridge
         check_exit_status $? "Failed to create bridge '$bridge_name'"
-        
-        echo "Bringing bridge '$bridge_name' up..."
-        sudo ip link set "$bridge_name" up
-        check_exit_status $? "Failed to bring up bridge '$bridge_name'"
-        
-        echo "Bridge '$bridge_name' created and up."
-    else
-        # Ensure bridge is up even if it exists
-        if ! ip link show "$bridge_name" | grep -q "state UP"; then
-            echo "Bridge '$bridge_name' exists but is down. Bringing up..."
-            sudo ip link set "$bridge_name" up
-            check_exit_status $? "Failed to bring up existing bridge '$bridge_name'"
-        else
-            echo "Bridge '$bridge_name' already exists and is up."
-        fi
     fi
+
+    echo "Assigning IP $bridge_ip to bridge '$bridge_name'..."
+    sudo ip addr flush dev "$bridge_name"
+    sudo ip addr add "$bridge_ip" dev "$bridge_name"
+    check_exit_status $? "Failed to assign IP to bridge '$bridge_name'"
+
+    echo "Bringing bridge '$bridge_name' up..."
+    sudo ip link set "$bridge_name" up
+    check_exit_status $? "Failed to bring up bridge '$bridge_name'"
+
+    echo "Bridge '$bridge_name' is up with IP $bridge_ip."
     echo "---------------------------"
 }
 
@@ -194,6 +192,123 @@ cleanup_tap() {
         echo "TAP interface '$tap_name' cleaned up successfully."
     else
         echo "TAP device '$tap_name' not found, cleanup skipped."
+    fi
+    echo "---------------------------"
+}
+
+#######################################
+# Configure host for internet sharing (NAT) and DHCP for a bridge
+# Arguments:
+#   bridge_name: The name of the bridge interface
+#   dhcp_range: The DHCP address range for dnsmasq (e.g., 192.168.99.100,192.168.99.200)
+# Globals:
+#   None
+# Returns:
+#   A string containing the original ip_forward value and dnsmasq PID, separated by a semicolon.
+# Exits:
+#   1 if setup fails
+#######################################
+setup_nat_and_dhcp_for_bridge() {
+    local bridge_name="$1"
+    local dhcp_range="$2"
+
+    info_log "Configuring host for internet sharing (NAT) and DHCP..."
+    check_command "dnsmasq" "dnsmasq" || exit 1
+
+    local primary_iface
+    primary_iface=$(ip route show default | awk '/default/ {print $5}' | head -n1)
+
+    if [ -z "$primary_iface" ]; then
+        warning_log "Could not automatically determine primary network interface. Internet sharing will not be enabled."
+        echo "no_change;"
+        return
+    fi
+
+    info_log "Detected primary network interface: $primary_iface"
+
+    # Enable IP forwarding and store original value
+    local original_ip_forward
+    original_ip_forward=$(cat /proc/sys/net/ipv4/ip_forward)
+    if [ "$original_ip_forward" -eq 0 ]; then
+        info_log "Enabling kernel IP forwarding..."
+        sudo sysctl -w net.ipv4.ip_forward=1
+    else
+        info_log "Kernel IP forwarding is already enabled."
+    fi
+
+    # Add iptables rule for NAT/Masquerade
+    info_log "Adding iptables NAT rule..."
+    sudo iptables -t nat -A POSTROUTING -o "$primary_iface" -j MASQUERADE
+    check_exit_status $? "Failed to add iptables NAT rule."
+
+    # Start dnsmasq for DHCP
+    info_log "Starting dnsmasq for DHCP on bridge '$bridge_name'..."
+    local dnsmasq_pid_file
+    dnsmasq_pid_file="/tmp/qemu-dnsmasq-$$.pid"
+    sudo dnsmasq 
+        --interface="$bridge_name" 
+        --bind-interfaces 
+        --dhcp-range="$dhcp_range" 
+        --except-interface=lo 
+        --pid-file="$dnsmasq_pid_file"
+    check_exit_status $? "Failed to start dnsmasq."
+    local dnsmasq_pid
+    dnsmasq_pid=$(cat "$dnsmasq_pid_file")
+    info_log "dnsmasq started with PID $dnsmasq_pid."
+
+    # Return original value and PID so they can be used for cleanup
+    echo "$original_ip_forward;$dnsmasq_pid"
+}
+
+#######################################
+# Clean up NAT rules, IP forwarding, and dnsmasq
+# Arguments:
+#   cleanup_info: A string containing the original ip_forward value and dnsmasq PID
+# Globals:
+#   None
+# Returns:
+#   None
+#######################################
+cleanup_nat_and_dhcp() {
+    local cleanup_info="$1"
+    local original_ip_forward_val
+    local dnsmasq_pid
+    original_ip_forward_val=$(echo "$cleanup_info" | cut -d';' -f1)
+    dnsmasq_pid=$(echo "$cleanup_info" | cut -d';' -f2)
+
+    # Stop dnsmasq
+    if [ -n "$dnsmasq_pid" ]; then
+        info_log "--- Network Cleanup (DHCP) ---"
+        info_log "Stopping dnsmasq (PID: $dnsmasq_pid)..."
+        sudo kill "$dnsmasq_pid"
+        rm -f "/tmp/qemu-dnsmasq-$$.pid"
+        echo "---------------------------"
+    fi
+    
+    # Don't do anything else if no change was made
+    if [ "$original_ip_forward_val" = "no_change" ]; then
+        return
+    fi
+
+    info_log "--- Network Cleanup (NAT) ---"
+    info_log "Cleaning up host internet sharing (NAT)..."
+
+    local primary_iface
+    primary_iface=$(ip route show default | awk '/default/ {print $5}' | head -n1)
+
+    if [ -n "$primary_iface" ]; then
+        info_log "Removing iptables NAT rule for interface '$primary_iface'..."
+        if sudo iptables-save -t nat | grep -q -- "-A POSTROUTING -o $primary_iface -j MASQUERADE"; then
+            sudo iptables -t nat -D POSTROUTING -o "$primary_iface" -j MASQUERADE
+        else
+            warning_log "NAT rule not found, skipping removal."
+        fi
+    fi
+
+    # Restore original IP forwarding setting
+    if [ -n "$original_ip_forward_val" ] && [ "$(cat /proc/sys/net/ipv4/ip_forward)" != "$original_ip_forward_val" ]; then
+        info_log "Restoring net.ipv4.ip_forward to its original value ('$original_ip_forward_val')..."
+        sudo sysctl -w net.ipv4.ip_forward="$original_ip_forward_val"
     fi
     echo "---------------------------"
 }
