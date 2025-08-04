@@ -225,6 +225,13 @@ Options:
 
 ### Common Issues
 
+**PowerPC Mac OS 9 installation media won't boot (Known Issue)**
+```bash
+# Currently experiencing issues with booting Mac OS 9 installation media on PowerPC
+# This is being actively worked on - Mac OS X (Tiger/Leopard) installation works fine
+# Workaround: Use pre-installed Mac OS 9 disk images if available
+```
+
 **"ROM file not found" (68k only)**
 ```bash
 # Option 1: Use mac-library to download automatically
