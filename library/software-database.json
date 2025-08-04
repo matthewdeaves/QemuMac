@@ -50,7 +50,7 @@
       "description": "Mac OS X 10.5.6 Leopard installation disc - the last version of Mac OS X to support PowerPC Macs.",
       "category": "Operating Systems",
       "architectures": ["ppc"],
-      "url": "ftp://mirror:mirror@ftp.macintosh.garden/apps/Mac_OS_X_Leopard_10.5.6.iso",
+      "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/Garden/apps/Mac_OS_X_Leopard_10.5.6.iso",
       "filename": "Mac_OS_X_Leopard_10.5.6.iso",
       "md5": "a1fe29041127623a92610c2572dd63bc"
     }

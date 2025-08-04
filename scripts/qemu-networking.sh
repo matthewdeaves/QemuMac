@@ -210,6 +210,7 @@ setup_networking() {
 #   qemu_args_var: Name of array variable to append to
 # Globals:
 #   TAP_DEV_NAME, MAC_ADDRESS, QEMU_USER_SMB_DIR, BRIDGE_NAME
+#   QEMU_NETWORK_DEVICE (optional, defaults by architecture)
 # Returns:
 #   None (modifies array via nameref)
 #######################################
@@ -217,32 +218,43 @@ build_network_args() {
     local network_type="$1"
     local -n qemu_args_ref=$2
     
+    # Determine network device model based on architecture
+    local network_device
+    if [ -n "${QEMU_NETWORK_DEVICE:-}" ]; then
+        network_device="$QEMU_NETWORK_DEVICE"
+    elif [ "${ARCH:-}" = "ppc" ]; then
+        network_device="rtl8139"  # PowerPC default
+    else
+        network_device="dp83932"  # 68k default
+    fi
+    
     case "$network_type" in
         "tap")
-            echo "Network: TAP device '$TAP_DEV_NAME' on bridge '$BRIDGE_NAME', MAC: $MAC_ADDRESS"
+            echo "Network: TAP device '$TAP_DEV_NAME' on bridge '$BRIDGE_NAME', MAC: $MAC_ADDRESS, Device: $network_device"
             qemu_args_ref+=(
                 "-netdev" "tap,id=net0,ifname=$TAP_DEV_NAME,script=no,downscript=no"
-                "-net" "nic,model=dp83932,netdev=net0,macaddr=$MAC_ADDRESS"
+                "-net" "nic,model=$network_device,netdev=net0,macaddr=$MAC_ADDRESS"
             )
             ;;
         "user")
-            echo "Network: User Mode Networking"
+            echo "Network: User Mode Networking, Device: $network_device"
             local user_net_opts="user"
             if [ -n "${QEMU_USER_SMB_DIR:-}" ] && [ -d "$QEMU_USER_SMB_DIR" ]; then
                 user_net_opts+=",smb=$QEMU_USER_SMB_DIR"
+                echo "SMB share: $QEMU_USER_SMB_DIR"
             elif [ -n "${QEMU_USER_SMB_DIR:-}" ]; then
                 warning_log "SMB directory '$QEMU_USER_SMB_DIR' not found, skipping SMB share."
             fi
             qemu_args_ref+=(
-                "-net" "nic,model=dp83932"
+                "-net" "nic,model=$network_device"
                 "-net" "$user_net_opts"
             )
             ;;
         "passt")
-            echo "Network: Passt backend (socket: ${PASST_SOCKET_PATH:-unknown})"
+            echo "Network: Passt backend (socket: ${PASST_SOCKET_PATH:-unknown}), Device: $network_device"
             qemu_args_ref+=(
                 "-netdev" "stream,id=net0,server=off,addr.type=unix,addr.path=${PASST_SOCKET_PATH}"
-                "-net" "nic,model=dp83932,netdev=net0"
+                "-net" "nic,model=$network_device,netdev=net0"
             )
             ;;
         *)

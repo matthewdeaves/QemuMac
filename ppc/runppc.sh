@@ -50,6 +50,7 @@ QEMU_IDE_AIO_MODE=""
 QEMU_DISPLAY_DEVICE=""
 QEMU_RESOLUTION_PRESET=""
 QEMU_USB_ENABLED=""
+QEMU_NETWORK_DEVICE=""
 
 # --- Script Variables ---
 CONFIG_FILE=""
@@ -57,11 +58,11 @@ CD_FILE=""
 ADDITIONAL_HDD_FILE=""
 BOOT_FROM_CD=false
 DISPLAY_TYPE=""
-# Auto-detect network type based on OS (User mode is simpler for PPC)
+# Auto-detect network type based on OS (TAP requires Linux, User mode for macOS)
 if [[ "$(uname)" == "Darwin" ]]; then
     NETWORK_TYPE="user"  # Default to user mode on macOS (TAP requires Linux tools)
 else
-    NETWORK_TYPE="user"  # Default to user mode on Linux for PPC (simpler than TAP)
+    NETWORK_TYPE="tap"   # Default to TAP on Linux
 fi
 DEBUG_MODE=false
 
@@ -223,59 +224,6 @@ prepare_disk_images() {
     info_log "All PowerPC disk images prepared successfully"
 }
 
-#######################################
-# Build PPC-specific network arguments (simplified vs 68k)
-# Arguments:
-#   network_type: Type of networking (tap, user, passt)
-#   qemu_args_ref: Reference to qemu_args array
-# Globals:
-#   BRIDGE_NAME, QEMU_USER_SMB_DIR
-# Returns:
-#   None
-#######################################
-build_ppc_network_args() {
-    local network_type="$1"
-    local -n qemu_args_ref=$2
-    
-    case "$network_type" in
-        "tap")
-            # Simplified TAP for PPC - use rtl8139 which is more compatible
-            echo "Network: TAP mode (simplified for PPC)"
-            qemu_args_ref+=(
-                "-netdev" "tap,id=net0"
-                "-device" "rtl8139,netdev=net0"
-            )
-            ;;
-        "user")
-            echo "Network: User Mode Networking"
-            local user_opts="user,id=net0"
-            if [ -n "${QEMU_USER_SMB_DIR:-}" ] && [ -d "$QEMU_USER_SMB_DIR" ]; then
-                user_opts+=",smb=$QEMU_USER_SMB_DIR"
-                echo "SMB share: $QEMU_USER_SMB_DIR"
-            fi
-            qemu_args_ref+=(
-                "-netdev" "$user_opts"
-                "-device" "rtl8139,netdev=net0"
-            )
-            ;;
-        "passt")
-            # Check if passt is available
-            if ! command -v passt &> /dev/null; then
-                echo "Error: passt command not found. Install passt or use -N user" >&2
-                exit 1
-            fi
-            echo "Network: Passt backend"
-            qemu_args_ref+=(
-                "-netdev" "stream,id=net0,server=off,addr.type=unix,addr.path=/tmp/passt.socket"
-                "-device" "rtl8139,netdev=net0"
-            )
-            ;;
-        *)
-            echo "Error: Unknown network type '$network_type'" >&2
-            exit 1
-            ;;
-    esac
-}
 
 #######################################
 # Build the QEMU command line arguments (PPC version)
@@ -401,6 +349,9 @@ build_qemu_command() {
         qemu_args+=("-usb")
     fi
     
+    # --- Network arguments using shared networking module ---
+    build_network_args "$NETWORK_TYPE" qemu_args
+    
     echo "Display: $DISPLAY_TYPE"
     echo "Performance: CPU=$QEMU_CPU, SMP=$QEMU_SMP_CORES, TCG=$QEMU_TCG_THREAD_MODE, TB=$QEMU_TB_SIZE"
     echo "Storage: Cache=$QEMU_IDE_CACHE_MODE, AIO=$QEMU_IDE_AIO_MODE"
@@ -500,6 +451,9 @@ main() {
     if [ -z "$DISPLAY_TYPE" ]; then
         DISPLAY_TYPE=$(determine_display_type "")
     fi
+    
+    # Setup networking
+    setup_networking "$NETWORK_TYPE"
     
     # Prepare disk images (create if missing)
     prepare_disk_images
