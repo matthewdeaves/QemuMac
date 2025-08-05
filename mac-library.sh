@@ -148,7 +148,7 @@ list_software() {
     while IFS= read -r config; do
         [ -n "$config" ] || continue
         echo "  $config"
-    done < <(get_config_list)
+    done < <(get_config_list "")
 }
 
 
@@ -217,23 +217,40 @@ launch_software() {
         fi
     fi
     
-    # Verify config exists
+    # Verify config exists (check architecture-specific directories)
     local config_path
     if [ -f "$SCRIPT_DIR/$config_file" ]; then
-        config_path="$SCRIPT_DIR/$config_file"
+        config_path="$config_file"
+    elif [ -f "$SCRIPT_DIR/m68k/configs/$config_file" ]; then
+        config_path="m68k/configs/$config_file"
+    elif [ -f "$SCRIPT_DIR/ppc/configs/$config_file" ]; then
+        config_path="ppc/configs/$config_file"
     elif [ -f "$SCRIPT_DIR/configs/$config_file" ]; then
-        config_path="$SCRIPT_DIR/configs/$config_file"
+        config_path="configs/$config_file"
     else
         echo "Error: Config file not found: $config_file" >&2
+        echo "Searched in: $config_file, m68k/configs/$config_file, ppc/configs/$config_file" >&2
         exit 1
     fi
     
     echo "Launching: $name with $config_file"
     
+    # Determine boot method using smart defaults (for command line mode)
+    local category
+    category=$(cd "$SCRIPT_DIR" && source scripts/qemu-menu.sh && get_cd_info "$cd_key" "category")
+    local boot_flag=""
+    
+    if [ "$category" = "Operating Systems" ]; then
+        boot_flag="-b"
+        echo "Category: Operating Systems - will boot from CD-ROM for installation"
+    else
+        echo "Category: $category - will boot from Virtual Mac with CD available on desktop"
+    fi
+    
     # Launch VM using the clean, effective filename
     cd "$SCRIPT_DIR" || exit 1
     # Note: Ensure you are calling your unified runmac.sh script here
-    ./runmac.sh -C "$config_path" -c "$DOWNLOADS_DIR/$effective_filename"
+    ./runmac.sh -C "$config_path" -c "$DOWNLOADS_DIR/$effective_filename" $boot_flag
 }
 
 

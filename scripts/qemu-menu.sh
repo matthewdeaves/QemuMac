@@ -859,6 +859,80 @@ handle_cd_selection() {
 
 
 #######################################
+# Show boot options menu with smart defaults
+# Arguments:
+#   cd_key: CD key to determine category and defaults
+#   software_name: Name of the software for display
+# Globals:
+#   Color constants
+# Returns:
+#   Sets BOOT_OPTION_RESULT global variable ("" for boot from Mac, "-b" for boot from CD)
+#######################################
+show_boot_options() {
+    local cd_key="$1"
+    local software_name="$2"
+    local category=$(get_cd_info "$cd_key" "category")
+    
+    # Determine smart default based on category
+    local default_option=1
+    local default_text="Boot from Virtual Mac"
+    local recommendation=""
+    
+    if [ "$category" = "Operating Systems" ]; then
+        default_option=2
+        default_text="Boot from CD-ROM"
+        recommendation="Recommended for OS installation"
+    else
+        recommendation="Recommended for applications and games"
+    fi
+    
+    echo
+    echo -e "${WHITE}${BOLD}Boot Options for: $software_name${NC}"
+    echo -e "${DIM}Category: $category${NC}"
+    echo
+    
+    # Show options with default highlighted
+    if [ "$default_option" -eq 1 ]; then
+        echo -e "${GREEN} 1)${NC} 🖥️  Boot from Virtual Mac ${YELLOW}[RECOMMENDED]${NC} ${DIM}(CD available on desktop)${NC}"
+        echo -e "${GREEN} 2)${NC} 💿  Boot from CD-ROM ${DIM}(for installation/CD-based software)${NC}"
+    else
+        echo -e "${GREEN} 1)${NC} 🖥️  Boot from Virtual Mac ${DIM}(CD available on desktop)${NC}"
+        echo -e "${GREEN} 2)${NC} 💿  Boot from CD-ROM ${YELLOW}[RECOMMENDED]${NC} ${DIM}(for installation/CD-based software)${NC}"
+    fi
+    
+    echo
+    echo -e "${DIM}$recommendation${NC}"
+    echo
+    echo -e -n "${YELLOW}Choose boot method [1-2] or press Enter for recommended [$default_option]: ${NC}"
+    
+    read -r boot_choice
+    
+    # Handle user input
+    if [ -z "$boot_choice" ]; then
+        boot_choice="$default_option"
+    fi
+    
+    case "$boot_choice" in
+        1)
+            echo -e "${GREEN}✓ Selected: Boot from Virtual Mac - CD will be available on desktop${NC}"
+            BOOT_OPTION_RESULT=""
+            ;;
+        2)
+            echo -e "${GREEN}✓ Selected: Boot from CD-ROM - use for installation or CD-based software${NC}"
+            BOOT_OPTION_RESULT="-b"
+            ;;
+        *)
+            echo -e "${RED}Invalid selection, using recommended option ($default_option)${NC}"
+            if [ "$default_option" -eq 2 ]; then
+                BOOT_OPTION_RESULT="-b"
+            else
+                BOOT_OPTION_RESULT=""
+            fi
+            ;;
+    esac
+}
+
+#######################################
 # Launch VM with selected config and CD
 # Arguments:
 #   config_file: Configuration file to use
@@ -886,15 +960,13 @@ launch_vm() {
         return
     fi
     
-    # Check if this is an installation disc (Operating Systems category)
-    local cd_category=$(get_cd_info "$cd_key" "category")
-    local boot_flag=""
-    if [ "$cd_category" = "Operating Systems" ]; then
-        boot_flag="-b"
-        echo -e "${CYAN}Detected installation disc - will boot from CD${NC}"
-    else
-        echo -e "${CYAN}Detected application disc - will boot from hard disk${NC}"
-    fi
+    # Get software name for display
+    local software_name=$(get_cd_info "$cd_key" "name")
+    
+    # Show boot options menu and get user choice
+    local boot_flag
+    show_boot_options "$cd_key" "$software_name"
+    boot_flag="$BOOT_OPTION_RESULT"
     
     echo
     echo -e "${CYAN}${BOLD}Launching Virtual Machine...${NC}"
