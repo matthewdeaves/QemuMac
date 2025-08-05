@@ -11,6 +11,9 @@ m68k/images/
 ppc/images/
 710
 
+# QEMU source code directory (temporary build folder)
+qemu/
+
 # macOS system files
 .DS_Store
 .DS_Store?
