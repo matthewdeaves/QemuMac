@@ -33,11 +33,12 @@ show_help() {
     echo "  -f, --force    Force installation even if dependencies exist"
     echo ""
     echo "This script installs all dependencies required for QEMU Mac emulation:"
+    echo "QEMU is built from the latest source for optimal Mac emulation compatibility."
     echo ""
     echo "Core Dependencies:"
-    echo "  - qemu-system-m68k  (QEMU m68k emulation)"
-    echo "  - qemu-system-ppc   (QEMU PowerPC emulation)"
-    echo "  - qemu-utils        (QEMU utilities)"
+    echo "  - qemu-system-m68k  (QEMU m68k emulation - built from source)"
+    echo "  - qemu-system-ppc   (QEMU PowerPC emulation - built from source)"
+    echo "  - qemu-utils        (QEMU utilities - built from source)"
     echo "  - coreutils         (Core system utilities)"
     echo "  - bsdmainutils      (BSD utilities like hexdump)"
     echo "  - jq                (JSON processor for mac-library tool)"
@@ -111,10 +112,14 @@ check_dependencies() {
     if [ $missing_count -eq 0 ]; then
         echo "✅ All core dependencies are installed!"
         echo "You can run QEMU Mac emulation with user-mode networking."
+        echo "QEMU version information:"
+        if command -v qemu-system-m68k &> /dev/null; then
+            qemu-system-m68k --version | head -1
+        fi
         return 0
     else
         echo "❌ $missing_count core dependencies are missing."
-        echo "Run '$0' without arguments to install them."
+        echo "Run '$0' without arguments to build and install QEMU from source."
         return 1
     fi
 }
@@ -180,12 +185,14 @@ main() {
     # Verify installation
     if check_dependencies; then
         echo ""
-        echo "🎉 Installation successful!"
+        echo "🎉 QEMU source build and installation successful!"
+        echo ""
+        echo "Installed QEMU version:"
+        qemu-system-m68k --version | head -1
         echo ""
         echo "You can now run QEMU Mac emulation:"
         echo "  ./runmac.sh -C m68k/configs/m68k-macos753.conf      # Mac OS 7.5.3 with user-mode networking"
         echo "  ./runmac.sh -C ppc/configs/ppc-macos91.conf        # Mac OS 9.1 with user-mode networking"
-        echo "  ./runmac.sh -C m68k/configs/m68k-macos753.conf    # 68k with user-mode networking"
     else
         echo ""
         echo "⚠️  Some dependencies may not have installed correctly."

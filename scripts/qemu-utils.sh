@@ -450,7 +450,7 @@ install_packages() {
 }
 
 #######################################
-# Install all QEMU Mac emulation dependencies
+# Install all QEMU Mac emulation dependencies by building from source
 # Arguments:
 #   None
 # Globals:
@@ -461,83 +461,300 @@ install_packages() {
 #   1 if installation fails or unsupported system
 #######################################
 install_qemu_dependencies() {
-    echo "Installing QEMU Mac emulation dependencies..."
+    echo "=== Installing QEMU Mac emulation dependencies from source ==="
+    echo "This will build the latest QEMU version for optimal Mac emulation compatibility."
+    echo ""
     
-    # Detect package manager and install accordingly
+    # Detect platform and install build dependencies
     if command -v apt-get &> /dev/null; then
         echo "Detected Debian/Ubuntu system (apt)"
-        local core_packages=(
-            "qemu-system-m68k"      # QEMU m68k emulation
-            "qemu-system-ppc"       # QEMU PowerPC emulation
-            "qemu-utils"            # QEMU utilities (qemu-img, etc.)
-            "coreutils"             # Core utilities (dd, printf, etc.)
-            "bsdmainutils"          # BSD utilities (hexdump, etc.)
-            "jq"                    # JSON processor (for mac-library tool)
-        )
-        
-        local filesystem_packages=(
-            "hfsprogs"              # HFS+ filesystem support
-            "hfsplus"               # Additional HFS+ tools
-        )
-        
-        echo "Installing core QEMU packages..."
-        install_packages "${core_packages[@]}"
-        
-        echo "Installing filesystem packages..."
-        install_packages "${filesystem_packages[@]}"
+        install_qemu_ubuntu_dependencies
+        build_qemu_from_source
         
     elif command -v brew &> /dev/null; then
         echo "Detected macOS system (Homebrew)"
-        local brew_packages=(
-            "qemu"                  # QEMU (includes m68k support)
-            "bash"                  # Modern bash (macOS default is old)
-            "jq"                    # JSON processor (for mac-library tool)
-        )
-        
-        echo "Installing packages via Homebrew..."
-        for package in "${brew_packages[@]}"; do
-            if ! brew list "$package" &> /dev/null; then
-                echo "Installing $package..."
-                brew install "$package" || {
-                    echo "Warning: Failed to install $package via Homebrew" >&2
-                }
-            else
-                echo "$package is already installed"
-            fi
-        done
-        
-        echo ""
-        echo "macOS Notes:"
-        echo "  - User-mode networking is used by default (no additional setup required)"
-        echo "  - Supports both m68k and PowerPC Mac emulation"
+        install_qemu_macos_dependencies
+        build_qemu_from_source_macos
         
     elif command -v dnf &> /dev/null; then
         echo "Detected Fedora/RHEL system (dnf)"
-        local fedora_packages=(
-            "qemu-system-m68k"
-            "qemu-system-ppc"
-            "qemu-img"
-            "hfsprogs"
-            "jq"
-        )
-        
-        echo "Installing packages via dnf..."
-        sudo dnf install -y "${fedora_packages[@]}" || {
-            echo "Error: Failed to install packages via dnf" >&2
-            return 1
-        }
+        install_qemu_fedora_dependencies
+        build_qemu_from_source
         
     else
-        echo "Error: Unsupported package manager. Please manually install:" >&2
-        echo "  - qemu-system-m68k (QEMU m68k emulation)" >&2
-        echo "  - qemu-system-ppc (QEMU PowerPC emulation)" >&2
-        echo "  - qemu-utils (QEMU utilities)" >&2
-        echo "  - hfsprogs (HFS+ support)" >&2
+        echo "Error: Unsupported system. Currently supported:" >&2
+        echo "  - Debian/Ubuntu (apt-get)" >&2
+        echo "  - macOS (Homebrew)" >&2
+        echo "  - Fedora/RHEL (dnf)" >&2
         return 1
     fi
     
-    echo "Dependency installation completed successfully!"
-    echo "You can now run QEMU Mac emulation with user-mode networking."
+    echo ""
+    echo "=== QEMU source build completed successfully! ==="
+    echo "Latest QEMU installed with Mac emulation optimizations."
+}
+
+#######################################
+# Install QEMU build dependencies on Ubuntu/Debian
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_ubuntu_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo apt remove --purge -y qemu-system qemu-system-ppc qemu-system-x86 qemu-system-arm qemu-system-mips qemu-system-misc qemu-system-s390x qemu-system-sparc qemu-utils qemu-system-gui qemu-system-common qemu-system-data qemu-block-extra qemu-system-modules-opengl qemu-system-modules-spice 2>/dev/null || true
+    sudo apt autoremove -y
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    sudo apt update
+    
+    local build_packages=(
+        "git" "build-essential" "pkg-config" "libglib2.0-dev" "libfdt-dev" 
+        "libpixman-1-dev" "zlib1g-dev" "ninja-build" "libslirp-dev" 
+        "libcap-ng-dev" "libattr1-dev" "libssl-dev" "python3-sphinx" 
+        "python3-sphinx-rtd-theme" "libaio-dev" "libbluetooth-dev" 
+        "libbrlapi-dev" "libbz2-dev" "libcap-dev" "libcurl4-gnutls-dev" 
+        "libgtk-3-dev" "libibverbs-dev" "libjpeg8-dev" "libncurses5-dev" 
+        "libnuma-dev" "librbd-dev" "librdmacm-dev" "libsasl2-dev" 
+        "libsdl2-dev" "libseccomp-dev" "libsnappy-dev" "libssh-dev" 
+        "libvde-dev" "libvdeplug-dev" "libvte-2.91-dev" "libxen-dev" 
+        "liblzo2-dev" "valgrind" "xfslibs-dev" "libnfs-dev" "libiscsi-dev"
+    )
+    
+    local core_packages=(
+        "coreutils"     # Core utilities (dd, printf, etc.)
+        "bsdmainutils"  # BSD utilities (hexdump, etc.)
+        "jq"            # JSON processor (for mac-library tool)
+        "hfsprogs"      # HFS+ filesystem support
+        "hfsplus"       # Additional HFS+ tools
+    )
+    
+    sudo apt install -y "${build_packages[@]}" "${core_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on macOS with Homebrew
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_macos_dependencies() {
+    echo "Step 1: Installing build dependencies via Homebrew..."
+    
+    # Remove existing QEMU if installed via Homebrew
+    if brew list qemu &> /dev/null; then
+        echo "Removing existing Homebrew QEMU package..."
+        brew uninstall qemu || true
+    fi
+    
+    local build_packages=(
+        "libffi" "gettext" "glib" "pkg-config" "pixman" "ninja" "meson"
+        "git" "bash" "jq"
+    )
+    
+    for package in "${build_packages[@]}"; do
+        if ! brew list "$package" &> /dev/null; then
+            echo "Installing $package..."
+            brew install "$package" || {
+                echo "Error: Failed to install $package via Homebrew" >&2
+                return 1
+            }
+        else
+            echo "✓ $package already installed"
+        fi
+    done
+    
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on Fedora/RHEL
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_fedora_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo dnf remove -y qemu-system-m68k qemu-system-ppc qemu-img 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "gcc-c++" "pkg-config" "glib2-devel" 
+        "libfdt-devel" "pixman-devel" "zlib-devel" "ninja-build"
+        "libslirp-devel" "libcap-ng-devel" "libattr-devel" 
+        "openssl-devel" "python3-sphinx" "libaio-devel" 
+        "bluez-libs-devel" "bzip2-devel" "libcap-devel" 
+        "libcurl-devel" "gtk3-devel" "libjpeg-turbo-devel" 
+        "ncurses-devel" "numactl-devel" "libseccomp-devel" 
+        "snappy-devel" "libssh-devel" "lzo-devel" "jq" "hfsprogs"
+    )
+    
+    sudo dnf install -y "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Build QEMU from source (Linux systems)
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if build fails
+#######################################
+build_qemu_from_source() {
+    echo "Step 3: Cloning QEMU source..."
+    
+    # Remove existing qemu directory if it exists
+    if [ -d "qemu" ]; then
+        echo "Removing existing qemu directory..."
+        rm -rf qemu
+    fi
+    
+    git clone https://gitlab.com/qemu-project/qemu.git
+    check_exit_status $? "Failed to clone QEMU source"
+    cd qemu
+    echo "✓ QEMU source cloned"
+    echo ""
+    
+    echo "Step 4: Configuring build..."
+    ./configure --target-list=m68k-softmmu,ppc-softmmu --enable-slirp \
+        --enable-gtk --enable-sdl --enable-curses --enable-vnc \
+        --enable-tools --enable-guest-agent
+    check_exit_status $? "Failed to configure QEMU build"
+    echo "✓ Build configured"
+    echo ""
+    
+    echo "Step 5: Building QEMU (this will take 15-30+ minutes)..."
+    echo "Using $(nproc) CPU cores for parallel compilation..."
+    make -j$(nproc)
+    check_exit_status $? "Failed to build QEMU"
+    echo "✓ QEMU built successfully"
+    echo ""
+    
+    echo "Step 6: Installing QEMU system-wide..."
+    sudo make install
+    check_exit_status $? "Failed to install QEMU"
+    echo "✓ QEMU installed to /usr/local/bin/"
+    echo ""
+    
+    # Clean up source directory
+    echo "Step 7: Cleaning up source directory..."
+    cd ..
+    rm -rf qemu
+    echo "✓ Source directory cleaned up"
+    echo ""
+    
+    echo "Step 8: Verifying installation..."
+    echo "QEMU PowerPC version:"
+    qemu-system-ppc --version | head -1
+    echo ""
+    echo "QEMU m68k version:"
+    qemu-system-m68k --version | head -1
+    echo ""
+    echo "Installation paths:"
+    which qemu-system-ppc
+    which qemu-system-m68k
+    echo ""
+}
+
+#######################################
+# Build QEMU from source on macOS
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if build fails
+#######################################
+build_qemu_from_source_macos() {
+    echo "Step 2: Cloning QEMU source..."
+    
+    # Remove existing qemu directory if it exists
+    if [ -d "qemu" ]; then
+        echo "Removing existing qemu directory..."
+        rm -rf qemu
+    fi
+    
+    git clone https://gitlab.com/qemu-project/qemu.git
+    check_exit_status $? "Failed to clone QEMU source"
+    cd qemu
+    echo "✓ QEMU source cloned"
+    echo ""
+    
+    echo "Step 3: Configuring build..."
+    ./configure --target-list=m68k-softmmu,ppc-softmmu --enable-slirp \
+        --enable-cocoa --enable-curses --enable-vnc --enable-tools \
+        --enable-guest-agent
+    check_exit_status $? "Failed to configure QEMU build"
+    echo "✓ Build configured"
+    echo ""
+    
+    echo "Step 4: Building QEMU (this will take 15-30+ minutes)..."
+    echo "Using $(sysctl -n hw.ncpu) CPU cores for parallel compilation..."
+    gmake -j$(sysctl -n hw.ncpu) 2>/dev/null || make -j$(sysctl -n hw.ncpu)
+    check_exit_status $? "Failed to build QEMU"
+    echo "✓ QEMU built successfully"
+    echo ""
+    
+    echo "Step 5: Installing QEMU system-wide..."
+    sudo gmake install 2>/dev/null || sudo make install
+    check_exit_status $? "Failed to install QEMU"
+    echo "✓ QEMU installed to /usr/local/bin/"
+    echo ""
+    
+    # Clean up source directory
+    echo "Step 6: Cleaning up source directory..."
+    cd ..
+    rm -rf qemu
+    echo "✓ Source directory cleaned up"
+    echo ""
+    
+    echo "Step 7: Verifying installation..."
+    echo "QEMU PowerPC version:"
+    /usr/local/bin/qemu-system-ppc --version | head -1
+    echo ""
+    echo "QEMU m68k version:"
+    /usr/local/bin/qemu-system-m68k --version | head -1
+    echo ""
+    echo "Installation paths:"
+    which qemu-system-ppc
+    which qemu-system-m68k
+    echo ""
+    
+    echo "macOS Notes:"
+    echo "  - User-mode networking is used by default (no additional setup required)"
+    echo "  - Supports both m68k and PowerPC Mac emulation"
+    echo "  - You may need to restart your terminal or run 'hash -r' to refresh PATH cache"
 }
 
 #######################################
