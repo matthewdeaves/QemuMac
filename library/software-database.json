@@ -4,6 +4,7 @@
       "name": "Apple Legacy Software Recovery CD",
       "description": "The October 1999 Apple Legacy Recovery disc is a bootable CD with Mac OS 7.6.1 and software for classic Apple computers and peripherals.",
       "category": "Operating Systems",
+      "architectures": ["m68k", "ppc"],
       "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/Garden/apps/Apple_Legacy_Recovery.iso_.zip",
       "filename": "Apple Legacy Recovery.iso",
       "md5": "817db4bd447e77706a64959070ded9c8"
@@ -12,6 +13,7 @@
       "name": "Marathon Trilogy",
       "description": "Classic sci-fi first-person shooter trilogy by Bungie - Marathon, Marathon 2: Durandal, and Marathon Infinity.",
       "category": "Games",
+      "architectures": ["m68k"],
       "url": "ftp://mirror:mirror@ftp.macintosh.garden/games/marathontrilogy.zip",
       "filename": "Marathon Trilogy.iso",
       "md5": "ec4b56162044b9a34e0c60cc859f073f"
@@ -20,6 +22,7 @@
       "name": "Game Pack 2",
       "description": "Classic LucasArts adventure games: The Secret of Monkey Island, Monkey Island 2: LeChuck's Revenge, and Indiana Jones and the Fate of Atlantis. All games have copy protection removed for easy play.",
       "category": "Games",
+      "architectures": ["m68k"],
       "url": "https://archive.org/download/lucasarts-mac-game-pack-2/game-pack-2.iso",
       "filename": "game-pack-2.iso",
       "md5": "e3b17eb417f8dd93d699773c5ab14bba"
@@ -28,9 +31,56 @@
       "name": "Myst",
       "description": "Myst, the surrealistic adventure that becomes your world, offers a first-person perspective, stunning 3-D photorealistic graphics and an original sound track as players seek to untangle a web of deceit.",
       "category": "Games",
+      "architectures": ["m68k"],
       "url": "ftp://mirror:mirror@ftp.macintosh.garden/games/Myst.iso",
       "filename": "Myst.iso",
       "md5": "df4c079f227412ee6f09a6ec341f9ba8"
+    },
+    "simcity4delux": {
+      "name": "SimCity 4 Deluxe",
+      "description": "A city-building simulation game that combines the original SimCity 4 with the Rush Hour expansion pack, allowing players to sculpt landscapes and build and manage an entire region of interconnected cities.",
+      "category": "Games",
+      "architectures": ["ppc"],
+      "url": "https://archive.org/download/sc-4_20221212/SC4.iso",
+      "filename": "SC4.iso",
+      "md5": ""
+    },
+    "simcity3000": {
+      "name": "SimCity 3000",
+      "description": "A city-building simulation game allowing players to sculpt landscapes and build and manage an entire region of interconnected cities. Needs PPC and Mac OS 7.6.1 to 9.x",
+      "category": "Games",
+      "architectures": ["ppc"],
+      "url": "https://archive.org/download/sim-city-3000_202508/SimCity3000.toast",
+      "filename": "SimCity3000.toast",
+      "md5": ""
+    },
+    "macos_x_tiger": {
+      "name": "Mac OS X Tiger 10.4",
+      "description": "Mac OS X 10.4 Tiger installation disc.",
+      "category": "Operating Systems",
+      "architectures": ["ppc"],
+      "url": "https://archive.org/download/mac-osx.-4/MacOSX.4.iso",
+      "filename": "MacOSX.4.iso",
+      "md5": "4764d50fecb9f9370b626fc146f09954"
+    },
+    "macos_x_leopard": {
+      "name": "Mac OS X Leopard 10.5.6",
+      "description": "Mac OS X 10.5.6 Leopard installation disc - the last version of Mac OS X to support PowerPC Macs.",
+      "category": "Operating Systems",
+      "architectures": ["ppc"],
+      "url": "https://archive.org/download/Mac_OS_X_Leopard_Install_DVD_Version_10.5_2Z691-6037-A_Apple_Inc._2007/Mac%20OS%20X%20Leopard%20Install%20DVD%20Version%2010.5%20%282Z691-6037-A%29%20%28Apple%2C%20Inc.%29%282007%29.iso",
+      "filename": "Mac OS X Leopard Install DVD Version 10.5 (2Z691-6037-A) (Apple, Inc.)(2007).iso",
+      "md5": "39131217782d060d72c9cb7688b2b26d",
+      "nice_filename": "MacOSXLeopard10.5.iso"
+    },
+    "macos922": {
+      "name": "Mac OS 9.2.2",
+      "description": "Mac OS 9.2.2",
+      "category": "Operating Systems",
+      "architectures": ["ppc"],
+      "url": "http://files.macos9lives.com/MacOS%20Operating%20Systems/Mac%20OS%209.2.2%20Universal%20Install/MacOS%20922%20Universal.iso",
+      "filename": "MacOS 922 Universal.iso",
+      "md5": "2d83af9f8d15ce622c6ae73ab86c27dd"
     }
   },
   "roms": {

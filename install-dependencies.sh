@@ -32,18 +32,16 @@ show_help() {
     echo "  -c, --check    Check dependencies without installing"
     echo "  -f, --force    Force installation even if dependencies exist"
     echo ""
-    echo "This script installs all dependencies required for QEMU m68k Mac emulation:"
+    echo "This script installs all dependencies required for QEMU Mac emulation:"
+    echo "QEMU is built from the latest source for optimal Mac emulation compatibility."
     echo ""
     echo "Core Dependencies:"
-    echo "  - qemu-system-m68k  (QEMU m68k emulation)"
-    echo "  - qemu-utils        (QEMU utilities)"
+    echo "  - qemu-system-m68k  (QEMU m68k emulation - built from source)"
+    echo "  - qemu-system-ppc   (QEMU PowerPC emulation - built from source)"
+    echo "  - qemu-utils        (QEMU utilities - built from source)"
     echo "  - coreutils         (Core system utilities)"
     echo "  - bsdmainutils      (BSD utilities like hexdump)"
-    echo ""
-    echo "Networking Dependencies:"
-    echo "  - bridge-utils      (TAP networking support)"
-    echo "  - iproute2          (IP networking tools)"
-    echo "  - passt             (Modern userspace networking)"
+    echo "  - jq                (JSON processor for mac-library tool)"
     echo ""
     echo "Filesystem Dependencies:"
     echo "  - hfsprogs          (HFS+ filesystem support)"
@@ -51,7 +49,10 @@ show_help() {
     echo ""
     echo "Supported Systems:"
     echo "  - Debian/Ubuntu     (apt package manager)"
-    echo "  - macOS             (Homebrew)"
+    echo "  - SUSE/openSUSE     (zypper package manager)"
+    echo "  - Arch Linux        (pacman package manager)"
+    echo "  - Alpine Linux      (apk package manager)"
+    echo "  - macOS             (Homebrew/MacPorts/Fink)"
     echo "  - Fedora/RHEL       (dnf package manager)"
     echo ""
     exit 1
@@ -71,20 +72,15 @@ check_dependencies() {
     local missing_count=0
     local deps_to_check=(
         "qemu-system-m68k:QEMU m68k emulation"
+        "qemu-system-ppc:QEMU PowerPC emulation"
         "qemu-img:QEMU utilities"
         "dd:Core utilities"
         "printf:Core utilities"
         "hexdump:BSD utilities"
+        "jq:JSON processor (mac-library tool)"
+        "meson:Build system"
     )
     
-    # Add Linux-specific networking dependencies
-    if [[ "$(uname)" != "Darwin" ]]; then
-        deps_to_check+=(
-            "brctl:Bridge utilities (TAP networking)"
-            "ip:IP utilities (TAP networking)"
-            "passt:Modern userspace networking"
-        )
-    fi
     
     echo "Core Dependencies:"
     for dep_info in "${deps_to_check[@]}"; do
@@ -113,23 +109,22 @@ check_dependencies() {
     
     # Platform-specific notes
     if [[ "$(uname)" == "Darwin" ]]; then
-        echo "📝 macOS Notes:"
-        echo "  - TAP and Passt networking are Linux-only"
-        echo "  - Use User Mode networking: ./run68k.sh -C config.conf -N user"
+        echo "📝 Networking Notes:"
+        echo "  - User-mode networking is used by default (no additional setup required)."
         echo ""
     fi
     
     if [ $missing_count -eq 0 ]; then
         echo "✅ All core dependencies are installed!"
-        if [[ "$(uname)" == "Darwin" ]]; then
-            echo "You can run QEMU Mac emulation with User Mode networking."
-        else
-            echo "You can run QEMU Mac emulation with all networking modes."
+        echo "You can run QEMU Mac emulation with user-mode networking."
+        echo "QEMU version information:"
+        if command -v qemu-system-m68k &> /dev/null; then
+            qemu-system-m68k --version | head -1
         fi
         return 0
     else
         echo "❌ $missing_count core dependencies are missing."
-        echo "Run '$0' without arguments to install them."
+        echo "Run '$0' without arguments to build and install QEMU from source."
         return 1
     fi
 }
@@ -195,12 +190,14 @@ main() {
     # Verify installation
     if check_dependencies; then
         echo ""
-        echo "🎉 Installation successful!"
+        echo "🎉 QEMU source build and installation successful!"
+        echo ""
+        echo "Installed QEMU version:"
+        qemu-system-m68k --version | head -1
         echo ""
         echo "You can now run QEMU Mac emulation:"
-        echo "  ./run68k.sh -C sys753-q800.conf           # TAP networking (Linux)"
-        echo "  ./run68k.sh -C sys753-q800.conf -N user   # User mode networking"
-        echo "  ./run68k.sh -C sys753-q800.conf -N passt  # Passt networking"
+        echo "  ./runmac.sh -C m68k/configs/m68k-macos753.conf      # Mac OS 7.5.3 with user-mode networking"
+        echo "  ./runmac.sh -C ppc/configs/ppc-macos91.conf        # Mac OS 9.1 with user-mode networking"
     else
         echo ""
         echo "⚠️  Some dependencies may not have installed correctly."

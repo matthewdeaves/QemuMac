@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 
+
 #######################################
 # QEMU Mac Library Menu System
 # Interactive menu with colors and download management
 #######################################
 
+
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/qemu-utils.sh
 source "$SCRIPT_DIR/qemu-utils.sh"
+
 
 # --- Colors and UI ---
 readonly RED='\033[0;31m'
@@ -22,11 +25,13 @@ readonly BOLD='\033[1m'
 readonly DIM='\033[2m'
 readonly NC='\033[0m' # No Color
 
+
 # --- Constants ---
 readonly LIBRARY_DIR="$SCRIPT_DIR/../library"
 readonly DATABASE_FILE="$LIBRARY_DIR/software-database.json"
 readonly DOWNLOADS_DIR="$LIBRARY_DIR/downloads"
 readonly CONFIGS_DIR="$SCRIPT_DIR/.."
+
 
 #######################################
 # Print colored header with ASCII art
@@ -47,6 +52,7 @@ print_header() {
     echo -e "${NC}"
     echo
 }
+
 
 #######################################
 # Show animated spinner during operations
@@ -73,6 +79,7 @@ show_spinner() {
     printf "\b%b✓%b\n" "$GREEN" "$NC"
 }
 
+
 #######################################
 # Show download progress bar
 # Arguments:
@@ -96,6 +103,7 @@ show_progress() {
     printf "] ${percent}%%${NC}"
 }
 
+
 #######################################
 # Initialize library directories
 # Arguments:
@@ -117,23 +125,20 @@ init_library() {
     fi
 }
 
+
 #######################################
-# Parse JSON database and extract CD information
+# Parse JSON database and extract CD information sorted by category then name
 # Arguments:
 #   None
 # Globals:
 #   DATABASE_FILE
 # Returns:
-#   Prints CD keys to stdout
+#   Prints CD keys to stdout, sorted by category (Operating Systems first, then Games) and then alphabetically by name
 #######################################
 get_cd_list() {
-    if command -v jq &> /dev/null; then
-        jq -r '.cds | keys[]' "$DATABASE_FILE" 2>/dev/null
-    else
-        # Fallback parsing without jq
-        grep -o '"[^"]*"[[:space:]]*:' "$DATABASE_FILE" | grep -A1 '"cds"' | grep -o '"[^"]*"' | tr -d '"' | grep -v cds
-    fi
+    jq -r '.cds | to_entries | sort_by(.value.category, .value.name) | .[].key' "$DATABASE_FILE" 2>/dev/null
 }
+
 
 #######################################
 # Get CD information by key
@@ -163,6 +168,9 @@ get_cd_info() {
             "filename")
                 grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep "\"filename\"" | cut -d'"' -f4
                 ;;
+            "nice_filename") # Add fallback for nice_filename
+                grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep "\"nice_filename\"" | cut -d'"' -f4
+                ;;
             "url")
                 grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep "\"url\"" | cut -d'"' -f4
                 ;;
@@ -172,6 +180,7 @@ get_cd_info() {
         esac
     fi
 }
+
 
 #######################################
 # Get ROM information by key
@@ -201,9 +210,13 @@ get_rom_info() {
             "url")
                 grep -A20 "\"$rom_key\"" "$DATABASE_FILE" | grep "\"url\"" | cut -d'"' -f4
                 ;;
+            "md5")
+                grep -A20 "\"$rom_key\"" "$DATABASE_FILE" | grep "\"md5\"" | cut -d'"' -f4
+                ;;
         esac
     fi
 }
+
 
 #######################################
 # Get additional files for a CD
@@ -226,20 +239,69 @@ get_cd_additional_files() {
     fi
 }
 
+
 #######################################
-# Get list of available config files
+# Get CD architectures as array
 # Arguments:
-#   None
+#   cd_key: Key of the CD in database
+# Globals:
+#   DATABASE_FILE
+# Returns:
+#   Architectures array elements via stdout (one per line)
+#######################################
+get_cd_architectures() {
+    local cd_key="$1"
+    
+    if command -v jq &> /dev/null; then
+        jq -r ".cds.\"$cd_key\".architectures[]? // empty" "$DATABASE_FILE" 2>/dev/null
+    else
+        # Fallback: simple grep-based parsing for architectures array
+        grep -A20 "\"$cd_key\"" "$DATABASE_FILE" | grep -A5 "architectures" | grep -o '"[^"]*"' | tr -d '"' | grep -E '^(m68k|ppc)$'
+    fi
+}
+
+
+#######################################
+# Get list of available config files, optionally filtered by architectures
+# Arguments:
+#   architectures: Optional space-separated list of architectures to filter by
 # Globals:
 #   CONFIGS_DIR
 # Returns:
 #   Config filenames via stdout
 #######################################
 get_config_list() {
-    find "$CONFIGS_DIR" -maxdepth 2 -name "*.conf" -type f | while read -r config; do
-        basename "$config"
-    done | sort
+    local filter_architectures="$1"
+    
+    # If no filter specified, return all configs
+    if [ -z "$filter_architectures" ]; then
+        find "$CONFIGS_DIR/m68k/configs" "$CONFIGS_DIR/ppc/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do
+            basename "$config"
+        done | sort
+        return
+    fi
+    
+    # Filter configs based on architectures
+    local configs=()
+    
+    # Check if m68k is in the filter
+    if echo "$filter_architectures" | grep -q "m68k"; then
+        while IFS= read -r config; do
+            [ -n "$config" ] && configs+=("$config")
+        done < <(find "$CONFIGS_DIR/m68k/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do basename "$config"; done)
+    fi
+    
+    # Check if ppc is in the filter
+    if echo "$filter_architectures" | grep -q "ppc"; then
+        while IFS= read -r config; do
+            [ -n "$config" ] && configs+=("$config")
+        done < <(find "$CONFIGS_DIR/ppc/configs" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | while read -r config; do basename "$config"; done)
+    fi
+    
+    # Output sorted unique configs
+    printf '%s\n' "${configs[@]}" | sort -u
 }
+
 
 #######################################
 # Verify MD5 checksum of a file
@@ -282,6 +344,7 @@ verify_md5() {
         return 1
     fi
 }
+
 
 #######################################
 # Extract ZIP file and clean up
@@ -326,6 +389,7 @@ extract_zip() {
         return 1
     fi
 }
+
 
 #######################################
 # Download file with real-time progress tracking, verification, and extraction
@@ -436,6 +500,7 @@ download_file() {
     return 0
 }
 
+
 #######################################
 # Check if file is already downloaded
 # Arguments:
@@ -472,6 +537,7 @@ is_downloaded() {
     
     return 1
 }
+
 
 #######################################
 # Find actual downloaded filename
@@ -511,6 +577,7 @@ find_downloaded_file() {
     # No file found
     return 1
 }
+
 
 #######################################
 # Display main menu and handle user selection
@@ -554,6 +621,7 @@ show_main_menu() {
     done
 }
 
+
 #######################################
 # Display CD selection menu
 # Arguments:
@@ -566,26 +634,53 @@ show_main_menu() {
 show_cd_menu() {
     while true; do
         print_header
-        echo -e "${WHITE}${BOLD}📀 Software CDs:${NC}"
+        echo -e "${WHITE}${BOLD}📀 Software Library:${NC}"
         echo
         
         local cd_keys=()
         local i=1
+        local current_category=""
         
-        # Read CD list into array
+        # Read CD list into array with category headers
         while IFS= read -r cd_key; do
             [ -n "$cd_key" ] || continue
             cd_keys+=("$cd_key")
             
             local name=$(get_cd_info "$cd_key" "name")
             local description=$(get_cd_info "$cd_key" "description")
-            local filename=$(get_cd_info "$cd_key" "filename")
+            # --- MODIFIED ---
+            # Use the helper function to get the correct local filename
+            local effective_filename
+            effective_filename=$(_get_local_filename "$cd_key")
+            local category=$(get_cd_info "$cd_key" "category")
             
-            # Check if already downloaded
-            if is_downloaded "$filename"; then
-                local status="${GREEN}✓ Downloaded${NC}"
+            # Display category header when category changes
+            if [ "$category" != "$current_category" ]; then
+                if [ -n "$current_category" ]; then
+                    echo  # Add spacing between categories
+                fi
+                case "$category" in
+                    "Operating Systems")
+                        echo -e "${CYAN}${BOLD}📀 Operating Systems:${NC}"
+                        ;;
+                    "Games")
+                        echo -e "${MAGENTA}${BOLD}🎮 Games:${NC}"
+                        ;;
+                    *)
+                        echo -e "${YELLOW}${BOLD}📁 $category:${NC}"
+                        ;;
+                esac
+                echo
+                current_category="$category"
+            fi
+            
+            # --- MODIFIED ---
+            # Check status using the effective filename
+            local status
+            if is_downloaded "$effective_filename"; then
+                status="${GREEN}✓ Downloaded${NC}"
             else
-                local status="${DIM}Not downloaded${NC}"
+                status="${DIM}Not downloaded${NC}"
             fi
             
             printf "%b%2d)%b %b%s%b\n" "$GREEN" $i "$NC" "$BOLD" "$name" "$NC"
@@ -614,6 +709,7 @@ show_cd_menu() {
     done
 }
 
+
 #######################################
 # Handle CD selection and system choice
 # Arguments:
@@ -626,7 +722,10 @@ show_cd_menu() {
 handle_cd_selection() {
     local cd_key="$1"
     local name=$(get_cd_info "$cd_key" "name")
-    local filename=$(get_cd_info "$cd_key" "filename")
+    # --- MODIFIED ---
+    # Use helper function for the filename throughout this function
+    local effective_filename
+    effective_filename=$(_get_local_filename "$cd_key")
     local url=$(get_cd_info "$cd_key" "url")
     local md5=$(get_cd_info "$cd_key" "md5")
     
@@ -634,12 +733,13 @@ handle_cd_selection() {
     echo -e "${WHITE}${BOLD}Selected: $name${NC}"
     echo
     
-    # Download if not already downloaded
-    if ! is_downloaded "$filename"; then
+    # --- MODIFIED ---
+    # Download if not already downloaded, using the effective filename
+    if ! is_downloaded "$effective_filename"; then
         echo -e "${YELLOW}CD not downloaded. Downloading now...${NC}"
         echo
         
-        if download_file "$url" "$DOWNLOADS_DIR/$filename" "$md5"; then
+        if download_file "$url" "$DOWNLOADS_DIR/$effective_filename" "$md5"; then
             echo -e "${GREEN}✓ Download completed!${NC}"
         else
             echo -e "${RED}✗ Download failed. Press Enter to continue...${NC}"
@@ -652,8 +752,9 @@ handle_cd_selection() {
         echo
     fi
     
-    # Check for multiple ISO files and let user choose
-    local selected_filename="$filename"
+    # --- MODIFIED ---
+    # The default selected filename is now the effective_filename
+    local selected_filename="$effective_filename"
     local additional_files_info
     additional_files_info=$(get_cd_additional_files "$cd_key")
     
@@ -662,13 +763,14 @@ handle_cd_selection() {
         local available_files=()
         local file_descriptions=()
         
-        # Add main file if it exists
-        if [ -f "$DOWNLOADS_DIR/$filename" ]; then
-            available_files+=("$filename")
+        # --- MODIFIED ---
+        # Add main file if it exists, using the effective filename
+        if [ -f "$DOWNLOADS_DIR/$effective_filename" ]; then
+            available_files+=("$effective_filename")
             file_descriptions+=("Main Game/Software")
         fi
         
-        # Add additional files if they exist
+        # Add additional files if they exist (this logic remains the same)
         while IFS='|' read -r add_filename add_description; do
             [ -n "$add_filename" ] || continue
             if [ -f "$DOWNLOADS_DIR/$add_filename" ]; then
@@ -697,15 +799,24 @@ handle_cd_selection() {
                 selected_filename="${available_files[$((disc_choice-1))]}"
                 echo -e "${GREEN}✓ Selected: $selected_filename${NC}"
             else
-                echo -e "${RED}Invalid selection, using default: $filename${NC}"
-                selected_filename="$filename"
+                # --- MODIFIED ---
+                # Fallback to the effective filename
+                echo -e "${RED}Invalid selection, using default: $effective_filename${NC}"
+                selected_filename="$effective_filename"
             fi
             echo
         fi
     fi
     
+    # Get architectures supported by this CD
+    local cd_architectures
+    cd_architectures=$(get_cd_architectures "$cd_key" | tr '\n' ' ' | sed 's/ $//')
+    
     # Show system selection
     echo -e "${WHITE}${BOLD}Select Mac OS System:${NC}"
+    if [ -n "$cd_architectures" ]; then
+        echo -e "${DIM}Showing configurations compatible with: $cd_architectures${NC}"
+    fi
     echo
     
     local configs=()
@@ -726,7 +837,7 @@ handle_cd_selection() {
         
         printf "%b%2d)%b %s %b(%s)%b\n" "$GREEN" $i "$NC" "$system_name" "$DIM" "$config" "$NC"
         ((i++))
-    done < <(get_config_list)
+    done < <(get_config_list "$cd_architectures")
     
     echo
     echo -e "${GREEN}b)${NC} 🔙 Back to CD selection"
@@ -739,11 +850,86 @@ handle_cd_selection() {
         return
     elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#configs[@]}" ]; then
         local selected_config="${configs[$((choice-1))]}"
-        launch_vm "$selected_config" "$DOWNLOADS_DIR/$selected_filename"
+        launch_vm "$selected_config" "$DOWNLOADS_DIR/$selected_filename" "$cd_key"
     else
         echo -e "\n${RED}Invalid selection. Press Enter to continue...${NC}"
         read -r
     fi
+}
+
+
+#######################################
+# Show boot options menu with smart defaults
+# Arguments:
+#   cd_key: CD key to determine category and defaults
+#   software_name: Name of the software for display
+# Globals:
+#   Color constants
+# Returns:
+#   Sets BOOT_OPTION_RESULT global variable ("" for boot from Mac, "-b" for boot from CD)
+#######################################
+show_boot_options() {
+    local cd_key="$1"
+    local software_name="$2"
+    local category=$(get_cd_info "$cd_key" "category")
+    
+    # Determine smart default based on category
+    local default_option=1
+    local default_text="Boot from Virtual Mac"
+    local recommendation=""
+    
+    if [ "$category" = "Operating Systems" ]; then
+        default_option=2
+        default_text="Boot from CD-ROM"
+        recommendation="Recommended for OS installation"
+    else
+        recommendation="Recommended for applications and games"
+    fi
+    
+    echo
+    echo -e "${WHITE}${BOLD}Boot Options for: $software_name${NC}"
+    echo -e "${DIM}Category: $category${NC}"
+    echo
+    
+    # Show options with default highlighted
+    if [ "$default_option" -eq 1 ]; then
+        echo -e "${GREEN} 1)${NC} 🖥️  Boot from Virtual Mac ${YELLOW}[RECOMMENDED]${NC} ${DIM}(CD available on desktop)${NC}"
+        echo -e "${GREEN} 2)${NC} 💿  Boot from CD-ROM ${DIM}(for installation/CD-based software)${NC}"
+    else
+        echo -e "${GREEN} 1)${NC} 🖥️  Boot from Virtual Mac ${DIM}(CD available on desktop)${NC}"
+        echo -e "${GREEN} 2)${NC} 💿  Boot from CD-ROM ${YELLOW}[RECOMMENDED]${NC} ${DIM}(for installation/CD-based software)${NC}"
+    fi
+    
+    echo
+    echo -e "${DIM}$recommendation${NC}"
+    echo
+    echo -e -n "${YELLOW}Choose boot method [1-2] or press Enter for recommended [$default_option]: ${NC}"
+    
+    read -r boot_choice
+    
+    # Handle user input
+    if [ -z "$boot_choice" ]; then
+        boot_choice="$default_option"
+    fi
+    
+    case "$boot_choice" in
+        1)
+            echo -e "${GREEN}✓ Selected: Boot from Virtual Mac - CD will be available on desktop${NC}"
+            BOOT_OPTION_RESULT=""
+            ;;
+        2)
+            echo -e "${GREEN}✓ Selected: Boot from CD-ROM - use for installation or CD-based software${NC}"
+            BOOT_OPTION_RESULT="-b"
+            ;;
+        *)
+            echo -e "${RED}Invalid selection, using recommended option ($default_option)${NC}"
+            if [ "$default_option" -eq 2 ]; then
+                BOOT_OPTION_RESULT="-b"
+            else
+                BOOT_OPTION_RESULT=""
+            fi
+            ;;
+    esac
 }
 
 #######################################
@@ -759,13 +945,14 @@ handle_cd_selection() {
 launch_vm() {
     local config_file="$1"
     local cd_path="$2"
+    local cd_key="$3"
     local config_path
     
-    # Find the full path to config file
-    if [ -f "$CONFIGS_DIR/$config_file" ]; then
-        config_path="$CONFIGS_DIR/$config_file"
-    elif [ -f "$CONFIGS_DIR/configs/$config_file" ]; then
-        config_path="$CONFIGS_DIR/configs/$config_file"
+    # Find the full path to config file in architecture-specific directories
+    if [ -f "$CONFIGS_DIR/m68k/configs/$config_file" ]; then
+        config_path="m68k/configs/$config_file"
+    elif [ -f "$CONFIGS_DIR/ppc/configs/$config_file" ]; then
+        config_path="ppc/configs/$config_file"
     else
         echo -e "${RED}Error: Config file not found: $config_file${NC}" >&2
         echo -e "Press Enter to continue..."
@@ -773,10 +960,21 @@ launch_vm() {
         return
     fi
     
+    # Get software name for display
+    local software_name=$(get_cd_info "$cd_key" "name")
+    
+    # Show boot options menu and get user choice
+    local boot_flag
+    show_boot_options "$cd_key" "$software_name"
+    boot_flag="$BOOT_OPTION_RESULT"
+    
     echo
     echo -e "${CYAN}${BOLD}Launching Virtual Machine...${NC}"
     echo -e "${WHITE}Config: $config_file${NC}"
     echo -e "${WHITE}CD: $(basename "$cd_path")${NC}"
+    echo
+    echo -e "${GREEN}Manual command (for testing):${NC}"
+    echo -e "${DIM}./runmac.sh -C \"$config_path\" -c \"$cd_path\" $boot_flag${NC}"
     echo
     echo -e "${DIM}Press Ctrl+Alt+G to release mouse, Ctrl+Alt+F to toggle fullscreen${NC}"
     echo -e "${DIM}Close QEMU window to return to menu${NC}"
@@ -784,14 +982,15 @@ launch_vm() {
     echo -e "${YELLOW}Starting in 3 seconds...${NC}"
     sleep 3
     
-    # Launch the VM
+    # Launch the VM using unified dispatcher with appropriate boot flag
     cd "$CONFIGS_DIR" || return
-    ./run68k.sh -C "$config_path" -c "$cd_path"
+    ./runmac.sh -C "$config_path" -c "$cd_path" $boot_flag
     
     echo
     echo -e "${GREEN}VM session ended. Press Enter to continue...${NC}"
     read -r
 }
+
 
 #######################################
 # Show ROM download menu
@@ -822,8 +1021,10 @@ show_rom_menu() {
                 local name=$(get_rom_info "$rom_key" "name")
                 local filename=$(get_rom_info "$rom_key" "filename")
                 
-                # Check if ROM already exists in root directory
-                if [ -f "$CONFIGS_DIR/$filename" ]; then
+                # Check if ROM already exists in m68k directory (PPC uses built-in BIOS)
+                local rom_path="$CONFIGS_DIR/m68k/$filename"
+                
+                if [ -n "$rom_path" ] && [ -f "$rom_path" ]; then
                     local status="${GREEN}✓ Installed${NC}"
                 else
                     local status="${DIM}Not installed${NC}"
@@ -862,6 +1063,7 @@ show_rom_menu() {
     done
 }
 
+
 #######################################
 # Handle ROM download to root directory
 # Arguments:
@@ -876,26 +1078,33 @@ handle_rom_download() {
     local name=$(get_rom_info "$rom_key" "name")
     local filename=$(get_rom_info "$rom_key" "filename")
     local url=$(get_rom_info "$rom_key" "url")
+    local md5=$(get_rom_info "$rom_key" "md5")
     
     print_header
     echo -e "${WHITE}${BOLD}Selected: $name${NC}"
     echo
     
-    # Check if ROM already exists
-    if [ -f "$CONFIGS_DIR/$filename" ]; then
-        echo -e "${GREEN}✓ ROM already exists: $CONFIGS_DIR/$filename${NC}"
+    # ROM files are only needed for 68k architecture (PPC uses built-in BIOS)
+    local rom_path="$CONFIGS_DIR/m68k/$filename"
+    
+    # Check if ROM already exists in architecture-specific location
+    if [ -f "$rom_path" ]; then
+        echo -e "${GREEN}✓ ROM already exists: $rom_path${NC}"
         echo -e "Press Enter to continue..."
         read -r
         return
     fi
     
-    # Download ROM to root directory
+    # Download ROM to m68k directory (68k architecture only)
     echo -e "${YELLOW}ROM not found. Downloading now...${NC}"
     echo
     
-    if download_file "$url" "$CONFIGS_DIR/$filename"; then
+    # Ensure target directory exists
+    mkdir -p "$(dirname "$rom_path")"
+    
+    if download_file "$url" "$rom_path" "$md5"; then
         echo -e "${GREEN}✓ ROM downloaded successfully!${NC}"
-        echo -e "${GREEN}✓ Saved to: $CONFIGS_DIR/$filename${NC}"
+        echo -e "${GREEN}✓ Saved to: $rom_path${NC}"
     else
         echo -e "${RED}✗ ROM download failed${NC}"
     fi
@@ -904,6 +1113,7 @@ handle_rom_download() {
     echo -e "Press Enter to continue..."
     read -r
 }
+
 
 #######################################
 # Show downloaded files
@@ -947,6 +1157,7 @@ show_downloads() {
     echo -e -n "${YELLOW}Press 'b' for back or Enter to continue: ${NC}"
     read -r choice
 }
+
 
 #######################################
 # Show system information

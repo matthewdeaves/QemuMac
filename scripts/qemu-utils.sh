@@ -174,17 +174,11 @@ declare -A OPTIONAL_CONFIG_VARS=(
     ["QEMU_CPU"]="CPU type override"
     ["QEMU_HDD_SIZE"]="Hard disk size (default: $DEFAULT_HDD_SIZE)"
     ["QEMU_SHARED_HDD_SIZE"]="Shared disk size (default: $DEFAULT_SHARED_HDD_SIZE)"
-    ["BRIDGE_NAME"]="Network bridge name (default: $DEFAULT_BRIDGE_NAME)"
-    ["QEMU_TAP_IFACE"]="TAP interface name"
-    ["QEMU_MAC_ADDR"]="MAC address"
-    ["QEMU_USER_SMB_DIR"]="SMB share directory for user mode"
-    ["QEMU_AUDIO_BACKEND"]="Audio backend (pa, alsa, sdl, none)"
+    ["QEMU_AUDIO_BACKEND"]="Audio backend (pa, alsa, none)"
     ["QEMU_AUDIO_LATENCY"]="Audio latency in microseconds"
     ["QEMU_ASC_MODE"]="Apple Sound Chip mode (easc or asc)"
-    ["QEMU_CPU_MODEL"]="Explicit CPU model (m68000-m68060)"
     ["QEMU_TCG_THREAD_MODE"]="TCG threading mode (single or multi)"
     ["QEMU_TB_SIZE"]="Translation block cache size"
-    ["QEMU_MEMORY_BACKEND"]="Memory backend type (ram, file, memfd)"
 )
 
 #######################################
@@ -268,363 +262,29 @@ validate_config_filename() {
     return 0
 }
 
-#######################################
-# Validate audio backend configuration
-# Arguments:
-#   audio_backend: Audio backend to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_audio_backend() {
-    local audio_backend="$1"
-    local valid_backends=("pa" "alsa" "sdl" "oss" "none" "wav" "spice" "dbus" "pipewire")
-    
-    if [ -z "$audio_backend" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for backend in "${valid_backends[@]}"; do
-        if [ "$audio_backend" = "$backend" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid audio backend '$audio_backend'" >&2
-    echo "Valid backends: ${valid_backends[*]}" >&2
-    return 1
-}
+# Audio backend validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate ASC mode configuration
-# Arguments:
-#   asc_mode: ASC mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_asc_mode() {
-    local asc_mode="$1"
-    local valid_modes=("easc" "asc")
-    
-    if [ -z "$asc_mode" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$asc_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid ASC mode '$asc_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    return 1
-}
+# ASC mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate CPU model for m68k emulation
-# Arguments:
-#   cpu_model: CPU model to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_cpu_model() {
-    local cpu_model="$1"
-    local valid_models=("m68000" "m68010" "m68020" "m68030" "m68040" "m68060")
-    
-    if [ -z "$cpu_model" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for model in "${valid_models[@]}"; do
-        if [ "$cpu_model" = "$model" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid CPU model '$cpu_model'" >&2
-    echo "Valid m68k CPU models: ${valid_models[*]}" >&2
-    return 1
-}
+# CPU model validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate TCG thread mode
-# Arguments:
-#   thread_mode: TCG threading mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_tcg_thread_mode() {
-    local thread_mode="$1"
-    local valid_modes=("single" "multi")
-    
-    if [ -z "$thread_mode" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$thread_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid TCG thread mode '$thread_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    return 1
-}
+# TCG thread mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate memory backend type
-# Arguments:
-#   backend_type: Memory backend type to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_memory_backend() {
-    local backend_type="$1"
-    local valid_backends=("ram" "file" "memfd")
-    
-    if [ -z "$backend_type" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for backend in "${valid_backends[@]}"; do
-        if [ "$backend_type" = "$backend" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid memory backend type '$backend_type'" >&2
-    echo "Valid backends: ${valid_backends[*]}" >&2
-    return 1
-}
+# Memory backend validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate translation block cache size
-# Arguments:
-#   tb_size: Translation block cache size to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_tb_size() {
-    local tb_size="$1"
-    
-    if [ -z "$tb_size" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    # Check if it's a positive integer
-    if ! [[ "$tb_size" =~ ^[0-9]+$ ]] || [ "$tb_size" -le 0 ]; then
-        echo "Error: Invalid translation block cache size '$tb_size'" >&2
-        echo "Must be a positive integer (recommended: 64-1024)" >&2
-        return 1
-    fi
-    
-    # Warn for unusual values
-    if [ "$tb_size" -lt 64 ] || [ "$tb_size" -gt 1024 ]; then
-        warning_log "TB cache size '$tb_size' is outside recommended range (64-1024)"
-    fi
-    
-    return 0
-}
+# Translation block cache size validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI cache mode
-# Arguments:
-#   cache_mode: SCSI cache mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_cache_mode() {
-    local cache_mode="$1"
-    local valid_modes=("writethrough" "writeback" "none" "directsync")
-    
-    if [ -z "$cache_mode" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$cache_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid SCSI cache mode '$cache_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    echo "  writethrough: Safe, writes go through to disk" >&2
-    echo "  writeback: Fast, but requires proper VM shutdown" >&2
-    echo "  none: Safest, direct I/O to disk" >&2
-    echo "  directsync: Direct I/O with sync" >&2
-    return 1
-}
+# SCSI cache mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI AIO mode
-# Arguments:
-#   aio_mode: SCSI AIO mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_aio_mode() {
-    local aio_mode="$1"
-    local valid_modes=("threads" "native")
-    
-    if [ -z "$aio_mode" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$aio_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid SCSI AIO mode '$aio_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    echo "  threads: Multi-threaded AIO (default, works everywhere)" >&2
-    echo "  native: Native AIO (Linux only, better performance)" >&2
-    return 1
-}
+# SCSI AIO mode validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI vendor string
-# Arguments:
-#   vendor: SCSI vendor string to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_vendor() {
-    local vendor="$1"
-    
-    if [ -z "$vendor" ]; then
-        return 0  # Empty is valid (will use QEMU default)
-    fi
-    
-    # SCSI vendor field is 8 characters max, alphanumeric and spaces
-    if [ ${#vendor} -gt 8 ]; then
-        echo "Error: SCSI vendor string '$vendor' too long (max 8 characters)" >&2
-        return 1
-    fi
-    
-    if ! [[ "$vendor" =~ ^[A-Z0-9\ ]+$ ]]; then
-        echo "Error: SCSI vendor string '$vendor' contains invalid characters" >&2
-        echo "Must contain only uppercase letters, numbers, and spaces" >&2
-        return 1
-    fi
-    
-    return 0
-}
+# SCSI vendor validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate SCSI serial prefix
-# Arguments:
-#   serial_prefix: SCSI serial number prefix to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_scsi_serial_prefix() {
-    local serial_prefix="$1"
-    
-    if [ -z "$serial_prefix" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    # Serial prefix should be 3-4 characters, alphanumeric
-    if [ ${#serial_prefix} -lt 2 ] || [ ${#serial_prefix} -gt 4 ]; then
-        echo "Error: SCSI serial prefix '$serial_prefix' must be 2-4 characters" >&2
-        return 1
-    fi
-    
-    if ! [[ "$serial_prefix" =~ ^[A-Z0-9]+$ ]]; then
-        echo "Error: SCSI serial prefix '$serial_prefix' contains invalid characters" >&2
-        echo "Must contain only uppercase letters and numbers" >&2
-        return 1
-    fi
-    
-    return 0
-}
+# SCSI serial prefix validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate display device type
-# Arguments:
-#   display_device: Display device type to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_display_device() {
-    local display_device="$1"
-    local valid_devices=("built-in" "nubus-macfb")
-    
-    if [ -z "$display_device" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for device in "${valid_devices[@]}"; do
-        if [ "$display_device" = "$device" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid display device '$display_device'" >&2
-    echo "Valid devices: ${valid_devices[*]}" >&2
-    echo "  built-in: Standard Q800 built-in display" >&2
-    echo "  nubus-macfb: NuBus framebuffer device" >&2
-    return 1
-}
+# Display device validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate resolution preset
-# Arguments:
-#   resolution_preset: Resolution preset name to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_resolution_preset() {
-    local resolution_preset="$1"
-    local valid_presets=("mac_standard" "vga" "svga" "xga" "sxga")
-    
-    if [ -z "$resolution_preset" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for preset in "${valid_presets[@]}"; do
-        if [ "$resolution_preset" = "$preset" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid resolution preset '$resolution_preset'" >&2
-    echo "Valid presets: ${valid_presets[*]}" >&2
-    echo "  mac_standard: 1152x870x8 (Mac 21-inch)" >&2
-    echo "  vga: 640x480x8 (VGA)" >&2
-    echo "  svga: 800x600x8 (Super VGA)" >&2
-    echo "  xga: 1024x768x8 (Extended VGA)" >&2
-    echo "  sxga: 1280x1024x8 (Super XGA)" >&2
-    return 1
-}
+# Resolution preset validation removed - simplified configs use trusted defaults
 
 #######################################
 # Get resolution from preset name
@@ -660,65 +320,9 @@ get_resolution_from_preset() {
     esac
 }
 
-#######################################
-# Validate floppy readonly setting
-# Arguments:
-#   readonly_mode: Floppy readonly mode to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_floppy_readonly() {
-    local readonly_mode="$1"
-    local valid_modes=("true" "false")
-    
-    if [ -z "$readonly_mode" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for mode in "${valid_modes[@]}"; do
-        if [ "$readonly_mode" = "$mode" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid floppy readonly mode '$readonly_mode'" >&2
-    echo "Valid modes: ${valid_modes[*]}" >&2
-    echo "  true: Read-only access (safe, prevents data loss)" >&2
-    echo "  false: Read-write access (allows modifications)" >&2
-    return 1
-}
+# Floppy readonly validation removed - simplified configs use trusted defaults
 
-#######################################
-# Validate floppy format
-# Arguments:
-#   floppy_format: Floppy format to validate
-# Globals:
-#   None
-# Returns:
-#   0 if valid, 1 if invalid
-#######################################
-validate_floppy_format() {
-    local floppy_format="$1"
-    local valid_formats=("mac" "pc")
-    
-    if [ -z "$floppy_format" ]; then
-        return 0  # Empty is valid (will use default)
-    fi
-    
-    for format in "${valid_formats[@]}"; do
-        if [ "$floppy_format" = "$format" ]; then
-            return 0
-        fi
-    done
-    
-    echo "Error: Invalid floppy format '$floppy_format'" >&2
-    echo "Valid formats: ${valid_formats[*]}" >&2
-    echo "  mac: Mac-formatted floppy disks" >&2
-    echo "  pc: PC-formatted floppy disks" >&2
-    return 1
-}
+# Floppy format validation removed - simplified configs use trusted defaults
 
 # --- Security and Input Validation Functions ---
 
@@ -846,7 +450,7 @@ install_packages() {
 }
 
 #######################################
-# Install all QEMU Mac emulation dependencies
+# Install all QEMU Mac emulation dependencies by building from source
 # Arguments:
 #   None
 # Globals:
@@ -857,96 +461,549 @@ install_packages() {
 #   1 if installation fails or unsupported system
 #######################################
 install_qemu_dependencies() {
-    echo "Installing QEMU Mac emulation dependencies..."
+    echo "=== Installing QEMU Mac emulation dependencies from source ==="
+    echo "This will build the latest QEMU version for optimal Mac emulation compatibility."
+    echo ""
     
-    # Detect package manager and install accordingly
+    # Detect platform and install build dependencies
     if command -v apt-get &> /dev/null; then
         echo "Detected Debian/Ubuntu system (apt)"
-        local core_packages=(
-            "qemu-system-m68k"      # QEMU m68k emulation
-            "qemu-utils"            # QEMU utilities (qemu-img, etc.)
-            "coreutils"             # Core utilities (dd, printf, etc.)
-            "bsdmainutils"          # BSD utilities (hexdump, etc.)
-        )
+        install_qemu_ubuntu_dependencies
+        build_qemu_from_source
         
-        local networking_packages=(
-            "bridge-utils"          # Bridge utilities (brctl)
-            "iproute2"              # IP route utilities
-            "passt"                 # Modern userspace networking
-        )
+    elif command -v zypper &> /dev/null; then
+        echo "Detected SUSE/openSUSE system (zypper)"
+        install_qemu_suse_dependencies
+        build_qemu_from_source
         
-        local filesystem_packages=(
-            "hfsprogs"              # HFS+ filesystem support
-            "hfsplus"               # Additional HFS+ tools
-        )
+    elif command -v pacman &> /dev/null; then
+        echo "Detected Arch Linux system (pacman)"
+        install_qemu_arch_dependencies
+        build_qemu_from_source
         
-        echo "Installing core QEMU packages..."
-        install_packages "${core_packages[@]}"
-        
-        echo "Installing networking packages..."
-        install_packages "${networking_packages[@]}"
-        
-        echo "Installing filesystem packages..."
-        install_packages "${filesystem_packages[@]}"
+    elif command -v apk &> /dev/null; then
+        echo "Detected Alpine Linux system (apk)"
+        install_qemu_alpine_dependencies
+        build_qemu_from_source
         
     elif command -v brew &> /dev/null; then
         echo "Detected macOS system (Homebrew)"
-        local brew_packages=(
-            "qemu"                  # QEMU (includes m68k support)
-            "bash"                  # Modern bash (macOS default is old)
-        )
+        install_qemu_macos_dependencies
+        build_qemu_from_source_macos
         
-        echo "Installing packages via Homebrew..."
-        for package in "${brew_packages[@]}"; do
-            if ! brew list "$package" &> /dev/null; then
-                echo "Installing $package..."
-                brew install "$package" || {
-                    echo "Warning: Failed to install $package via Homebrew" >&2
-                }
-            else
-                echo "$package is already installed"
-            fi
-        done
+    elif command -v port &> /dev/null; then
+        echo "Detected macOS system (MacPorts)"
+        install_qemu_macports_dependencies
+        build_qemu_from_source_macos
         
-        echo ""
-        echo "macOS Networking Notes:"
-        echo "  - TAP networking requires Linux-specific tools and is not available on macOS"
-        echo "  - Passt networking is Linux-only and not available via Homebrew"
-        echo "  - Use User Mode networking (-N user) for internet access on macOS"
-        echo "  - Bridge utilities and iproute2 are Linux-specific"
-        echo ""
-        echo "Recommended network mode for macOS: ./run68k.sh -C config.conf -N user"
+    elif command -v fink &> /dev/null; then
+        echo "Detected macOS system (Fink)"
+        install_qemu_fink_dependencies
+        build_qemu_from_source_macos
         
     elif command -v dnf &> /dev/null; then
         echo "Detected Fedora/RHEL system (dnf)"
-        local fedora_packages=(
-            "qemu-system-m68k"
-            "qemu-img"
-            "bridge-utils"
-            "iproute"
-            "passt"
-            "hfsprogs"
-        )
-        
-        echo "Installing packages via dnf..."
-        sudo dnf install -y "${fedora_packages[@]}" || {
-            echo "Error: Failed to install packages via dnf" >&2
-            return 1
-        }
+        install_qemu_fedora_dependencies
+        build_qemu_from_source
         
     else
-        echo "Error: Unsupported package manager. Please manually install:" >&2
-        echo "  - qemu-system-m68k (QEMU m68k emulation)" >&2
-        echo "  - qemu-utils (QEMU utilities)" >&2
-        echo "  - bridge-utils (for TAP networking)" >&2
-        echo "  - iproute2 (for TAP networking)" >&2
-        echo "  - passt (modern networking)" >&2
-        echo "  - hfsprogs (HFS+ support)" >&2
+        echo "Error: Unsupported system. Currently supported:" >&2
+        echo "  - Debian/Ubuntu (apt-get)" >&2
+        echo "  - SUSE/openSUSE (zypper)" >&2
+        echo "  - Arch Linux (pacman)" >&2
+        echo "  - Alpine Linux (apk)" >&2
+        echo "  - macOS (Homebrew/MacPorts/Fink)" >&2
+        echo "  - Fedora/RHEL (dnf)" >&2
         return 1
     fi
     
-    echo "Dependency installation completed successfully!"
-    echo "You can now run QEMU Mac emulation with all networking modes supported."
+    echo ""
+    echo "=== QEMU source build completed successfully! ==="
+    echo "Latest QEMU installed with Mac emulation optimizations."
+}
+
+#######################################
+# Install QEMU build dependencies on Ubuntu/Debian
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_ubuntu_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo apt remove --purge -y qemu-system qemu-system-ppc qemu-system-x86 qemu-system-arm qemu-system-mips qemu-system-misc qemu-system-s390x qemu-system-sparc qemu-utils qemu-system-gui qemu-system-common qemu-system-data qemu-block-extra qemu-system-modules-opengl qemu-system-modules-spice 2>/dev/null || true
+    sudo apt autoremove -y
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    sudo apt update
+    
+    local build_packages=(
+        "git" "build-essential" "pkg-config" "libglib2.0-dev" "libfdt-dev" 
+        "libpixman-1-dev" "zlib1g-dev" "ninja-build" "libslirp-dev" 
+        "libcap-ng-dev" "libattr1-dev" "libssl-dev" "python3-sphinx" 
+        "python3-sphinx-rtd-theme" "libaio-dev" "libbluetooth-dev" 
+        "libbrlapi-dev" "libbz2-dev" "libcap-dev" "libcurl4-gnutls-dev" 
+        "libgtk-3-dev" "libibverbs-dev" "libjpeg8-dev" "libncurses5-dev" 
+        "libnuma-dev" "librbd-dev" "librdmacm-dev" "libsasl2-dev" 
+        "libsdl2-dev" "libseccomp-dev" "libsnappy-dev" "libssh-dev" 
+        "libvde-dev" "libvdeplug-dev" "libvte-2.91-dev" "libxen-dev" 
+        "liblzo2-dev" "valgrind" "xfslibs-dev" "libnfs-dev" "libiscsi-dev"
+        "libffi-dev" "gettext" "meson"
+    )
+    
+    local core_packages=(
+        "coreutils"     # Core utilities (dd, printf, etc.)
+        "bsdmainutils"  # BSD utilities (hexdump, etc.)
+        "jq"            # JSON processor (for mac-library tool)
+        "hfsprogs"      # HFS+ filesystem support
+        "hfsplus"       # Additional HFS+ tools
+    )
+    
+    sudo apt install -y "${build_packages[@]}" "${core_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on macOS with Homebrew
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_macos_dependencies() {
+    echo "Step 1: Checking macOS environment..."
+    
+    # Check macOS version for HVF acceleration support
+    local macos_version=$(sw_vers -productVersion)
+    local macos_major=$(echo "$macos_version" | cut -d. -f1)
+    local macos_minor=$(echo "$macos_version" | cut -d. -f2)
+    
+    echo "Detected macOS $macos_version"
+    
+    # Check compiler preference (Clang recommended)
+    if command -v clang &> /dev/null; then
+        local clang_version=$(clang --version | head -1)
+        echo "✓ Clang compiler found: $clang_version"
+    else
+        echo "⚠️  Clang compiler not found - consider installing Xcode Command Line Tools"
+    fi
+    
+    echo ""
+    echo "Step 2: Installing build dependencies via Homebrew..."
+    
+    # Remove existing QEMU if installed via Homebrew
+    if brew list qemu &> /dev/null; then
+        echo "Removing existing Homebrew QEMU package..."
+        brew uninstall qemu || true
+    fi
+    
+    local build_packages=(
+        "libffi" "gettext" "glib" "pkg-config" "pixman" "ninja" "meson"
+        "git" "bash" "jq"
+    )
+    
+    for package in "${build_packages[@]}"; do
+        if ! brew list "$package" &> /dev/null; then
+            echo "Installing $package..."
+            brew install "$package" || {
+                echo "Error: Failed to install $package via Homebrew" >&2
+                return 1
+            }
+        else
+            echo "✓ $package already installed"
+        fi
+    done
+    
+    echo "✓ Build dependencies installed"
+    echo ""
+    
+    # Performance recommendations
+    if [ "$macos_major" -gt 10 ] || ([ "$macos_major" -eq 10 ] && [ "$macos_minor" -ge 10 ]); then
+        echo "📝 Performance Note:"
+        echo "  - Your macOS version supports HVF acceleration"
+        echo "  - For Intel Mac guests on Intel hosts, consider using '-accel hvf' for near-native speed"
+        echo ""
+    fi
+}
+
+#######################################
+# Install QEMU build dependencies on macOS with MacPorts
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_macports_dependencies() {
+    echo "Step 1: Installing build dependencies via MacPorts..."
+    
+    # Remove existing QEMU if installed via MacPorts
+    if port installed | grep -q "qemu "; then
+        echo "Removing existing MacPorts QEMU package..."
+        sudo port uninstall qemu || true
+    fi
+    
+    local build_packages=(
+        "libffi" "gettext" "glib2" "pkgconfig" "libpixman" "ninja" "meson"
+        "git" "jq"
+    )
+    
+    for package in "${build_packages[@]}"; do
+        if ! port installed | grep -q "^  $package "; then
+            echo "Installing $package..."
+            sudo port install "$package" || {
+                echo "Error: Failed to install $package via MacPorts" >&2
+                return 1
+            }
+        else
+            echo "✓ $package already installed"
+        fi
+    done
+    
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on macOS with Fink
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_fink_dependencies() {
+    echo "Step 1: Installing build dependencies via Fink..."
+    
+    # Remove existing QEMU if installed via Fink
+    if fink list -i | grep -q "qemu"; then
+        echo "Removing existing Fink QEMU package..."
+        fink remove qemu || true
+    fi
+    
+    local build_packages=(
+        "libffi6-dev" "gettext-dev" "glib2-dev" "pkgconfig" "pixman" "ninja" "meson"
+        "git" "jq"
+    )
+    
+    for package in "${build_packages[@]}"; do
+        if ! fink list -i | grep -q "^i.*$package"; then
+            echo "Installing $package..."
+            fink install "$package" || {
+                echo "Error: Failed to install $package via Fink" >&2
+                return 1
+            }
+        else
+            echo "✓ $package already installed"
+        fi
+    done
+    
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on Fedora/RHEL
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_fedora_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo dnf remove -y qemu-system-m68k qemu-system-ppc qemu-img 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "gcc-c++" "pkg-config" "glib2-devel" 
+        "libfdt-devel" "pixman-devel" "zlib-devel" "ninja-build"
+        "libslirp-devel" "libcap-ng-devel" "libattr-devel" 
+        "openssl-devel" "python3-sphinx" "libaio-devel" 
+        "bluez-libs-devel" "bzip2-devel" "libcap-devel" 
+        "libcurl-devel" "gtk3-devel" "libjpeg-turbo-devel" 
+        "ncurses-devel" "numactl-devel" "libseccomp-devel" 
+        "snappy-devel" "libssh-devel" "lzo-devel" "jq" "hfsprogs"
+        "libffi-devel" "gettext-devel" "meson"
+    )
+    
+    sudo dnf install -y "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on SUSE/openSUSE
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_suse_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo zypper remove -y qemu qemu-tools qemu-x86 qemu-ppc qemu-arm 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "gcc-c++" "pkg-config" "glib2-devel" 
+        "libfdt1-devel" "libpixman-1-0-devel" "zlib-devel" "ninja"
+        "libslirp-devel" "libcap-ng-devel" "libattr-devel" 
+        "libopenssl-devel" "python3-Sphinx" "libaio-devel" 
+        "bluez-devel" "libbz2-devel" "libcap-devel" 
+        "libcurl-devel" "gtk3-devel" "libjpeg8-devel" 
+        "ncurses-devel" "libnuma-devel" "libseccomp-devel" 
+        "snappy-devel" "libssh-devel" "lzo-devel" "jq"
+        "libffi-devel" "gettext-devel" "meson"
+        "coreutils" "util-linux"
+    )
+    
+    sudo zypper install -y "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on Arch Linux
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_arch_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo pacman -Rns --noconfirm qemu qemu-arch-extra 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "pkg-config" "glib2" 
+        "dtc" "pixman" "zlib" "ninja"
+        "libslirp" "libcap-ng" "attr" 
+        "openssl" "python-sphinx" "libaio" 
+        "bluez-libs" "bzip2" "libcap" 
+        "curl" "gtk3" "libjpeg-turbo" 
+        "ncurses" "numactl" "libseccomp" 
+        "snappy" "libssh" "lzo" "jq"
+        "libffi" "gettext" "meson"
+        "coreutils" "util-linux"
+    )
+    
+    sudo pacman -S --noconfirm "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on Alpine Linux
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_alpine_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo apk del qemu qemu-img qemu-system-x86_64 qemu-system-ppc 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "g++" "pkgconfig" "glib-dev" 
+        "dtc-dev" "pixman-dev" "zlib-dev" "samurai"
+        "libslirp-dev" "libcap-ng-dev" "attr-dev" 
+        "openssl-dev" "py3-sphinx" "libaio-dev" 
+        "bluez-dev" "bzip2-dev" "libcap-dev" 
+        "curl-dev" "gtk+3.0-dev" "jpeg-dev" 
+        "ncurses-dev" "numactl-dev" "libseccomp-dev" 
+        "snappy-dev" "libssh-dev" "lzo-dev" "jq"
+        "libffi-dev" "gettext-dev" "meson"
+        "coreutils" "util-linux"
+    )
+    
+    sudo apk add "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Build QEMU from source (Linux systems)
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if build fails
+#######################################
+build_qemu_from_source() {
+    echo "Step 3: Cloning QEMU source..."
+    
+    # Remove existing qemu directory if it exists
+    if [ -d "qemu" ]; then
+        echo "Removing existing qemu directory..."
+        rm -rf qemu
+    fi
+    
+    git clone https://gitlab.com/qemu-project/qemu.git
+    check_exit_status $? "Failed to clone QEMU source"
+    cd qemu
+    echo "✓ QEMU source cloned"
+    echo ""
+    
+    echo "Step 4: Configuring build..."
+    ./configure --target-list=m68k-softmmu,ppc-softmmu --enable-slirp \
+        --enable-gtk --enable-sdl --enable-curses --enable-vnc \
+        --enable-tools --enable-guest-agent
+    check_exit_status $? "Failed to configure QEMU build"
+    echo "✓ Build configured"
+    echo ""
+    
+    echo "Step 5: Building QEMU (this will take 15-30+ minutes)..."
+    echo "Using $(nproc) CPU cores for parallel compilation..."
+    make -j$(nproc)
+    check_exit_status $? "Failed to build QEMU"
+    echo "✓ QEMU built successfully"
+    echo ""
+    
+    echo "Step 6: Installing QEMU system-wide..."
+    sudo make install
+    check_exit_status $? "Failed to install QEMU"
+    echo "✓ QEMU installed to /usr/local/bin/"
+    echo ""
+    
+    # Clean up source directory
+    echo "Step 7: Cleaning up source directory..."
+    cd ..
+    rm -rf qemu
+    echo "✓ Source directory cleaned up"
+    echo ""
+    
+    echo "Step 8: Verifying installation..."
+    echo "QEMU PowerPC version:"
+    qemu-system-ppc --version | head -1
+    echo ""
+    echo "QEMU m68k version:"
+    qemu-system-m68k --version | head -1
+    echo ""
+    echo "Installation paths:"
+    which qemu-system-ppc
+    which qemu-system-m68k
+    echo ""
+}
+
+#######################################
+# Build QEMU from source on macOS
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if build fails
+#######################################
+build_qemu_from_source_macos() {
+    echo "Step 2: Cloning QEMU source..."
+    
+    # Remove existing qemu directory if it exists
+    if [ -d "qemu" ]; then
+        echo "Removing existing qemu directory..."
+        rm -rf qemu
+    fi
+    
+    git clone https://gitlab.com/qemu-project/qemu.git
+    check_exit_status $? "Failed to clone QEMU source"
+    cd qemu
+    echo "✓ QEMU source cloned"
+    echo ""
+    
+    echo "Step 3: Configuring build..."
+    ./configure --target-list=m68k-softmmu,ppc-softmmu --enable-slirp \
+        --enable-cocoa --enable-curses --enable-vnc --enable-tools \
+        --enable-guest-agent
+    check_exit_status $? "Failed to configure QEMU build"
+    echo "✓ Build configured"
+    echo ""
+    
+    echo "Step 4: Building QEMU (this will take 15-30+ minutes)..."
+    echo "Using $(sysctl -n hw.ncpu) CPU cores for parallel compilation..."
+    gmake -j$(sysctl -n hw.ncpu) 2>/dev/null || make -j$(sysctl -n hw.ncpu)
+    check_exit_status $? "Failed to build QEMU"
+    echo "✓ QEMU built successfully"
+    echo ""
+    
+    echo "Step 5: Installing QEMU system-wide..."
+    sudo gmake install 2>/dev/null || sudo make install
+    check_exit_status $? "Failed to install QEMU"
+    echo "✓ QEMU installed to /usr/local/bin/"
+    echo ""
+    
+    # Clean up source directory
+    echo "Step 6: Cleaning up source directory..."
+    cd ..
+    rm -rf qemu
+    echo "✓ Source directory cleaned up"
+    echo ""
+    
+    echo "Step 7: Verifying installation..."
+    echo "QEMU PowerPC version:"
+    /usr/local/bin/qemu-system-ppc --version | head -1
+    echo ""
+    echo "QEMU m68k version:"
+    /usr/local/bin/qemu-system-m68k --version | head -1
+    echo ""
+    echo "Installation paths:"
+    which qemu-system-ppc
+    which qemu-system-m68k
+    echo ""
+    
+    echo "macOS Notes:"
+    echo "  - User-mode networking is used by default (no additional setup required)"
+    echo "  - Supports both m68k and PowerPC Mac emulation"
+    echo "  - You may need to restart your terminal or run 'hash -r' to refresh PATH cache"
 }
 
 #######################################
@@ -979,9 +1036,7 @@ check_and_offer_install() {
         missing_deps+=("iproute2")
     fi
     
-    if ! command -v passt &> /dev/null; then
-        missing_deps+=("passt")
-    fi
+    
     
     # If dependencies are missing, offer to install
     if [ ${#missing_deps[@]} -gt 0 ]; then
