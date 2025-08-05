@@ -40,12 +40,82 @@ cp your_800.ROM m68k/800.ROM
 
 ### Installing an Operating System
 
-For brand new VMs, you need to install an OS first:
+For brand new VMs, you need to install an OS first. The mac-library system provides several OS installation images that can be downloaded automatically:
 
-#### 68k Mac OS Installation Example
+#### Using the Mac Library for OS Installation
 ```bash
-# 1. Get Mac OS installation media (user provides)
-# Place your Mac OS 7.5.3 install CD at: /path/to/macos753_install.iso
+# Browse available operating systems
+./mac-library.sh
+# Navigate to "Operating Systems" to see available OS installers
+
+# Or list OS installers from command line
+./mac-library.sh list | grep "Operating Systems"
+```
+
+**Available OS Installers in Library:**
+- Mac OS X Tiger 10.4 (PowerPC)
+- Mac OS X Leopard 10.5.6 (PowerPC) 
+- Mac OS 9.2 for G4 Power Mac (PowerPC)
+- Apple Legacy Recovery CD (68k/PowerPC)
+
+#### Mac OS X Tiger Installation Example
+```bash
+# 1. Download Tiger installer using mac-library
+./mac-library.sh download macos_x_tiger
+
+# 2. Boot from Tiger installation CD
+./runmac.sh -C ppc/configs/ppc-osxtiger104.conf -c library/downloads/MacOSX.4.iso -b
+
+# 3. Installation process:
+#    - Boot from CD
+#    - Use Disk Utility to format the drive as Mac OS Extended (HFS+)
+#    - Install Mac OS X
+#    - Complete setup assistant
+#    - Shutdown when complete
+
+# 4. Boot normally from installed system
+./runmac.sh -C ppc/configs/ppc-osxtiger104.conf
+```
+
+#### Mac OS X Leopard Installation Example
+```bash
+# 1. Download Leopard installer using mac-library
+./mac-library.sh download macos_x_leopard
+
+# 2. Boot from Leopard installation DVD
+./runmac.sh -C ppc/configs/ppc-osxleopard105.conf -c "library/downloads/MacOSXLeopard10.5.iso" -b
+
+# 3. Installation process:
+#    - Boot from DVD
+#    - Use Disk Utility to format drive as Mac OS Extended (HFS+)
+#    - Install Mac OS X 
+#    - Complete setup assistant
+
+# 4. Boot normally from installed system
+./runmac.sh -C ppc/configs/ppc-osxleopard105.conf
+```
+
+#### Mac OS 9.2 Installation Example
+```bash
+# 1. Download Mac OS 9.2 installer using mac-library
+./mac-library.sh download macos922
+
+# 2. Boot from Mac OS 9.2 installation CD
+./runmac.sh -C ppc/configs/ppc-macos91.conf -c "library/downloads/Power Mac G4 Install 9.2.toast" -b
+
+# 3. In the Mac OS installer:
+#    - Initialize drives with Drive Setup
+#    - Install Mac OS to the main drive
+#    - Restart when installation completes
+
+# 4. Boot from installed system
+./runmac.sh -C ppc/configs/ppc-macos91.conf
+```
+
+#### 68k Mac OS Installation (User-Provided Media)
+```bash
+# For 68k systems, provide your own Mac OS 7.x installation media
+# 1. Place your Mac OS 7.5.3 install CD at: /path/to/macos753_install.iso
 
 # 2. Boot from installation CD
 ./runmac.sh -C m68k/configs/m68k-macos753.conf -c /path/to/macos753_install.iso -b
@@ -58,36 +128,6 @@ For brand new VMs, you need to install an OS first:
 
 # 4. Boot normally from installed system
 ./runmac.sh -C m68k/configs/m68k-macos753.conf
-```
-
-#### PowerPC Mac OS Installation Example
-```bash
-# 1. Boot from Mac OS 9.1 installation CD
-./runmac.sh -C ppc/configs/ppc-macos91.conf -c /path/to/macos91_install.iso -b
-
-# 2. In the Mac OS installer:
-#    - Initialize drives with Drive Setup
-#    - Install Mac OS to the main drive
-#    - Restart when installation completes
-
-# 3. Boot from installed system (remove -b flag)
-./runmac.sh -C ppc/configs/ppc-macos91.conf
-# Or if you leave the CD mounted, just remove -b:
-./runmac.sh -C ppc/configs/ppc-macos91.conf -c /path/to/macos91_install.iso
-```
-
-### Mac OS X Installation Example
-```bash
-# Mac OS X requires more RAM and takes longer to install
-./runmac.sh -C ppc/configs/ppc-osxtiger104.conf -c /path/to/tiger_install.iso -b
-
-# Installation process:
-# 1. Boot from CD (will take several minutes)
-# 2. Use Disk Utility to format the drive as Mac OS Extended (HFS+)
-# 3. Install Mac OS X (can take 30+ minutes)
-# 4. Complete setup assistant
-# 5. Shutdown and boot normally:
-./runmac.sh -C ppc/configs/ppc-osxtiger104.conf
 ```
 
 ## Using the Software Library

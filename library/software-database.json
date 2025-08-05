@@ -74,13 +74,13 @@
       "nice_filename": "MacOSXLeopard10.5.iso"
     },
     "macos922": {
-      "name": "Mac OS 9.2",
-      "description": "Mac OS 9.2 for G4 Power Mac",
+      "name": "Mac OS 9.2.2",
+      "description": "Mac OS 9.2.2",
       "category": "Operating Systems",
       "architectures": ["ppc"],
-      "url": "https://download.macintoshgarden.org/apps/Power_Mac_G4_Install_9.2.toast_.zip",
-      "filename": "Power Mac G4 Install 9.2.toast",
-      "md5": ""
+      "url": "http://files.macos9lives.com/MacOS%20Operating%20Systems/Mac%20OS%209.2.2%20Universal%20Install/MacOS%20922%20Universal.iso",
+      "filename": "MacOS 922 Universal.iso",
+      "md5": "2d83af9f8d15ce622c6ae73ab86c27dd"
     }
   },
   "roms": {
