@@ -471,9 +471,34 @@ install_qemu_dependencies() {
         install_qemu_ubuntu_dependencies
         build_qemu_from_source
         
+    elif command -v zypper &> /dev/null; then
+        echo "Detected SUSE/openSUSE system (zypper)"
+        install_qemu_suse_dependencies
+        build_qemu_from_source
+        
+    elif command -v pacman &> /dev/null; then
+        echo "Detected Arch Linux system (pacman)"
+        install_qemu_arch_dependencies
+        build_qemu_from_source
+        
+    elif command -v apk &> /dev/null; then
+        echo "Detected Alpine Linux system (apk)"
+        install_qemu_alpine_dependencies
+        build_qemu_from_source
+        
     elif command -v brew &> /dev/null; then
         echo "Detected macOS system (Homebrew)"
         install_qemu_macos_dependencies
+        build_qemu_from_source_macos
+        
+    elif command -v port &> /dev/null; then
+        echo "Detected macOS system (MacPorts)"
+        install_qemu_macports_dependencies
+        build_qemu_from_source_macos
+        
+    elif command -v fink &> /dev/null; then
+        echo "Detected macOS system (Fink)"
+        install_qemu_fink_dependencies
         build_qemu_from_source_macos
         
     elif command -v dnf &> /dev/null; then
@@ -484,7 +509,10 @@ install_qemu_dependencies() {
     else
         echo "Error: Unsupported system. Currently supported:" >&2
         echo "  - Debian/Ubuntu (apt-get)" >&2
-        echo "  - macOS (Homebrew)" >&2
+        echo "  - SUSE/openSUSE (zypper)" >&2
+        echo "  - Arch Linux (pacman)" >&2
+        echo "  - Alpine Linux (apk)" >&2
+        echo "  - macOS (Homebrew/MacPorts/Fink)" >&2
         echo "  - Fedora/RHEL (dnf)" >&2
         return 1
     fi
@@ -526,6 +554,7 @@ install_qemu_ubuntu_dependencies() {
         "libsdl2-dev" "libseccomp-dev" "libsnappy-dev" "libssh-dev" 
         "libvde-dev" "libvdeplug-dev" "libvte-2.91-dev" "libxen-dev" 
         "liblzo2-dev" "valgrind" "xfslibs-dev" "libnfs-dev" "libiscsi-dev"
+        "libffi-dev" "gettext" "meson"
     )
     
     local core_packages=(
@@ -554,7 +583,25 @@ install_qemu_ubuntu_dependencies() {
 #   1 if installation fails
 #######################################
 install_qemu_macos_dependencies() {
-    echo "Step 1: Installing build dependencies via Homebrew..."
+    echo "Step 1: Checking macOS environment..."
+    
+    # Check macOS version for HVF acceleration support
+    local macos_version=$(sw_vers -productVersion)
+    local macos_major=$(echo "$macos_version" | cut -d. -f1)
+    local macos_minor=$(echo "$macos_version" | cut -d. -f2)
+    
+    echo "Detected macOS $macos_version"
+    
+    # Check compiler preference (Clang recommended)
+    if command -v clang &> /dev/null; then
+        local clang_version=$(clang --version | head -1)
+        echo "✓ Clang compiler found: $clang_version"
+    else
+        echo "⚠️  Clang compiler not found - consider installing Xcode Command Line Tools"
+    fi
+    
+    echo ""
+    echo "Step 2: Installing build dependencies via Homebrew..."
     
     # Remove existing QEMU if installed via Homebrew
     if brew list qemu &> /dev/null; then
@@ -572,6 +619,96 @@ install_qemu_macos_dependencies() {
             echo "Installing $package..."
             brew install "$package" || {
                 echo "Error: Failed to install $package via Homebrew" >&2
+                return 1
+            }
+        else
+            echo "✓ $package already installed"
+        fi
+    done
+    
+    echo "✓ Build dependencies installed"
+    echo ""
+    
+    # Performance recommendations
+    if [ "$macos_major" -gt 10 ] || ([ "$macos_major" -eq 10 ] && [ "$macos_minor" -ge 10 ]); then
+        echo "📝 Performance Note:"
+        echo "  - Your macOS version supports HVF acceleration"
+        echo "  - For Intel Mac guests on Intel hosts, consider using '-accel hvf' for near-native speed"
+        echo ""
+    fi
+}
+
+#######################################
+# Install QEMU build dependencies on macOS with MacPorts
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_macports_dependencies() {
+    echo "Step 1: Installing build dependencies via MacPorts..."
+    
+    # Remove existing QEMU if installed via MacPorts
+    if port installed | grep -q "qemu "; then
+        echo "Removing existing MacPorts QEMU package..."
+        sudo port uninstall qemu || true
+    fi
+    
+    local build_packages=(
+        "libffi" "gettext" "glib2" "pkgconfig" "libpixman" "ninja" "meson"
+        "git" "jq"
+    )
+    
+    for package in "${build_packages[@]}"; do
+        if ! port installed | grep -q "^  $package "; then
+            echo "Installing $package..."
+            sudo port install "$package" || {
+                echo "Error: Failed to install $package via MacPorts" >&2
+                return 1
+            }
+        else
+            echo "✓ $package already installed"
+        fi
+    done
+    
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on macOS with Fink
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_fink_dependencies() {
+    echo "Step 1: Installing build dependencies via Fink..."
+    
+    # Remove existing QEMU if installed via Fink
+    if fink list -i | grep -q "qemu"; then
+        echo "Removing existing Fink QEMU package..."
+        fink remove qemu || true
+    fi
+    
+    local build_packages=(
+        "libffi6-dev" "gettext-dev" "glib2-dev" "pkgconfig" "pixman" "ninja" "meson"
+        "git" "jq"
+    )
+    
+    for package in "${build_packages[@]}"; do
+        if ! fink list -i | grep -q "^i.*$package"; then
+            echo "Installing $package..."
+            fink install "$package" || {
+                echo "Error: Failed to install $package via Fink" >&2
                 return 1
             }
         else
@@ -610,9 +747,121 @@ install_qemu_fedora_dependencies() {
         "libcurl-devel" "gtk3-devel" "libjpeg-turbo-devel" 
         "ncurses-devel" "numactl-devel" "libseccomp-devel" 
         "snappy-devel" "libssh-devel" "lzo-devel" "jq" "hfsprogs"
+        "libffi-devel" "gettext-devel" "meson"
     )
     
     sudo dnf install -y "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on SUSE/openSUSE
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_suse_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo zypper remove -y qemu qemu-tools qemu-x86 qemu-ppc qemu-arm 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "gcc-c++" "pkg-config" "glib2-devel" 
+        "libfdt1-devel" "libpixman-1-0-devel" "zlib-devel" "ninja"
+        "libslirp-devel" "libcap-ng-devel" "libattr-devel" 
+        "libopenssl-devel" "python3-Sphinx" "libaio-devel" 
+        "bluez-devel" "libbz2-devel" "libcap-devel" 
+        "libcurl-devel" "gtk3-devel" "libjpeg8-devel" 
+        "ncurses-devel" "libnuma-devel" "libseccomp-devel" 
+        "snappy-devel" "libssh-devel" "lzo-devel" "jq"
+        "libffi-devel" "gettext-devel" "meson"
+        "coreutils" "util-linux"
+    )
+    
+    sudo zypper install -y "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on Arch Linux
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_arch_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo pacman -Rns --noconfirm qemu qemu-arch-extra 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "pkg-config" "glib2" 
+        "dtc" "pixman" "zlib" "ninja"
+        "libslirp" "libcap-ng" "attr" 
+        "openssl" "python-sphinx" "libaio" 
+        "bluez-libs" "bzip2" "libcap" 
+        "curl" "gtk3" "libjpeg-turbo" 
+        "ncurses" "numactl" "libseccomp" 
+        "snappy" "libssh" "lzo" "jq"
+        "libffi" "gettext" "meson"
+        "coreutils" "util-linux"
+    )
+    
+    sudo pacman -S --noconfirm "${build_packages[@]}"
+    check_exit_status $? "Failed to install build dependencies"
+    echo "✓ Build dependencies installed"
+    echo ""
+}
+
+#######################################
+# Install QEMU build dependencies on Alpine Linux
+# Arguments:
+#   None
+# Globals:
+#   None
+# Returns:
+#   None
+# Exits:
+#   1 if installation fails
+#######################################
+install_qemu_alpine_dependencies() {
+    echo "Step 1: Removing any existing QEMU packages..."
+    sudo apk del qemu qemu-img qemu-system-x86_64 qemu-system-ppc 2>/dev/null || true
+    echo "✓ Existing QEMU packages removed"
+    echo ""
+    
+    echo "Step 2: Installing build dependencies..."
+    local build_packages=(
+        "git" "make" "gcc" "g++" "pkgconfig" "glib-dev" 
+        "dtc-dev" "pixman-dev" "zlib-dev" "samurai"
+        "libslirp-dev" "libcap-ng-dev" "attr-dev" 
+        "openssl-dev" "py3-sphinx" "libaio-dev" 
+        "bluez-dev" "bzip2-dev" "libcap-dev" 
+        "curl-dev" "gtk+3.0-dev" "jpeg-dev" 
+        "ncurses-dev" "numactl-dev" "libseccomp-dev" 
+        "snappy-dev" "libssh-dev" "lzo-dev" "jq"
+        "libffi-dev" "gettext-dev" "meson"
+        "coreutils" "util-linux"
+    )
+    
+    sudo apk add "${build_packages[@]}"
     check_exit_status $? "Failed to install build dependencies"
     echo "✓ Build dependencies installed"
     echo ""

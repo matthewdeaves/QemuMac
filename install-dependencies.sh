@@ -49,7 +49,10 @@ show_help() {
     echo ""
     echo "Supported Systems:"
     echo "  - Debian/Ubuntu     (apt package manager)"
-    echo "  - macOS             (Homebrew)"
+    echo "  - SUSE/openSUSE     (zypper package manager)"
+    echo "  - Arch Linux        (pacman package manager)"
+    echo "  - Alpine Linux      (apk package manager)"
+    echo "  - macOS             (Homebrew/MacPorts/Fink)"
     echo "  - Fedora/RHEL       (dnf package manager)"
     echo ""
     exit 1
@@ -69,11 +72,13 @@ check_dependencies() {
     local missing_count=0
     local deps_to_check=(
         "qemu-system-m68k:QEMU m68k emulation"
+        "qemu-system-ppc:QEMU PowerPC emulation"
         "qemu-img:QEMU utilities"
         "dd:Core utilities"
         "printf:Core utilities"
         "hexdump:BSD utilities"
         "jq:JSON processor (mac-library tool)"
+        "meson:Build system"
     )
     
     
