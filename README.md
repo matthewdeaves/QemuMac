@@ -1,6 +1,6 @@
 # QemuMac - Classic Macintosh Emulation
 
-A comprehensive dual-architecture emulation system for classic Macintosh computers using QEMU. Supports both Motorola 68k (Mac OS 7.x-8.x) and PowerPC (Mac OS 9.x/X) systems with an integrated software library for easy access to classic Mac software.
+A comprehensive dual-architecture emulation system for classic Macintosh computers using QEMU. Supports both Motorola 68k (Mac OS 7.x-8.x) and PowerPC (Mac OS 9.x and Mac OS X) systems with an integrated software library for easy access to classic Mac software.
 
 **Tested Platform**: Ubuntu Linux (primary development and testing platform)
 
@@ -335,35 +335,3 @@ QemuMac/
 ├── ppc/                       # PowerPC configs and disk images  
 └── scripts/                   # Utility scripts
 ```
-
-## System Requirements
-
-**Host System**: 
-- Ubuntu Linux (tested platform)
-- 4GB+ RAM (8GB+ recommended for Mac OS X)
-- SSD storage recommended
-- x86_64 processor
-
-**Guest Systems**:
-- 68k: 32MB-256MB RAM
-- PowerPC: 256MB-2GB RAM
-- 1GB+ disk space per guest OS
-
-## Legal Notes
-
-- You must provide your own ROM files and software
-- All software must be legally obtained
-- This project provides emulation tools only, not copyrighted content
-- Respect software licensing and copyright laws
-
-## Contributing
-
-- Test on other Linux distributions
-- Add new software to `library/software-database.json`
-- Create new optimized configurations
-- Report issues and improvements
-- Documentation improvements welcome
-
----
-
-**Status**: Active development | **Tested on**: Ubuntu Linux | **License**: Check individual components
