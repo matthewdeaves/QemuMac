@@ -150,6 +150,29 @@ Configuration files support extensive performance tuning:
 - **TCG Threading**: `multi` (faster) vs `single` (stable)
 - **Memory Backends**: Standard RAM vs file-backed debugging
 
+## Claude Code Development Instructions
+
+### Changelog Management
+**IMPORTANT**: Maintain a `CHANGELOG.md` file in the project root to log important changes and decisions. Keep entries brief but informative:
+- Log significant feature additions, architectural changes, and important bug fixes
+- Include the reasoning behind major decisions
+- Format: `YYYY-MM-DD - Brief description of change and why it was made`
+- Focus on changes that affect users or developers, not minor code cleanup
+
+### Documentation Maintenance  
+**IMPORTANT**: Keep all `CLAUDE.md` files across the project up to date as changes are made:
+- Update relevant CLAUDE.md files when modifying functionality in that directory
+- Reflect architectural changes in the main CLAUDE.md file
+- Update configuration documentation when adding new parameters or options
+- Keep the "Improvements That Could Be Made" sections current and actionable
+
+### Development Philosophy
+**IMPORTANT**: Do not worry about backwards compatibility for existing installations or old file structures:
+- Feel free to refactor configurations, file layouts, and directory structures for improvement
+- Breaking changes to enhance the codebase are acceptable and encouraged
+- Focus on creating the best possible system rather than maintaining legacy support
+- Users can recreate installations if needed for major improvements
+
 ## Common Issues and Solutions
 
 ### Missing Dependencies
