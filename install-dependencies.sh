@@ -1,210 +1,267 @@
 #!/usr/bin/env bash
 
 #######################################
-# QEMU Mac Emulation Dependency Installer
-# Installs all required dependencies for QEMU m68k Mac emulation
-# Supports multiple package managers: apt, brew, dnf
+# Simplified QEMU Mac Dependency Installer
+# Supports Ubuntu/Debian and macOS only
+# Based on official QEMU wiki instructions
 #######################################
 
-set -euo pipefail
+set -eo pipefail
 
-# Source shared utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/qemu-utils.sh
-source "$SCRIPT_DIR/scripts/qemu-utils.sh"
-
-#######################################
-# Display help information
-# Arguments:
-#   None
-# Returns:
-#   None
-# Exits:
-#   1 (help display always exits)
-#######################################
 show_help() {
-    echo "QEMU Mac Emulation Dependency Installer"
+    echo "Simplified QEMU Mac Dependency Installer"
     echo ""
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  -h, --help     Show this help message"
-    echo "  -c, --check    Check dependencies without installing"
-    echo "  -f, --force    Force installation even if dependencies exist"
+    echo "  -h, --help     Show this help"
+    echo "  -c, --check    Check dependencies only"
     echo ""
-    echo "This script installs all dependencies required for QEMU Mac emulation:"
-    echo "QEMU is built from the latest source for optimal Mac emulation compatibility."
+    echo "Supported platforms:"
+    echo "  - Ubuntu/Debian (using apt)"
+    echo "  - macOS (using Homebrew)"
     echo ""
-    echo "Core Dependencies:"
-    echo "  - qemu-system-m68k  (QEMU m68k emulation - built from source)"
-    echo "  - qemu-system-ppc   (QEMU PowerPC emulation - built from source)"
-    echo "  - qemu-utils        (QEMU utilities - built from source)"
-    echo "  - coreutils         (Core system utilities)"
-    echo "  - bsdmainutils      (BSD utilities like hexdump)"
-    echo "  - jq                (JSON processor for mac-library tool)"
-    echo ""
-    echo "Filesystem Dependencies:"
-    echo "  - hfsprogs          (HFS+ filesystem support)"
-    echo "  - hfsplus           (Additional HFS+ tools)"
-    echo ""
-    echo "Supported Systems:"
-    echo "  - Debian/Ubuntu     (apt package manager)"
-    echo "  - SUSE/openSUSE     (zypper package manager)"
-    echo "  - Arch Linux        (pacman package manager)"
-    echo "  - Alpine Linux      (apk package manager)"
-    echo "  - macOS             (Homebrew/MacPorts/Fink)"
-    echo "  - Fedora/RHEL       (dnf package manager)"
-    echo ""
-    exit 1
+    echo "This script:"
+    echo "  1. Installs build dependencies"
+    echo "  2. Optionally builds QEMU from source"
+    echo "  3. Installs HFS+ tools for Mac disk support"
 }
 
 #######################################
-# Check all dependencies and report status
-# Arguments:
-#   None
-# Returns:
-#   0 if all dependencies present, 1 if any missing
+# Detect platform
 #######################################
-check_dependencies() {
-    echo "Checking QEMU Mac emulation dependencies..."
-    echo ""
+detect_platform() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "macos"
+    elif [[ -f /etc/debian_version ]] || command -v apt-get &> /dev/null; then
+        echo "ubuntu"
+    else
+        echo "unsupported"
+    fi
+}
+
+#######################################
+# Check if QEMU is already installed
+#######################################
+check_qemu() {
+    local missing=()
     
-    local missing_count=0
-    local deps_to_check=(
-        "qemu-system-m68k:QEMU m68k emulation"
-        "qemu-system-ppc:QEMU PowerPC emulation"
-        "qemu-img:QEMU utilities"
-        "dd:Core utilities"
-        "printf:Core utilities"
-        "hexdump:BSD utilities"
-        "jq:JSON processor (mac-library tool)"
-        "meson:Build system"
-    )
-    
-    
-    echo "Core Dependencies:"
-    for dep_info in "${deps_to_check[@]}"; do
-        IFS=':' read -r cmd desc <<< "$dep_info"
-        if command -v "$cmd" &> /dev/null; then
-            echo "  ✅ $cmd ($desc)"
-        else
-            echo "  ❌ $cmd ($desc) - MISSING"
-            ((missing_count++))
-        fi
-    done
-    
-    echo ""
-    echo "Filesystem Dependencies:"
-    local fs_tools=("fsck.hfs:HFS filesystem check" "fsck.hfsplus:HFS+ filesystem check")
-    for dep_info in "${fs_tools[@]}"; do
-        IFS=':' read -r cmd desc <<< "$dep_info"
-        if command -v "$cmd" &> /dev/null; then
-            echo "  ✅ $cmd ($desc)"
-        else
-            echo "  ⚠️  $cmd ($desc) - missing (optional for shared disk repair)"
-        fi
-    done
-    
-    echo ""
-    
-    # Platform-specific notes
-    if [[ "$(uname)" == "Darwin" ]]; then
-        echo "📝 Networking Notes:"
-        echo "  - User-mode networking is used by default (no additional setup required)."
-        echo ""
+    if ! command -v qemu-system-m68k &> /dev/null; then
+        missing+=("qemu-system-m68k")
     fi
     
-    if [ $missing_count -eq 0 ]; then
-        echo "✅ All core dependencies are installed!"
-        echo "You can run QEMU Mac emulation with user-mode networking."
-        echo "QEMU version information:"
-        if command -v qemu-system-m68k &> /dev/null; then
-            qemu-system-m68k --version | head -1
-        fi
+    if ! command -v qemu-system-ppc &> /dev/null; then
+        missing+=("qemu-system-ppc")
+    fi
+    
+    if ! command -v qemu-img &> /dev/null; then
+        missing+=("qemu-img")
+    fi
+    
+    if [ ${#missing[@]} -eq 0 ]; then
+        echo "✓ QEMU is already installed"
+        qemu-system-m68k --version | head -1
+        qemu-system-ppc --version | head -1
         return 0
     else
-        echo "❌ $missing_count core dependencies are missing."
-        echo "Run '$0' without arguments to build and install QEMU from source."
+        echo "Missing QEMU components: ${missing[*]}"
         return 1
     fi
 }
 
 #######################################
+# Install Ubuntu dependencies and QEMU
+#######################################
+install_ubuntu() {
+    echo "Installing Ubuntu dependencies..."
+    
+    # Install basic dependencies from QEMU wiki
+    local deps=(
+        "git"
+        "libglib2.0-dev"
+        "libfdt-dev" 
+        "libpixman-1-dev"
+        "zlib1g-dev"
+        "ninja-build"
+        "build-essential"
+        "pkg-config"
+        "libsdl2-dev"
+        "libgtk-3-dev"
+        "jq"
+    )
+    
+    echo "Installing build dependencies..."
+    sudo apt-get update
+    sudo apt-get install -y "${deps[@]}"
+    
+    # Install HFS+ tools if available
+    echo "Installing HFS+ filesystem support..."
+    sudo apt-get install -y hfsprogs hfsplus || echo "Warning: Some HFS+ tools not available"
+    
+    echo "✓ Ubuntu dependencies installed"
+}
+
+#######################################
+# Install macOS dependencies and QEMU  
+#######################################
+install_macos() {
+    echo "Installing macOS dependencies..."
+    
+    if ! command -v brew &> /dev/null; then
+        echo "Error: Homebrew not found. Please install Homebrew first:" >&2
+        echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"" >&2
+        exit 1
+    fi
+    
+    # Install basic dependencies from QEMU wiki
+    local deps=(
+        "libffi"
+        "gettext"
+        "glib"
+        "pkg-config"
+        "pixman"
+        "ninja"
+        "meson"
+        "git"
+        "jq"
+    )
+    
+    echo "Installing build dependencies via Homebrew..."
+    for dep in "${deps[@]}"; do
+        if ! brew list "$dep" &> /dev/null; then
+            echo "Installing $dep..."
+            brew install "$dep"
+        else
+            echo "✓ $dep already installed"
+        fi
+    done
+    
+    echo "✓ macOS dependencies installed"
+}
+
+#######################################
+# Build QEMU from source
+#######################################
+build_qemu_from_source() {
+    echo ""
+    echo "=== Build QEMU from source ==="
+    echo "This builds the latest QEMU with m68k and PowerPC support"
+    echo ""
+    
+    read -p "Do you want to build QEMU from source? (y/N): " -r
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Skipping QEMU source build"
+        return 0
+    fi
+    
+    echo "Cloning QEMU source..."
+    if [ -d "qemu" ]; then
+        rm -rf qemu
+    fi
+    
+    git clone https://gitlab.com/qemu-project/qemu.git
+    cd qemu
+    
+    echo "Configuring QEMU build..."
+    ./configure --target-list=m68k-softmmu,ppc-softmmu --enable-slirp
+    
+    echo "Building QEMU (this may take 15-30+ minutes)..."
+    local cpu_count
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        cpu_count=$(sysctl -n hw.ncpu)
+    else
+        cpu_count=$(nproc)
+    fi
+    
+    echo "Using $cpu_count CPU cores for compilation..."
+    make -j"$cpu_count"
+    
+    echo "Installing QEMU..."
+    sudo make install
+    
+    cd ..
+    rm -rf qemu
+    
+    echo "✓ QEMU built and installed successfully"
+    echo "QEMU installed to: /usr/local/bin/"
+    echo ""
+    
+    echo "Verifying installation..."
+    qemu-system-m68k --version | head -1
+    qemu-system-ppc --version | head -1
+}
+
+#######################################
 # Main function
-# Arguments:
-#   All command line arguments
-# Returns:
-#   None
 #######################################
 main() {
     local check_only=false
-    local force_install=false
     
     # Parse arguments
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case $1 in
-            -h|--help)
-                show_help
-                ;;
-            -c|--check)
-                check_only=true
-                shift
-                ;;
-            -f|--force)
-                force_install=true
-                shift
-                ;;
-            *)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Use '$0 --help' for usage information." >&2
-                exit 1
-                ;;
+            -h|--help) show_help; exit 0 ;;
+            -c|--check) check_only=true ;;
+            *) echo "Unknown option: $1" >&2; show_help; exit 1 ;;
         esac
+        shift
     done
     
-    # Just check dependencies if requested
-    if [ "$check_only" = true ]; then
-        check_dependencies
-        exit $?
-    fi
-    
-    # Check if installation is needed
-    if [ "$force_install" = false ]; then
-        if check_dependencies; then
-            echo ""
-            echo "All dependencies are already installed. Use --force to reinstall."
-            exit 0
-        fi
-        echo ""
-    fi
-    
-    # Install dependencies
-    echo "Starting dependency installation..."
-    echo ""
-    install_qemu_dependencies
-    
-    echo ""
-    echo "Installation completed! Verifying dependencies..."
+    echo "Simplified QEMU Mac Dependency Installer"
     echo ""
     
-    # Verify installation
-    if check_dependencies; then
-        echo ""
-        echo "🎉 QEMU source build and installation successful!"
-        echo ""
-        echo "Installed QEMU version:"
-        qemu-system-m68k --version | head -1
-        echo ""
-        echo "You can now run QEMU Mac emulation:"
-        echo "  ./runmac.sh -C m68k/configs/m68k-macos753.conf      # Mac OS 7.5.3 with user-mode networking"
-        echo "  ./runmac.sh -C ppc/configs/ppc-macos91.conf        # Mac OS 9.1 with user-mode networking"
-    else
-        echo ""
-        echo "⚠️  Some dependencies may not have installed correctly."
-        echo "Please check the output above and install missing packages manually."
+    # Detect platform
+    local platform
+    platform=$(detect_platform)
+    echo "Detected platform: $platform"
+    
+    if [ "$platform" = "unsupported" ]; then
+        echo "Error: Unsupported platform" >&2
+        echo "This script only supports Ubuntu/Debian and macOS" >&2
         exit 1
     fi
+    
+    # Check existing QEMU installation
+    if check_qemu; then
+        if [ "$check_only" = true ]; then
+            echo "✓ All dependencies satisfied"
+            exit 0
+        fi
+        
+        echo ""
+        read -p "QEMU is already installed. Continue anyway? (y/N): " -r
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Installation cancelled"
+            exit 0
+        fi
+    fi
+    
+    if [ "$check_only" = true ]; then
+        echo "❌ Some dependencies are missing"
+        echo "Run without -c/--check to install them"
+        exit 1
+    fi
+    
+    # Install platform-specific dependencies
+    case $platform in
+        ubuntu)
+            install_ubuntu
+            build_qemu_from_source
+            ;;
+        macos)
+            install_macos
+            build_qemu_from_source
+            ;;
+    esac
+    
+    echo ""
+    echo "=== Installation Complete ==="
+    echo "✓ Dependencies installed"
+    echo "✓ QEMU built from source"
+    echo ""
+    echo "You can now run Mac emulation:"
+    echo "  ./runmac.sh -C m68k/configs/m68k-macos753.conf"
+    echo "  ./runmac.sh -C ppc/configs/ppc-macos91.conf"
 }
 
-# Entry point
 main "$@"
