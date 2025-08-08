@@ -105,24 +105,12 @@ load_config() {
     echo "Architecture: $ARCH"
 }
 
+declare -a qemu_cmd_array
+
 #######################################
 # Check dependencies
 #######################################
 check_dependencies() {
-    local qemu_binary=""
-    
-    if [ "$ARCH" = "m68k" ]; then
-        qemu_binary="qemu-system-m68k"
-    else
-        qemu_binary="qemu-system-ppc"
-    fi
-    
-    if ! command -v "$qemu_binary" &> /dev/null; then
-        echo "Error: $qemu_binary not found" >&2
-        echo "Please install QEMU or run ./install-dependencies.sh" >&2
-        exit 1
-    fi
-    
     # Check ROM file for 68k
     if [ "$ARCH" = "m68k" ] && [ ! -f "$QEMU_ROM" ]; then
         echo "Error: ROM file not found: $QEMU_ROM" >&2
@@ -185,22 +173,24 @@ create_missing_images() {
 # Build QEMU command for 68k
 #######################################
 build_68k_command() {
-    local cmd=("qemu-system-m68k")
     local display
     display="$(determine_display)"
     
-    cmd+=("-M" "$QEMU_MACHINE")
-    cmd+=("-m" "$QEMU_RAM")
-    cmd+=("-bios" "$QEMU_ROM")
+    qemu_cmd_array=("qemu-system-m68k"
+        "-M" "$QEMU_MACHINE"
+        "-m" "$QEMU_RAM"
+        "-bios" "$QEMU_ROM")
+
     # PRAM file (simpler approach)
     if [ -n "$QEMU_PRAM" ]; then
-        cmd+=("-drive" "file=$QEMU_PRAM,format=raw,if=none,id=pram")
-        cmd+=("-global" "q800-machine.pram=pram")
+        qemu_cmd_array+=("-drive" "file=$QEMU_PRAM,format=raw,if=none,id=pram")
+        qemu_cmd_array+=("-global" "q800-machine.pram=pram")
     fi
-    cmd+=("-display" "$display")
-    cmd+=("-netdev" "user,id=net0")
 
-    cmd+=(
+    qemu_cmd_array+=("-display" "$display")
+    qemu_cmd_array+=("-netdev" "user,id=net0")
+
+    qemu_cmd_array+=(
         "-net"
         "nic,model=$QEMU_NETWORK_DEVICE"
         "-net"
@@ -209,37 +199,87 @@ build_68k_command() {
     
     # Graphics
     if [ -n "$QEMU_GRAPHICS" ]; then
-        cmd+=("-g" "$QEMU_GRAPHICS")
+        qemu_cmd_array+=("-g" "$QEMU_GRAPHICS")
     fi
     
     # Storage setup
     if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
         # Boot from CD: CD gets SCSI ID 6, HDD gets ID 5
-        cmd+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=scsi,bus=0,unit=6")
+        qemu_cmd_array+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=scsi,bus=0,unit=6")
         if [ -n "$QEMU_HDD" ]; then
-            cmd+=("-drive" "file=$QEMU_HDD,format=raw,if=scsi,bus=0,unit=5")
+            qemu_cmd_array+=("-drive" "file=$QEMU_HDD,format=raw,if=scsi,bus=0,unit=5")
         fi
     else
         # Normal boot: HDD gets SCSI ID 6
         if [ -n "$QEMU_HDD" ]; then
-            cmd+=("-drive" "file=$QEMU_HDD,format=raw,if=scsi,bus=0,unit=6")
+            qemu_cmd_array+=("-drive" "file=$QEMU_HDD,format=raw,if=scsi,bus=0,unit=6")
         fi
         if [ -n "$CD_FILE" ]; then
-            cmd+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=scsi,bus=0,unit=3")
+            qemu_cmd_array+=("-drive" "file=$CD_FILE,format=raw,media=cdrom,if=scsi,bus=0,unit=3")
         fi
     fi
     
     # Shared drive
     if [ -n "$QEMU_SHARED_HDD" ]; then
-        cmd+=("-drive" "file=$QEMU_SHARED_HDD,format=raw,if=scsi,bus=0,unit=4")
+        qemu_cmd_array+=("-drive" "file=$QEMU_SHARED_HDD,format=raw,if=scsi,bus=0,unit=4")
     fi
     
     # Additional HDD
     if [ -n "$ADDITIONAL_HDD_FILE" ]; then
-        cmd+=("-drive" "file=$ADDITIONAL_HDD_FILE,format=raw,if=scsi,bus=0,unit=2")
+        qemu_cmd_array+=("-drive" "file=$ADDITIONAL_HDD_FILE,format=raw,if=scsi,bus=0,unit=2")
+    fi
+}
+
+#######################################
+# Build QEMU command for PowerPC
+#######################################
+build_ppc_command() {
+    local display
+    display="$(determine_display)"
+    
+    qemu_cmd_array=("qemu-system-ppc"
+        "-M" "$QEMU_MACHINE"
+        "-m" "$QEMU_RAM"
+        "-display" "$display"
+        "-netdev" "user,id=net0"
+        "-device" "rtl8139,netdev=net0")
+    
+    # Graphics
+    if [ -n "$QEMU_GRAPHICS" ]; then
+        local res="${QEMU_GRAPHICS%x*}"  # Extract resolution
+        local width="${res%x*}"
+        local height="${res#*x}"
+        qemu_cmd_array+=("-device" "VGA,xres=$width,yres=$height")
     fi
     
-    echo "${cmd[@]}"
+    # Storage setup
+    if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
+        # Boot from CD
+        qemu_cmd_array+=("-cdrom" "$CD_FILE")
+        qemu_cmd_array+=("-boot" "d")
+        if [ -n "$QEMU_HDD" ]; then
+            qemu_cmd_array+=("-drive" "file=$QEMU_HDD,format=raw,if=ide")
+        fi
+    else
+        # Normal boot from HDD
+        if [ -n "$QEMU_HDD" ]; then
+            qemu_cmd_array+=("-drive" "file=$QEMU_HDD,format=raw,if=ide")
+        fi
+        if [ -n "$CD_FILE" ]; then
+            qemu_cmd_array+=("-cdrom" "$CD_FILE")
+        fi
+        qemu_cmd_array+=("-boot" "c")
+    fi
+    
+    # Shared drive as second IDE drive
+    if [ -n "$QEMU_SHARED_HDD" ]; then
+        qemu_cmd_array+=("-drive" "file=$QEMU_SHARED_HDD,format=raw,if=ide,index=1")
+    fi
+    
+    # Additional HDD
+    if [ -n "$ADDITIONAL_HDD_FILE" ]; then
+        qemu_cmd_array+=("-drive" "file=$ADDITIONAL_HDD_FILE,format=raw,if=ide,index=2")
+    fi
 }
 
 #######################################
@@ -296,6 +336,7 @@ build_ppc_command() {
     echo "${cmd[@]}"
 }
 
+
 #######################################
 # Main execution
 #######################################
@@ -318,15 +359,14 @@ main() {
     fi
     
     # Build and execute command based on architecture
-    local qemu_cmd
     if [ "$ARCH" = "m68k" ]; then
-        qemu_cmd="$(build_68k_command)"
+        build_68k_command
     else
-        qemu_cmd="$(build_ppc_command)"
+        build_ppc_command
     fi
     
-    echo "Executing: $qemu_cmd"
-    eval "$qemu_cmd"
+    echo "Executing: ${qemu_cmd_array[@]}"
+    "${qemu_cmd_array[@]}"
 }
 
 # Run main function with all arguments

@@ -41,35 +41,6 @@ detect_platform() {
 }
 
 #######################################
-# Check if QEMU is already installed
-#######################################
-check_qemu() {
-    local missing=()
-    
-    if ! command -v qemu-system-m68k &> /dev/null; then
-        missing+=("qemu-system-m68k")
-    fi
-    
-    if ! command -v qemu-system-ppc &> /dev/null; then
-        missing+=("qemu-system-ppc")
-    fi
-    
-    if ! command -v qemu-img &> /dev/null; then
-        missing+=("qemu-img")
-    fi
-    
-    if [ ${#missing[@]} -eq 0 ]; then
-        echo "✓ QEMU is already installed"
-        qemu-system-m68k --version | head -1
-        qemu-system-ppc --version | head -1
-        return 0
-    else
-        echo "Missing QEMU components: ${missing[*]}"
-        return 1
-    fi
-}
-
-#######################################
 # Install Ubuntu dependencies and QEMU
 #######################################
 install_ubuntu() {
@@ -222,23 +193,8 @@ main() {
     fi
     
     # Check existing QEMU installation
-    if check_qemu; then
-        if [ "$check_only" = true ]; then
-            echo "✓ All dependencies satisfied"
-            exit 0
-        fi
-        
-        echo ""
-        read -p "QEMU is already installed. Continue anyway? (y/N): " -r
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Installation cancelled"
-            exit 0
-        fi
-    fi
-    
     if [ "$check_only" = true ]; then
-        echo "❌ Some dependencies are missing"
-        echo "Run without -c/--check to install them"
+        echo "check not supported"
         exit 1
     fi
     
