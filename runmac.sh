@@ -181,10 +181,9 @@ build_68k_command() {
         "-m" "$QEMU_RAM"
         "-bios" "$QEMU_ROM")
 
-    # PRAM file (simpler approach)
+    # PRAM file (MTD interface approach)
     if [ -n "$QEMU_PRAM" ]; then
-        qemu_cmd_array+=("-drive" "file=$QEMU_PRAM,format=raw,if=none,id=pram")
-        qemu_cmd_array+=("-global" "q800-machine.pram=pram")
+        qemu_cmd_array+=("-drive" "file=$QEMU_PRAM,format=raw,if=mtd")
     fi
 
     qemu_cmd_array+=("-display" "$display")
@@ -282,59 +281,7 @@ build_ppc_command() {
     fi
 }
 
-#######################################
-# Build QEMU command for PowerPC
-#######################################
-build_ppc_command() {
-    local cmd=("qemu-system-ppc")
-    local display
-    display="$(determine_display)"
-    
-    cmd+=("-M" "$QEMU_MACHINE")
-    cmd+=("-m" "$QEMU_RAM")
-    cmd+=("-display" "$display")
-    cmd+=("-netdev" "user,id=net0")
-    cmd+=("-device" "rtl8139,netdev=net0")
-    
-    # Graphics
-    if [ -n "$QEMU_GRAPHICS" ]; then
-        local res="${QEMU_GRAPHICS%x*}"  # Extract resolution
-        local width="${res%x*}"
-        local height="${res#*x}"
-        cmd+=("-device" "VGA,xres=$width,yres=$height")
-    fi
-    
-    # Storage setup
-    if [ "$BOOT_FROM_CD" = true ] && [ -n "$CD_FILE" ]; then
-        # Boot from CD
-        cmd+=("-cdrom" "$CD_FILE")
-        cmd+=("-boot" "d")
-        if [ -n "$QEMU_HDD" ]; then
-            cmd+=("-drive" "file=$QEMU_HDD,format=raw,if=ide")
-        fi
-    else
-        # Normal boot from HDD
-        if [ -n "$QEMU_HDD" ]; then
-            cmd+=("-drive" "file=$QEMU_HDD,format=raw,if=ide")
-        fi
-        if [ -n "$CD_FILE" ]; then
-            cmd+=("-cdrom" "$CD_FILE")
-        fi
-        cmd+=("-boot" "c")
-    fi
-    
-    # Shared drive as second IDE drive
-    if [ -n "$QEMU_SHARED_HDD" ]; then
-        cmd+=("-drive" "file=$QEMU_SHARED_HDD,format=raw,if=ide,index=1")
-    fi
-    
-    # Additional HDD
-    if [ -n "$ADDITIONAL_HDD_FILE" ]; then
-        cmd+=("-drive" "file=$ADDITIONAL_HDD_FILE,format=raw,if=ide,index=2")
-    fi
-    
-    echo "${cmd[@]}"
-}
+
 
 
 #######################################
@@ -365,7 +312,8 @@ main() {
         build_ppc_command
     fi
     
-    echo "Executing: ${qemu_cmd_array[@]}"
+    echo "Executing: "
+    echo "${qemu_cmd_array[@]}"
     "${qemu_cmd_array[@]}"
 }
 
