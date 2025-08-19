@@ -1,24 +1,6 @@
-# Library - track database but not downloads
-library/downloads/
-library/cache/
-
-# ROM files are user-provided and tracked
-800.ROM
-1.6.rom
-
-# Disk images are user data and not tracked
-m68k/images/
-ppc/images/
-710
-
-# QEMU source code directory (temporary build folder)
-qemu/
-
-# macOS system files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+*.qcow2
+vms/*/pram.img
+roms/800.ROM
+iso/custom-software.json
+qemu-source
+qemu_install
