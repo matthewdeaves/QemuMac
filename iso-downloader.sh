@@ -40,16 +40,24 @@ select_category() {
     
     local categories
     mapfile -t categories < <(echo "$software_db" | jq -r '(.cds, .roms) | .[] | .category // "Miscellaneous"' | sort -u)
-    categories+=("Quit")
     
-    PS3="${C_YELLOW}Choose a category: ${C_RESET}"
-    select category in "${categories[@]}"; do
-        case "$category" in
-            "Quit") info "Exiting"; exit 0 ;;
-            "") error "Invalid selection" ;;
-            *) echo "$category"; return ;;
-        esac
-    done
+    show_menu "Choose a category:" "${categories[@]}"
+}
+
+build_software_options() {
+    local software_db="$1"
+    local category="$2"
+    
+    # Define category matching filter for reusability
+    local category_filter='(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == "")))'
+    
+    # Get CDs matching the category
+    echo "$software_db" | jq -r --arg cat "$category" \
+        ".cds | to_entries[] | select($category_filter) | \"\(.key):\(.value.name):cd\""
+    
+    # Get ROMs matching the category  
+    echo "$software_db" | jq -r --arg cat "$category" \
+        ".roms | to_entries[] | select($category_filter) | \"\(.key):\(.value.name):rom\""
 }
 
 select_item() {
@@ -58,12 +66,11 @@ select_item() {
     
     header "Select an item to download"
     
-    local options
-    mapfile -t options < <(echo "$software_db" | jq -r --arg cat "$category" '
-        (.cds | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == "")))) as $cd | "\($cd.key):\($cd.value.name):cd",
-        (.roms | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == "")))) as $rom | "\($rom.key):\($rom.value.name):rom"
-    ' | sort)
-    options+=("Back to Categories" "Quit")
+    local options software_options
+    mapfile -t software_options < <(build_software_options "$software_db" "$category" | sort)
+    
+    # Build menu options with special items
+    options=("${software_options[@]}" "Back to Categories" "Quit")
     
     PS3="${C_YELLOW}Select the software you want to download: ${C_RESET}"
     select choice in "${options[@]}"; do

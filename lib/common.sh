@@ -48,3 +48,56 @@ file_exists() {
 dir_exists() {
     [[ -d "$1" ]]
 }
+
+# Menu utility functions for consistent user interaction
+
+# Basic menu with simple string options
+# Usage: selected=$(show_menu "Choose option:" option1 option2 option3)
+# Returns: selected option string, or exits on "Quit"
+show_menu() {
+    local prompt="$1"
+    shift
+    local options=("$@")
+    
+    # Always add Quit option if not present
+    local has_quit=false
+    for opt in "${options[@]}"; do
+        [[ "$opt" == "Quit" ]] && has_quit=true
+    done
+    [[ "$has_quit" == false ]] && options+=("Quit")
+    
+    PS3="${C_YELLOW}${prompt} ${C_RESET}"
+    select choice in "${options[@]}"; do
+        case "$choice" in
+            "Quit") info "Exiting"; exit 0 ;;
+            "") error "Invalid selection" ;;
+            *) echo "$choice"; return 0 ;;
+        esac
+    done
+}
+
+# Enhanced menu that returns index into source array  
+# Usage: idx=$(show_indexed_menu "Choose:" options_array source_array offset)
+# Returns: index into source_array, -2 for special first option, -1 for back, or exits on quit
+show_indexed_menu() {
+    local prompt="$1"
+    local -n options_ref="$2"
+    local -n source_array_ref="$3"
+    local offset="${4:-0}"
+    
+    PS3="${C_YELLOW}${prompt} ${C_RESET}"
+    select choice in "${options_ref[@]}"; do
+        case "$choice" in
+            "Quit") info "Exiting"; exit 0 ;;
+            "Back to Categories"|"Back") echo "-1"; return 0 ;;
+            "None"*) echo "-2"; return 0 ;;  # Special handling for "None" options
+            "") error "Invalid selection" ;;
+            *)
+                if [[ -n "$choice" ]]; then
+                    local index=$((REPLY - 1 - offset))
+                    echo "$index"; return 0
+                fi
+                ;;
+        esac
+    done
+}

@@ -37,18 +37,11 @@ main() {
         vm_options+=("$(basename "$(dirname "$conf_path")")")
     done
 
-    # Use the 'select' command to create an interactive menu for VMs.
-    PS3="${C_YELLOW}Choose a VM: ${C_RESET}"
-    select vm_choice in "${vm_options[@]}"; do
-        if [[ -n "$vm_choice" ]]; then
-            # The REPLY variable holds the index number of the selected option.
-            SELECTED_CONFIG="${CONFIG_FILES[$REPLY-1]}"
-            info "You selected VM: ${C_BLUE}${vm_choice}${C_RESET}"
-            break
-        else
-            error "Invalid selection. Please try again."
-        fi
-    done
+    # Use menu utility to select VM
+    local vm_index
+    vm_index=$(show_indexed_menu "Choose a VM:" vm_options CONFIG_FILES 0)
+    SELECTED_CONFIG="${CONFIG_FILES[$vm_index]}"
+    info "You selected VM: ${C_BLUE}${vm_options[$vm_index]}${C_RESET}"
 
     # --- Step 2: Select an ISO file to attach ---
     header "Select an ISO file to attach (optional)"
@@ -64,24 +57,18 @@ main() {
 
     local SELECTED_ISO=""
 
-    # Display the interactive selection menu for ISOs.
-    PS3="${C_YELLOW}Choose an ISO: ${C_RESET}"
-    select iso_choice in "${iso_options[@]}"; do
-        if [[ -n "$iso_choice" ]]; then
-            if [[ "$iso_choice" == "None (Boot from Hard Drive)" ]]; then
-                info "No ISO selected. The VM will boot from its hard drive."
-                SELECTED_ISO=""
-            else
-                # The index for ISO_FILES is off by one because we added "None" at the start of iso_options.
-                # For example, selecting option 2 (the first ISO) corresponds to index 0 in the ISO_FILES array.
-                SELECTED_ISO="${ISO_FILES[$REPLY-2]}"
-                info "You selected ISO: ${C_BLUE}${iso_choice}${C_RESET}"
-            fi
-            break
-        else
-            error "Invalid selection. Please try again."
-        fi
-    done
+    # Use menu utility to select ISO
+    local iso_index
+    iso_index=$(show_indexed_menu "Choose an ISO:" iso_options ISO_FILES 1)
+    
+    if [[ "$iso_index" == "-2" ]]; then
+        # Handle "None" selection
+        info "No ISO selected. The VM will boot from its hard drive."
+        SELECTED_ISO=""
+    else
+        SELECTED_ISO="${ISO_FILES[$iso_index]}"
+        info "You selected ISO: ${C_BLUE}$(basename "$SELECTED_ISO")${C_RESET}"
+    fi
 
     # --- Step 3: Choose Boot Target (only if an ISO was selected) ---
     local BOOT_FLAG=""
@@ -93,20 +80,16 @@ main() {
             "Boot from CD/ISO (for OS installation, etc.)"
         )
 
-        PS3="${C_YELLOW}How should the ISO be used? ${C_RESET}"
-        select boot_action in "${boot_prompt_options[@]}"; do
-            if [[ "$boot_action" == "Boot from CD/ISO (for OS installation, etc.)" ]]; then
-                BOOT_FLAG="--boot-from-cd"
-                info "VM will attempt to boot from the ISO."
-                break
-            elif [[ "$boot_action" == "Boot from Hard Drive (mount ISO on desktop)" ]]; then
-                BOOT_FLAG=""
-                info "VM will boot from the hard drive; ISO will be available on the guest desktop."
-                break
-            else
-                error "Invalid selection. Please try again."
-            fi
-        done
+        local boot_action
+        boot_action=$(show_menu "How should the ISO be used?" "${boot_prompt_options[@]}")
+        
+        if [[ "$boot_action" == "Boot from CD/ISO (for OS installation, etc.)" ]]; then
+            BOOT_FLAG="--boot-from-cd"
+            info "VM will attempt to boot from the ISO."
+        else
+            BOOT_FLAG=""
+            info "VM will boot from the hard drive; ISO will be available on the guest desktop."
+        fi
     fi
 
     # --- Step 4: Assemble and Execute the Command ---
