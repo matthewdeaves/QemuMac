@@ -6,18 +6,8 @@
 
 set -Euo pipefail
 
-# --- Color Codes for User-Friendly Output ---
-C_RED=$(tput setaf 1)
-C_GREEN=$(tput setaf 2)
-C_YELLOW=$(tput setaf 3)
-C_BLUE=$(tput setaf 4)
-C_RESET=$(tput sgr0)
-
-# --- Helper functions for printing colored text ---
-info() { >&2 echo "${C_YELLOW}Info: ${1}${C_RESET}"; }
-success() { >&2 echo "${C_GREEN}Success: ${1}${C_RESET}"; }
-error() { >&2 echo "${C_RED}Error: ${1}${C_RESET}"; }
-header() { >&2 echo -e "\n${C_BLUE}=== ${1} ===${C_RESET}"; }
+# Load common library
+source "$(dirname "$0")/lib/common.sh"
 
 # --- Configuration ---
 QEMU_GIT_URL="https://gitlab.com/qemu-project/qemu.git"
@@ -51,7 +41,7 @@ install_system_dependencies() {
         if ! command -v brew &>/dev/null; then
             error "Homebrew is not installed. Please install it first:"
             echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-            exit 1
+            die "Homebrew required"
         fi
         
         info "Installing required dependencies via Homebrew..."
@@ -103,16 +93,13 @@ install_system_dependencies() {
 clone_qemu_source() {
     header "Downloading QEMU Source"
     
-    if [[ -d "$QEMU_SOURCE_DIR" ]]; then
+    if dir_exists "$QEMU_SOURCE_DIR"; then
         info "Removing existing QEMU source directory..."
         rm -rf "$QEMU_SOURCE_DIR"
     fi
     
     info "Cloning latest QEMU source from GitLab..."
-    git clone "$QEMU_GIT_URL" "$QEMU_SOURCE_DIR" || {
-        error "Failed to clone QEMU repository"
-        exit 1
-    }
+    git clone "$QEMU_GIT_URL" "$QEMU_SOURCE_DIR" || die "Failed to clone QEMU repository"
     
     cd "$QEMU_SOURCE_DIR"
     local qemu_version
@@ -133,7 +120,7 @@ clone_qemu_source() {
     )
     
     for submodule in "${minimal_submodules[@]}"; do
-        if [[ -d "$submodule" ]]; then
+        if dir_exists "$submodule"; then
             info "  Updating $submodule..."
             git submodule update --init "$submodule" 2>/dev/null || true
         fi
@@ -195,7 +182,7 @@ build_and_install_qemu() {
     ./configure "${configure_args[@]}" || {
         error "QEMU configuration failed"
         error "Check the error messages above for missing dependencies"
-        exit 1
+        die "QEMU configuration failed"
     }
     
     # Determine number of parallel jobs
@@ -207,22 +194,13 @@ build_and_install_qemu() {
     fi
     
     info "Building QEMU with $num_jobs parallel jobs..."
-    make -j"$num_jobs" || {
-        error "QEMU build failed"
-        exit 1
-    }
+    make -j"$num_jobs" || die "QEMU build failed"
     
     info "Installing QEMU..."
     if [[ "$install_type" == "local" ]]; then
-        make install || {
-            error "QEMU installation failed"
-            exit 1
-        }
+        make install || die "QEMU installation failed"
     else
-        sudo make install || {
-            error "QEMU installation failed"
-            exit 1
-        }
+        sudo make install || die "QEMU installation failed"
     fi
     
     cd ..
@@ -275,7 +253,7 @@ main() {
     if [[ "$os_type" == "unsupported" ]]; then
         error "Unsupported operating system"
         error "This script supports macOS and Ubuntu/Debian Linux only"
-        exit 1
+        die "Unsupported OS"
     fi
     
     info "Detected OS: $os_type"
@@ -302,8 +280,7 @@ main() {
             exit 0
             ;;
         *)
-            error "Invalid choice"
-            exit 1
+            die "Invalid choice"
             ;;
     esac
     
@@ -325,8 +302,7 @@ main() {
             info "Will install QEMU globally in /usr/local"
             ;;
         *)
-            error "Invalid choice"
-            exit 1
+            die "Invalid choice"
             ;;
     esac
     

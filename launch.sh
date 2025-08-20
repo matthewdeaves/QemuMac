@@ -7,27 +7,14 @@
 
 set -Euo pipefail
 
-# --- Color Codes for User-Friendly Output (consistent with other scripts) ---
-C_RED=$(tput setaf 1)
-C_GREEN=$(tput setaf 2)
-C_YELLOW=$(tput setaf 3)
-C_BLUE=$(tput setaf 4)
-C_RESET=$(tput sgr0)
-
-
-# --- Helper functions for printing colored text ---
-info() { >&2 echo -e "${C_YELLOW}Info: ${1}${C_RESET}"; }
-error() { >&2 echo -e "${C_RED}Error: ${1}${C_RESET}"; }
-header() { >&2 echo -e "\n${C_BLUE}--- ${1} ---${C_RESET}"; }
+# Load common library
+source "$(dirname "$0")/lib/common.sh"
 
 
 # --- SCRIPT ENTRY POINT ---
 main() {
     # Pre-flight check to ensure the main run script is available
-    if [[ ! -x "./run-mac.sh" ]]; then
-        error "'run-mac.sh' not found or is not executable in the current directory."
-        exit 1
-    fi
+    require_executable "./run-mac.sh" "'run-mac.sh' not found or is not executable in the current directory."
 
     # --- Step 1: Select the Virtual Machine ---
     header "Select a Virtual Machine to launch"
@@ -39,7 +26,7 @@ main() {
     if [[ ${#CONFIG_FILES[@]} -eq 0 ]]; then
         error "No VM configuration files (.conf) found in the 'vms/' directory."
         info "You can create one using: ./run-mac.sh --create-config <vm-name>"
-        exit 1
+        die "No VM configurations found"
     fi
 
     # Create a user-friendly list of VM names from their config file paths.

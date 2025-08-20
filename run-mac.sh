@@ -4,17 +4,8 @@
 
 set -Euo pipefail # Exit on error, unset var, pipe failure
 
-# --- Color Codes for User-Friendly Output ---
-C_RED=$(tput setaf 1)
-C_GREEN=$(tput setaf 2)
-C_YELLOW=$(tput setaf 3)
-C_BLUE=$(tput setaf 4)
-C_RESET=$(tput sgr0)
-
-# --- Helper functions for printing colored text ---
-info() { >&2 echo "${C_YELLOW}Info: ${1}${C_RESET}"; }
-success() { >&2 echo "${C_GREEN}Success: ${1}${C_RESET}"; }
-error() { >&2 echo "${C_RED}Error: ${1}${C_RESET}"; }
+# Load common library
+source "$(dirname "$0")/lib/common.sh"
 
 #
 # Generates a new VM directory and an interactive configuration template.
@@ -25,10 +16,7 @@ generate_config() {
     local conf_file="${vm_dir}/${vm_name}.conf"
     local arch_choice arch
 
-    if [[ -d "$vm_dir" ]]; then
-        error "VM '${vm_name}' already exists at '${vm_dir}'."
-        exit 1
-    fi
+    dir_exists "$vm_dir" && die "VM '${vm_name}' already exists at '${vm_dir}'."
 
     >&2 echo "Choose an architecture for '${C_BLUE}${vm_name}${C_RESET}':"
     select arch_choice in "m68k (Macintosh Quadra)" "ppc (PowerMac G4)"; do
@@ -76,28 +64,22 @@ EOL
 preflight_checks() {
     info "Running pre-flight checks..."
 
-    if [[ ! -f "$HD_IMAGE" ]]; then
+    if ! file_exists "$HD_IMAGE"; then
         info "Hard drive not found. Creating '${HD_IMAGE}' (${HD_SIZE})."
         qemu-img create -f qcow2 "$HD_IMAGE" "$HD_SIZE" > /dev/null
     fi
 
     if [[ "$ARCH" == "m68k" ]]; then
         # For m68k, PRAM file is required but might be created by user, so check.
-        if [[ ! -f "$PRAM_FILE" ]]; then
+        if ! file_exists "$PRAM_FILE"; then
             info "PRAM file not found. Creating '${PRAM_FILE}'."
             dd if=/dev/zero of="$PRAM_FILE" bs=256 count=1 &>/dev/null
         fi
         local m68k_rom_file="roms/800.ROM"
-        if [[ ! -f "$m68k_rom_file" ]]; then
-            error "Required m68k ROM file not found at: ${m68k_rom_file}"
-            exit 1
-        fi
+        require_file "$m68k_rom_file" "Required m68k ROM file not found at: ${m68k_rom_file}"
     fi
 
-    if [[ -n "$CD_ISO_FILE" && ! -f "$CD_ISO_FILE" ]]; then
-        error "ISO file '${CD_ISO_FILE}' is specified but not found."
-        exit 1
-    fi
+    [[ -n "$CD_ISO_FILE" ]] && require_file "$CD_ISO_FILE" "ISO file '${CD_ISO_FILE}' is specified but not found."
     info "Checks passed."
 }
 
@@ -236,8 +218,8 @@ main() {
     done
 
     [[ -n $CREATE_VM_NAME ]] && { generate_config "$CREATE_VM_NAME"; exit 0; }
-    [[ -z $CONFIG_FILE ]] && { error "No config file specified. Use --config"; exit 1; }
-    [[ ! -f $CONFIG_FILE ]] && { error "Config file not found"; exit 1; }
+    [[ -z $CONFIG_FILE ]] && die "No config file specified. Use --config"
+    require_file "$CONFIG_FILE" "Config file not found"
 
     source "$CONFIG_FILE"
     CD_ISO_FILE="${CD_ISO_FILE:-}"
@@ -260,7 +242,7 @@ main() {
     else
         error "QEMU executable '${QEMU_EXECUTABLE}' not found in PATH or in './${LOCAL_QEMU_INSTALL_DIR}/'."
         info "Please run the install-deps.sh script to build it."
-        exit 1
+        die "QEMU executable not found"
     fi
 
     declare -a QEMU_ARGS

@@ -87,6 +87,7 @@
     "quadra800": {
       "name": "Quadra 800 ROM",
       "description": "ROM file for Quadra 800 emulation",
+      "category": "ROMs",
       "filename": "800.ROM",
       "url": "https://archive.org/download/800_20250604/800.ROM"
     }
