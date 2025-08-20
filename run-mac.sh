@@ -249,20 +249,20 @@ main() {
     preflight_checks
 
     # Define the path for the local QEMU installation
-    local LOCAL_QEMU_INSTALL_DIR="qemu_install"
+    local LOCAL_qemu-install_DIR="qemu-install"
     local QEMU_EXECUTABLE="qemu-system-${ARCH}"
     local qemu_bin_path=""
 
     # Prioritize the local QEMU build if it exists
-    if [[ -x "${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}" ]]; then
-        info "Using local QEMU build from './${LOCAL_QEMU_INSTALL_DIR}/'"
-        qemu_bin_path="${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}"
+    if [[ -x "${LOCAL_qemu-install_DIR}/bin/${QEMU_EXECUTABLE}" ]]; then
+        info "Using local QEMU build from './${LOCAL_qemu-install_DIR}/'"
+        qemu_bin_path="${LOCAL_qemu-install_DIR}/bin/${QEMU_EXECUTABLE}"
     # Otherwise, fall back to the system's PATH
     elif command -v "$QEMU_EXECUTABLE" &>/dev/null; then
         info "Using system QEMU found in PATH."
         qemu_bin_path="$QEMU_EXECUTABLE"
     else
-        error "QEMU executable '${QEMU_EXECUTABLE}' not found in PATH or in './${LOCAL_QEMU_INSTALL_DIR}/'."
+        error "QEMU executable '${QEMU_EXECUTABLE}' not found in PATH or in './${LOCAL_qemu-install_DIR}/'."
         info "Please run the install-deps.sh script to build it."
         die "QEMU executable not found"
     fi

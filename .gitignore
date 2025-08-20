@@ -3,4 +3,4 @@ vms/*/pram.img
 roms/800.ROM
 iso/custom-software.json
 qemu-source
-qemu_install
+qemu-install

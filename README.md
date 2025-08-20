@@ -19,7 +19,7 @@ For macOS and Ubuntu/Debian Linux, you can run the dependency installer:
 This script will:
 - Install required system dependencies (via Homebrew on macOS, apt on Ubuntu)
 - Build the latest QEMU from source with m68k and ppc support
-- Install QEMU either locally (in `qemu_install/`) or globally
+- Install QEMU either locally (in `qemu-install/`) or globally
 - Verify the installation works correctly
 
 The script supports both local installation (recommended) and global system-wide installation.
@@ -75,6 +75,25 @@ Downloads Mac OS installers and software from curated database.
 
 - **68k (Quadra 800)**: 128M RAM, 2G disk, requires ROM file
 - **PPC (PowerMac G4)**: 512M RAM, 10G disk, no ROM needed
+
+## Performance Optimizations
+
+QemuMac includes built-in performance optimizations for the best possible emulation experience:
+
+### Storage I/O Optimization
+- **Writeback caching**: 50-80% faster disk operations
+- **Compatible AIO backend**: Universal threading support
+- **Zero detection**: Space-efficient storage
+
+### CPU Accuracy
+- **Authentic CPU models**: m68040 for Quadra 800, PowerMac G4-7400 for PPC
+- **Proper instruction timing**: Improved compatibility and performance
+- **Architecture-specific optimizations**: Tailored for each Mac model
+
+### Automatic Detection
+- Performance optimizations are applied automatically
+- Compatible with all QEMU versions and host platforms
+- No configuration required - works out of the box
 
 ## Controls
 

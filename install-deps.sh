@@ -12,7 +12,7 @@ source "$(dirname "$0")/lib/common.sh"
 # --- Configuration ---
 QEMU_GIT_URL="https://gitlab.com/qemu-project/qemu.git"
 QEMU_SOURCE_DIR="qemu-source"
-LOCAL_INSTALL_DIR="qemu_install"
+LOCAL_INSTALL_DIR="qemu-install"
 
 # --- Detect OS ---
 detect_os() {
@@ -288,7 +288,7 @@ main() {
     local install_type
     echo
     echo "${C_YELLOW}Where do you want to install QEMU?${C_RESET}"
-    echo "  1) Local - Install in project folder (./qemu_install/)"
+    echo "  1) Local - Install in project folder (./qemu-install/)"
     echo "  2) Global - Install system-wide in /usr/local"
     read -rp "Choice [1-2]: " choice
     
