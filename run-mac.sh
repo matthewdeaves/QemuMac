@@ -143,26 +143,43 @@ build_display_and_input_args() {
 }
 
 #
+# Detect optimal AIO backend based on QEMU build capabilities
+# Note: aio=native requires cache=direct, which conflicts with cache=writeback
+# So for writeback caching, we use threads which is universally supported
+#
+detect_aio_backend() {
+    # For writeback caching, threads is the most compatible option
+    # Native AIO requires cache=direct which conflicts with cache=writeback
+    # io_uring may not be compiled into all QEMU builds
+    echo "threads"
+}
+
+#
 # Build all QEMU arguments for an m68k (Quadra) VM.
 #
 build_m68k_args() {
     info "Building QEMU arguments for m68k (Quadra 800)..."
     set_boot_m68k "$PRAM_FILE" "$BOOT_TARGET"
 
+    local aio_backend
+    aio_backend=$(detect_aio_backend)
+    info "Performance optimizations: CPU=m68040, Storage=writeback+${aio_backend}"
+    
     QEMU_ARGS+=(
         -M "$MACHINE_TYPE"
+        -cpu m68040
         -m "$RAM_SIZE"
         -bios "roms/800.ROM"
         -g 1152x870x8
         -nic user,model=dp83932,mac=08:00:07:12:34:56
         -drive "file=${PRAM_FILE},format=raw,if=mtd"
         -device scsi-hd,scsi-id=$HD_SCSI_ID,drive=hd0
-        -drive "file=${HD_IMAGE},format=qcow2,if=none,id=hd0"
+        -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
     )
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
             -device scsi-cd,scsi-id=$CD_SCSI_ID,drive=cd0
-            -drive "file=${CD_ISO_FILE},format=raw,if=none,media=cdrom,id=cd0"
+            -drive "file=${CD_ISO_FILE},format=raw,cache=writeback,aio=${aio_backend},if=none,media=cdrom,id=cd0"
         )
     fi
 }
@@ -175,11 +192,16 @@ build_ppc_args() {
     # Enable PMU for stable USB keyboard/mouse support in Mac OS 9.
     local machine_string="${MACHINE_TYPE},via=pmu"
 
+    local aio_backend
+    aio_backend=$(detect_aio_backend)
+    info "Performance optimizations: CPU=G4-7400, Storage=writeback+${aio_backend}"
+    
     local hd_i=1 cd_i=2
     [[ "$BOOT_TARGET" == "cd" ]] && hd_i=2 cd_i=1
 
     QEMU_ARGS+=(
         -M "$machine_string"
+        -cpu 7400_v2.9
         -m "$RAM_SIZE"
         -vga std
         -g 1024x768x32
@@ -188,12 +210,12 @@ build_ppc_args() {
         -device pci-ohci,id=ohci
         -device usb-mouse,bus=ohci.0
         -device usb-kbd,bus=ohci.0
-        -drive "file=${HD_IMAGE},format=qcow2,if=none,id=hd0"
+        -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
         -device ide-hd,drive=hd0,bootindex=$hd_i
     )
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
-            -drive "file=${CD_ISO_FILE},format=raw,if=none,id=cd0,media=cdrom"
+            -drive "file=${CD_ISO_FILE},format=raw,cache=writeback,aio=${aio_backend},if=none,id=cd0,media=cdrom"
             -device ide-cd,drive=cd0,bootindex=$cd_i
         )
     fi
