@@ -16,21 +16,14 @@ ROM_DOWNLOAD_DIR="roms"
 
 check_dependencies() {
     for cmd in jq curl unzip; do
-        if ! command -v "$cmd" &>/dev/null; then
+        if ! command_exists "$cmd"; then
             die "Required command '${cmd}' is not installed."
         fi
     done
 }
 
 load_database() {
-    require_file "$DEFAULT_JSON_FILE" "Software database not found at '${DEFAULT_JSON_FILE}'"
-
-    if file_exists "$CUSTOM_JSON_FILE"; then
-        info "Merging custom software database"
-        jq -s '.[0] * .[1]' "$DEFAULT_JSON_FILE" "$CUSTOM_JSON_FILE"
-    else
-        cat "$DEFAULT_JSON_FILE"
-    fi
+    db_load "$DEFAULT_JSON_FILE" "$CUSTOM_JSON_FILE"
 }
 
 select_category() {
@@ -39,25 +32,16 @@ select_category() {
     header "Select a Category"
     
     local categories
-    mapfile -t categories < <(echo "$software_db" | jq -r '(.cds, .roms) | .[] | .category // "Miscellaneous"' | sort -u)
+    mapfile -t categories < <(db_categories "$software_db")
     
-    show_menu "Choose a category:" "${categories[@]}"
+    menu "Choose a category:" "${categories[@]}"
 }
 
 build_software_options() {
     local software_db="$1"
     local category="$2"
     
-    # Define category matching filter for reusability
-    local category_filter='(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == "")))'
-    
-    # Get CDs matching the category
-    echo "$software_db" | jq -r --arg cat "$category" \
-        ".cds | to_entries[] | select($category_filter) | \"\(.key):\(.value.name):cd\""
-    
-    # Get ROMs matching the category  
-    echo "$software_db" | jq -r --arg cat "$category" \
-        ".roms | to_entries[] | select($category_filter) | \"\(.key):\(.value.name):rom\""
+    db_items "$software_db" "$category"
 }
 
 select_item() {
@@ -66,21 +50,16 @@ select_item() {
     
     header "Select an item to download"
     
-    local options software_options
+    local software_options
     mapfile -t software_options < <(build_software_options "$software_db" "$category" | sort)
     
     # Build menu options with special items
-    options=("${software_options[@]}" "Back to Categories" "Quit")
+    local options=("${software_options[@]}" "Back to Categories")
     
-    PS3="${C_YELLOW}Select the software you want to download: ${C_RESET}"
-    select choice in "${options[@]}"; do
-        case "$choice" in
-            "Quit") info "Exiting"; exit 0 ;;
-            "Back to Categories") echo "back"; return ;;
-            "") error "Invalid selection" ;;
-            *) echo "$choice"; return ;;
-        esac
-    done
+    local choice
+    choice=$(menu "Select the software you want to download:" "${options[@]}")
+    
+    [[ "$choice" == "BACK" ]] || [[ "$choice" == "Back"* ]] && echo "back" || echo "$choice"
 }
 
 download_file() {
@@ -92,25 +71,26 @@ download_file() {
     
     info "Preparing to download '${C_BLUE}${selected_name}${C_RESET}'"
     
-    # Get file info
-    local json_path=".${item_type}s"
-    local url filename
-    url=$(echo "$software_db" | jq -r "${json_path}.\"$selected_key\".url")
-    filename=$(echo "$software_db" | jq -r "${json_path}.\"$selected_key\".filename")
+    # Get all item details in one call
+    local item
+    item=$(db_item "$software_db" "$selected_key" "$item_type")
+    
+    local url filename nice_filename
+    url=$(echo "$item" | jq -r '.url')
+    filename=$(echo "$item" | jq -r '.filename')
+    nice_filename=$(echo "$item" | jq -r '.nice_filename // .filename')
     
     # Determine destination
     local dest_path
     if [[ "$item_type" == "rom" ]]; then
-        mkdir -p "$ROM_DOWNLOAD_DIR"
+        ensure_directory "$ROM_DOWNLOAD_DIR" "Creating ROM download directory"
         if [[ "$selected_key" == "quadra800" ]]; then
             dest_path="${ROM_DOWNLOAD_DIR}/800.ROM"
         else
             dest_path="${ROM_DOWNLOAD_DIR}/${filename}"
         fi
     else
-        mkdir -p "$ISO_DOWNLOAD_DIR"
-        local nice_filename
-        nice_filename=$(echo "$software_db" | jq -r "${json_path}.\"$selected_key\".nice_filename // \"$filename\"")
+        ensure_directory "$ISO_DOWNLOAD_DIR" "Creating ISO download directory"
         dest_path="${ISO_DOWNLOAD_DIR}/${nice_filename}"
     fi
     

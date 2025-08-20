@@ -18,7 +18,7 @@ LOCAL_INSTALL_DIR="qemu-install"
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "macos"
-    elif [[ -f /etc/os-release ]]; then
+    elif file_exists "/etc/os-release"; then
         . /etc/os-release
         if [[ "$ID" == "ubuntu" ]] || [[ "$ID" == "debian" ]]; then
             echo "ubuntu"
@@ -38,7 +38,7 @@ install_system_dependencies() {
     
     if [[ "$os_type" == "macos" ]]; then
         info "Checking for Homebrew..."
-        if ! command -v brew &>/dev/null; then
+        if ! command_exists "brew"; then
             error "Homebrew is not installed. Please install it first:"
             echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
             die "Homebrew required"
@@ -144,7 +144,7 @@ build_and_install_qemu() {
     local install_prefix
     if [[ "$install_type" == "local" ]]; then
         install_prefix="$(pwd)/../${LOCAL_INSTALL_DIR}"
-        mkdir -p "$install_prefix"
+        ensure_directory "$install_prefix" "Creating local installation directory"
         install_prefix="$(cd "$install_prefix" && pwd)"  # Get absolute path
     else
         install_prefix="/usr/local"
@@ -224,7 +224,7 @@ verify_installation() {
     fi
     
     # Check m68k
-    if command -v "$qemu_m68k_path" &>/dev/null; then
+    if command_exists "$qemu_m68k_path"; then
         local m68k_version
         m68k_version=$("$qemu_m68k_path" --version | head -n1)
         success "✓ $m68k_version"
@@ -233,7 +233,7 @@ verify_installation() {
     fi
     
     # Check ppc
-    if command -v "$qemu_ppc_path" &>/dev/null; then
+    if command_exists "$qemu_ppc_path"; then
         local ppc_version
         ppc_version=$("$qemu_ppc_path" --version | head -n1)
         success "✓ $ppc_version"

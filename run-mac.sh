@@ -18,17 +18,18 @@ generate_config() {
 
     dir_exists "$vm_dir" && die "VM '${vm_name}' already exists at '${vm_dir}'."
 
-    >&2 echo "Choose an architecture for '${C_BLUE}${vm_name}${C_RESET}':"
-    select arch_choice in "m68k (Macintosh Quadra)" "ppc (PowerMac G4)"; do
-        case $arch_choice in
-            "m68k (Macintosh Quadra)") arch="m68k"; break;;
-            "ppc (PowerMac G4)") arch="ppc"; break;;
-            *) >&2 echo "Invalid choice. Please enter 1 or 2.";;
-        esac
-    done
+    local arch_choice
+    arch_choice=$(menu "Choose an architecture for '${vm_name}':" \
+        "m68k (Macintosh Quadra)" \
+        "ppc (PowerMac G4)")
+    
+    case $arch_choice in
+        "m68k (Macintosh Quadra)") arch="m68k";;
+        "ppc (PowerMac G4)") arch="ppc";;
+    esac
 
     info "Creating new VM: ${vm_name} (${arch})"
-    mkdir -p "$vm_dir"
+    ensure_directory "$vm_dir" "Creating VM directory"
 
     # Cleaned up templates without redundant display, net, or rom settings.
     if [[ "$arch" == "m68k" ]]; then
@@ -249,20 +250,20 @@ main() {
     preflight_checks
 
     # Define the path for the local QEMU installation
-    local LOCAL_qemu-install_DIR="qemu-install"
+    local LOCAL_QEMU_INSTALL_DIR="qemu-install"
     local QEMU_EXECUTABLE="qemu-system-${ARCH}"
     local qemu_bin_path=""
 
     # Prioritize the local QEMU build if it exists
-    if [[ -x "${LOCAL_qemu-install_DIR}/bin/${QEMU_EXECUTABLE}" ]]; then
-        info "Using local QEMU build from './${LOCAL_qemu-install_DIR}/'"
-        qemu_bin_path="${LOCAL_qemu-install_DIR}/bin/${QEMU_EXECUTABLE}"
+    if executable_exists "${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}"; then
+        info "Using local QEMU build from './${LOCAL_QEMU_INSTALL_DIR}/'"
+        qemu_bin_path="${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}"
     # Otherwise, fall back to the system's PATH
-    elif command -v "$QEMU_EXECUTABLE" &>/dev/null; then
+    elif command_exists "$QEMU_EXECUTABLE"; then
         info "Using system QEMU found in PATH."
         qemu_bin_path="$QEMU_EXECUTABLE"
     else
-        error "QEMU executable '${QEMU_EXECUTABLE}' not found in PATH or in './${LOCAL_qemu-install_DIR}/'."
+        error "QEMU executable '${QEMU_EXECUTABLE}' not found in PATH or in './${LOCAL_QEMU_INSTALL_DIR}/'."
         info "Please run the install-deps.sh script to build it."
         die "QEMU executable not found"
     fi

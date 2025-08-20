@@ -39,7 +39,7 @@ main() {
 
     # Use menu utility to select VM
     local vm_index
-    vm_index=$(show_indexed_menu "Choose a VM:" vm_options CONFIG_FILES 0)
+    vm_index=$(menu_files "Choose a VM:" "${CONFIG_FILES[@]}")
     SELECTED_CONFIG="${CONFIG_FILES[$vm_index]}"
     info "You selected VM: ${C_BLUE}${vm_options[$vm_index]}${C_RESET}"
 
@@ -58,15 +58,18 @@ main() {
     local SELECTED_ISO=""
 
     # Use menu utility to select ISO
-    local iso_index
-    iso_index=$(show_indexed_menu "Choose an ISO:" iso_options ISO_FILES 1)
+    local iso_choice
+    iso_choice=$(menu "Choose an ISO:" "${iso_options[@]}")
     
-    if [[ "$iso_index" == "-2" ]]; then
+    if [[ "$iso_choice" == "NONE" ]] || [[ "$iso_choice" == "None"* ]]; then
         # Handle "None" selection
         info "No ISO selected. The VM will boot from its hard drive."
         SELECTED_ISO=""
     else
-        SELECTED_ISO="${ISO_FILES[$iso_index]}"
+        # Find matching ISO file
+        for iso in "${ISO_FILES[@]}"; do
+            [[ "$(basename "$iso")" == "$iso_choice" ]] && SELECTED_ISO="$iso" && break
+        done
         info "You selected ISO: ${C_BLUE}$(basename "$SELECTED_ISO")${C_RESET}"
     fi
 
@@ -81,7 +84,7 @@ main() {
         )
 
         local boot_action
-        boot_action=$(show_menu "How should the ISO be used?" "${boot_prompt_options[@]}")
+        boot_action=$(menu "How should the ISO be used?" "${boot_prompt_options[@]}")
         
         if [[ "$boot_action" == "Boot from CD/ISO (for OS installation, etc.)" ]]; then
             BOOT_FLAG="--boot-from-cd"
