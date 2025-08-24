@@ -40,7 +40,14 @@ Downloads Mac OS installers and software from curated database.
 
 **Custom Software**: Create `iso/custom-software.json` to add your own download sources. The script will automatically merge it with the default database. Use the same structure as `iso/software-database.json`.
 
-### 3. Create New VM
+### 3. Shared Disk for File Transfer
+```bash
+./mount-shared.sh        # Mount shared disk on host
+./mount-shared.sh -u     # Unmount shared disk
+```
+A 512MB shared disk (HFS format) accessible by all VMs for easy file transfer between host and guests.
+
+### 4. Create New VM
 ```bash
 ./run-mac.sh --create-config my_mac
 ```
@@ -59,6 +66,21 @@ Downloads Mac OS installers and software from curated database.
 ./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
 ```
 
+### File Transfer Between Host and VM
+```bash
+# 1. Start VM and format shared disk as Mac OS Standard (HFS) if needed
+./run-mac.sh --config vms/quadra800/quadra800.conf
+
+# 2. Mount shared disk on host (requires hfsprogs)
+./mount-shared.sh
+
+# 3. Copy files to /tmp/qemu-shared on host
+cp ~/myfiles/* /tmp/qemu-shared/
+
+# 4. Unmount when done
+./mount-shared.sh -u
+```
+
 ### Running with Software
 ```bash
 # Boot normally with game disc mounted
@@ -70,6 +92,7 @@ Downloads Mac OS installers and software from curated database.
 - `vms/` - VM configurations and disk images
 - `iso/` - ISO files and software database
 - `roms/` - ROM files (800.ROM required for 68k)
+- `shared/` - Shared disk accessible by all VMs (auto-created)
 
 ## Architectures
 

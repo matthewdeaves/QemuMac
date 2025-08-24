@@ -50,6 +50,9 @@ install_system_dependencies() {
         info "Installing optional but recommended dependencies..."
         brew install sdl2 gtk+3 libusb vde nettle gnutls || true
         
+        info "Installing HFS filesystem support..."
+        brew install hfsutils || true
+        
     elif [[ "$os_type" == "ubuntu" ]]; then
         info "Updating package lists..."
         sudo apt-get update
@@ -84,6 +87,9 @@ install_system_dependencies() {
             curl \
             unzip \
             jq || true
+        
+        info "Installing HFS filesystem support..."
+        sudo apt-get install -y hfsprogs || true
     fi
     
     success "System dependencies installed"

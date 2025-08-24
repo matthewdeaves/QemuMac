@@ -35,7 +35,15 @@ mount_shared() {
     ensure_directory "$MOUNT_POINT"
     
     info "Mounting shared disk: $SHARED_DISK"
-    sudo mount -o loop "$SHARED_DISK" "$MOUNT_POINT" || die "Failed to mount shared disk"
+    local uid=$(id -u)
+    local gid=$(id -g)
+    if sudo mount -t hfsplus -o loop,rw,uid=$uid,gid=$gid "$SHARED_DISK" "$MOUNT_POINT" 2>/dev/null; then
+        info "Mounted as HFS+ (read-write)"
+    elif sudo mount -t hfs -o loop,rw,uid=$uid,gid=$gid "$SHARED_DISK" "$MOUNT_POINT" 2>/dev/null; then
+        info "Mounted as HFS (read-write)"
+    else
+        die "Failed to mount shared disk. Install HFS support: sudo apt install hfsprogs"
+    fi
     
     success "Shared disk mounted at: $MOUNT_POINT"
     info "This disk is accessible from all your Mac VMs"

@@ -90,10 +90,9 @@ preflight_checks() {
         info "Shared disk not found. Creating '${shared_disk}' (512M)."
         ensure_directory "$shared_dir"
         qemu-img create -f raw "$shared_disk" 512M > /dev/null
-        info "Formatting shared disk as ext4..."
-        mkfs.ext4 -F "$shared_disk" > /dev/null 2>&1
-        success "Shared disk created and formatted"
-        info "Mount with: ./mount-shared.sh"
+        success "Shared disk created (unformatted)"
+        info "Format as Mac OS Standard from within your Mac VM"
+        info "Then mount with: ./mount-shared.sh"
     fi
     
     info "Checks passed."

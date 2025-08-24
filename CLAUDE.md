@@ -15,8 +15,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./iso-downloader.sh` - Interactive downloader for operating systems and software from the database
 - Custom software can be added to `iso/custom-software.json` to extend the available downloads
 
+### File Transfer System
+- `./mount-shared.sh` - Mount shared disk on host for file transfer
+- `./mount-shared.sh -u` - Unmount shared disk
+- Shared disk appears as additional drive in all VMs (auto-created on first run)
+
 ### Dependencies
-Required tools: `qemu-system-m68k`, `qemu-system-ppc`, `qemu-img`, `jq`, `curl`, `unzip`
+Required tools: `qemu-system-m68k`, `qemu-system-ppc`, `qemu-img`, `jq`, `curl`, `unzip`, `hfsprogs` (Ubuntu) or `hfsutils` (macOS)
 
 ## Architecture Overview
 
@@ -44,6 +49,7 @@ The project provides a complete QEMU-based classic Macintosh emulation environme
 - `vms/`: Directory containing VM configurations and disk images
 - `iso/`: Directory for ISO files and software database
 - `roms/`: Directory for required ROM files
+- `shared/`: Cross-VM shared disk directory (auto-created)
 
 ### VM Configuration Format
 VM configs are bash files defining variables:
@@ -53,10 +59,18 @@ VM configs are bash files defining variables:
 - `HD_SIZE`: Disk size for new VMs
 - `HD_IMAGE`: Path to disk image
 - Architecture-specific settings (PRAM_FILE, SCSI IDs for m68k)
+- `SHARED_SCSI_ID`: SCSI ID for shared disk (m68k only, defaults to 4)
 
 ### Boot Device Handling
 - **m68k**: PRAM file is patched with SCSI RefNum calculations for boot device selection
 - **PPC**: Uses QEMU's bootindex parameter for IDE devices
+
+### Shared Disk System
+- **Single shared disk**: 512MB HFS-formatted disk accessible by all VMs
+- **Cross-architecture support**: Works with both m68k (SCSI) and PPC (IDE) VMs
+- **Automatic creation**: Created on first VM run, format as HFS from within Mac OS
+- **Host mounting**: Simple loop mount via `mount-shared.sh` script
+- **File transfer**: Easy way to move files between host and all Mac VMs
 
 ### Display and Input
 - Automatically detects host OS (macOS uses Cocoa, Linux uses SDL)
