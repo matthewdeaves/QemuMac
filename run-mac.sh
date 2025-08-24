@@ -43,6 +43,7 @@ PRAM_FILE="${vm_dir}/pram.img"
 HD_IMAGE="${vm_dir}/hdd.qcow2"
 HD_SCSI_ID=0
 CD_SCSI_ID=2
+SHARED_SCSI_ID=4
 EOL
     else # ppc
         cat > "$conf_file" << EOL
@@ -81,6 +82,20 @@ preflight_checks() {
     fi
 
     [[ -n "$CD_ISO_FILE" ]] && require_file "$CD_ISO_FILE" "ISO file '${CD_ISO_FILE}' is specified but not found."
+    
+    # Create shared disk if it doesn't exist
+    local shared_dir="shared"
+    local shared_disk="$shared_dir/shared-disk.img"
+    if ! file_exists "$shared_disk"; then
+        info "Shared disk not found. Creating '${shared_disk}' (512M)."
+        ensure_directory "$shared_dir"
+        qemu-img create -f raw "$shared_disk" 512M > /dev/null
+        info "Formatting shared disk as ext4..."
+        mkfs.ext4 -F "$shared_disk" > /dev/null 2>&1
+        success "Shared disk created and formatted"
+        info "Mount with: ./mount-shared.sh"
+    fi
+    
     info "Checks passed."
 }
 
@@ -176,6 +191,8 @@ build_m68k_args() {
         -drive "file=${PRAM_FILE},format=raw,if=mtd"
         -device scsi-hd,scsi-id=$HD_SCSI_ID,drive=hd0
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
+        -device scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0
+        -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
     )
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
@@ -212,12 +229,14 @@ build_ppc_args() {
         -device usb-mouse,bus=ohci.0
         -device usb-kbd,bus=ohci.0
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
-        -device ide-hd,drive=hd0,bootindex=$hd_i
+        -device ide-hd,bus=ide.0,unit=0,drive=hd0,bootindex=$hd_i
+        -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
+        -device ide-hd,bus=ide.1,unit=0,drive=shared0
     )
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
             -drive "file=${CD_ISO_FILE},format=raw,cache=writeback,aio=${aio_backend},if=none,id=cd0,media=cdrom"
-            -device ide-cd,drive=cd0,bootindex=$cd_i
+            -device ide-cd,bus=ide.0,unit=1,drive=cd0,bootindex=$cd_i
         )
     fi
 }

@@ -4,3 +4,4 @@ roms/800.ROM
 iso/custom-software.json
 qemu-source
 qemu-install
+shared/*.img
