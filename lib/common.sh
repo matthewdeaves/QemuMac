@@ -85,7 +85,7 @@ menu() {
     PS3="${C_YELLOW}${prompt} ${C_RESET}"
     select choice in "${options[@]}"; do
         case "$choice" in
-            "Quit") info "Exiting"; exit 0 ;;
+            "Quit") info "Exiting"; echo "QUIT"; return 0 ;;
             "Back"*) echo "BACK"; return 0 ;;
             "None"*) echo "NONE"; return 0 ;;
             "") error "Invalid selection" ;;

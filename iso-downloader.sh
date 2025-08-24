@@ -59,7 +59,11 @@ select_item() {
     local choice
     choice=$(menu "Select the software you want to download:" "${options[@]}")
     
-    [[ "$choice" == "BACK" ]] || [[ "$choice" == "Back"* ]] && echo "back" || echo "$choice"
+    case "$choice" in
+        "QUIT") echo "quit" ;;
+        "BACK"|"Back"*) echo "back" ;;
+        *) echo "$choice" ;;
+    esac
 }
 
 download_file() {
@@ -126,13 +130,16 @@ main() {
         local category
         category=$(select_category "$software_db")
         
+        [[ "$category" == "QUIT" ]] && exit 0
+        
         while true; do
             local choice
             choice=$(select_item "$software_db" "$category")
             
-            if [[ "$choice" == "back" ]]; then
-                break
-            fi
+            case "$choice" in
+                "back") break ;;
+                "quit") exit 0 ;;
+            esac
             
             download_file "$software_db" "$choice"
             exit 0
