@@ -1,0 +1,161 @@
+#!/bin/bash
+#
+# QemuMac Common Library - Shared utilities for all QemuMac scripts
+#
+
+# Color constants for consistent output
+C_RED=$(tput setaf 1)
+C_GREEN=$(tput setaf 2)
+C_YELLOW=$(tput setaf 3)
+C_BLUE=$(tput setaf 4)
+C_RESET=$(tput sgr0)
+
+# Helper functions for colored output
+info() { echo -e "${C_YELLOW}Info: ${1}${C_RESET}" >&2; }
+success() { echo -e "${C_GREEN}Success: ${1}${C_RESET}" >&2; }
+error() { echo -e "${C_RED}Error: ${1}${C_RESET}" >&2; }
+header() { echo -e "\n${C_BLUE}--- ${1} ---${C_RESET}" >&2; }
+
+# Utility function for consistent error handling
+die() {
+    error "$1"
+    exit "${2:-1}"
+}
+
+# File validation functions
+require_file() {
+    local file="$1"
+    local msg="${2:-File not found: $file}"
+    [[ -f "$file" ]] || die "$msg"
+}
+
+require_executable() {
+    local file="$1"
+    local msg="${2:-Executable not found: $file}"
+    [[ -x "$file" ]] || die "$msg"
+}
+
+require_directory() {
+    local dir="$1"
+    local msg="${2:-Directory not found: $dir}"
+    [[ -d "$dir" ]] || die "$msg"
+}
+
+file_exists() {
+    [[ -f "$1" ]]
+}
+
+dir_exists() {
+    [[ -d "$1" ]]
+}
+
+# Additional utility functions
+
+command_exists() {
+    command -v "$1" &>/dev/null
+}
+
+executable_exists() {
+    [[ -x "$1" ]]
+}
+
+ensure_directory() {
+    local dir="$1"
+    local msg="${2:-Creating directory: $dir}"
+    
+    if ! dir_exists "$dir"; then
+        info "$msg"
+        mkdir -p "$dir" || die "Failed to create directory: $dir"
+    fi
+}
+
+# Menu utility functions for consistent user interaction
+
+# Simple universal menu - handles all cases
+# Usage: result=$(menu "prompt" options...)
+# Returns: selected option string, or exits on quit
+menu() {
+    local prompt="$1"
+    shift
+    local options=("$@")
+    
+    # Always add Quit if not present
+    [[ ! " ${options[*]} " =~ " Quit " ]] && options+=("Quit")
+    
+    PS3="${C_YELLOW}${prompt} ${C_RESET}"
+    select choice in "${options[@]}"; do
+        case "$choice" in
+            "Quit") info "Exiting"; echo "QUIT"; return 0 ;;
+            "Back"*) echo "BACK"; return 0 ;;
+            "None"*) echo "NONE"; return 0 ;;
+            "") error "Invalid selection" ;;
+            *) echo "$choice"; return 0 ;;
+        esac
+    done
+}
+
+# Helper for file-based selections (returns index)
+menu_files() {
+    local prompt="$1"
+    shift
+    local files=("$@")
+    
+    local options
+    for file in "${files[@]}"; do
+        options+=("$(basename "$(dirname "$file")")")
+    done
+    
+    local choice
+    choice=$(menu "$prompt" "${options[@]}")
+    
+    # Return index of selected item
+    for i in "${!options[@]}"; do
+        [[ "${options[$i]}" == "$choice" ]] && echo "$i" && return
+    done
+}
+
+# Database utility functions for JSON handling
+
+# Load database once, cache in variable  
+db_load() {
+    local default_file="$1"
+    local custom_file="$2"
+    
+    require_file "$default_file"
+    
+    if file_exists "$custom_file"; then
+        jq -s '.[0] * .[1]' "$default_file" "$custom_file"
+    else
+        cat "$default_file"
+    fi
+}
+
+# Get all categories (merged, sorted, unique)
+db_categories() {
+    local db="$1"
+    echo "$db" | jq -r '[(.cds, .roms) | .[] | .category // "Miscellaneous"] | unique | sort[]'
+}
+
+# Get items for category (returns "key:name:type" format)  
+db_items() {
+    local db="$1"
+    local category="$2"
+    
+    echo "$db" | jq -r --arg cat "$category" '
+        [
+            (.cds | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == ""))) | "\(.key):\(.value.name):cd"),
+            (.roms | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == ""))) | "\(.key):\(.value.name):rom")
+        ] | sort[]'
+}
+
+# Get item details (single call gets everything)
+db_item() {
+    local db="$1" 
+    local key="$2"
+    local type="$3"
+    
+    local path
+    [[ "$type" == "cd" ]] && path=".cds" || path=".roms"
+    
+    echo "$db" | jq -r --arg key "$key" "${path}[\$key]"
+}
