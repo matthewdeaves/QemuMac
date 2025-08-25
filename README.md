@@ -26,11 +26,15 @@ The script supports both local installation (recommended) and global system-wide
 
 ## Quick Start
 
-### 1. Interactive Launch (Recommended)
+### 1. Launch a VM
+
+For the most user-friendly experience, run the script without any arguments to open an interactive menu:
+
 ```bash
-./launch.sh
+./run-mac.sh
 ```
-Select VM and ISO from menus, choose boot options.
+
+This will guide you through selecting a VM, attaching an ISO, and choosing boot options.
 
 ### 2. Download Software
 ```bash

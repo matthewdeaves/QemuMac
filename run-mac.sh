@@ -1,15 +1,7 @@
 #!/bin/bash
-#
-# QemuMac Runner - A simple, robust script to manage and launch classic Mac VMs
-
-set -Euo pipefail # Exit on error, unset var, pipe failure
-
-# Load common library
+set -Euo pipefail
 source "$(dirname "$0")/lib/common.sh"
 
-#
-# Generates a new VM directory and an interactive configuration template.
-#
 generate_config() {
     local vm_name="$1"
     local vm_dir="vms/${vm_name}"
@@ -31,7 +23,6 @@ generate_config() {
     info "Creating new VM: ${vm_name} (${arch})"
     ensure_directory "$vm_dir" "Creating VM directory"
 
-    # Cleaned up templates without redundant display, net, or rom settings.
     if [[ "$arch" == "m68k" ]]; then
         cat > "$conf_file" << EOL
 # VM Configuration for ${vm_name} (m68k)
@@ -60,19 +51,13 @@ EOL
     >&2 echo "  ./run-mac.sh --config ${conf_file}"
 }
 
-#
-# Verifies required files and creates images if they don't exist.
-#
 preflight_checks() {
-    info "Running pre-flight checks..."
-
     if ! file_exists "$HD_IMAGE"; then
         info "Hard drive not found. Creating '${HD_IMAGE}' (${HD_SIZE})."
         qemu-img create -f qcow2 "$HD_IMAGE" "$HD_SIZE" > /dev/null
     fi
 
     if [[ "$ARCH" == "m68k" ]]; then
-        # For m68k, PRAM file is required but might be created by user, so check.
         if ! file_exists "$PRAM_FILE"; then
             info "PRAM file not found. Creating '${PRAM_FILE}'."
             dd if=/dev/zero of="$PRAM_FILE" bs=256 count=1 &>/dev/null
@@ -83,7 +68,6 @@ preflight_checks() {
 
     [[ -n "$CD_ISO_FILE" ]] && require_file "$CD_ISO_FILE" "ISO file '${CD_ISO_FILE}' is specified but not found."
     
-    # Create shared disk if it doesn't exist
     local shared_dir="shared"
     local shared_disk="$shared_dir/shared-disk.img"
     if ! file_exists "$shared_disk"; then
@@ -94,28 +78,9 @@ preflight_checks() {
         info "Format as Mac OS Standard from within your Mac VM"
         info "Then mount with: ./mount-shared.sh"
     fi
-    
-    info "Checks passed."
 }
 
-#
-# Patches the m68k PRAM file to set the boot device.
-# Mac OS on m68k ignores the QEMU boot order arguments and instead reads the
-# boot device from PRAM (Parameter RAM). This function writes to the PRAM
-# file before launch to select the boot target (hard drive or CD-ROM).
-#
-# The boot device is stored as a 4-byte value starting at offset 0x78 (120)
-# in the PRAM file. The structure is:
-#   - Byte 0 (offset 120, 0x78): Drive ID
-#   - Byte 1 (offset 121, 0x79): Partition ID
-#   - Bytes 2-3 (offset 122, 0x7A): RefNum (a 16-bit word)
-#
-# For SCSI devices, DriveID and PartitionID are typically 0xff. The RefNum
-# is calculated from the SCSI ID using the formula: RefNum = ~(SCSI_ID + 32).
-#
-# This function calculates the correct RefNum for the target SCSI device
-# and writes the full 4-byte sequence into the PRAM file.
-#
+# Patch PRAM boot device: RefNum = ~(SCSI_ID + 32) at offset 120
 set_boot_m68k() {
     local pram_file="$1"
     local target="$2"
@@ -137,9 +102,6 @@ set_boot_m68k() {
     printf "$byte_format_string" | dd of="$pram_file" bs=1 seek=120 count=4 conv=notrunc &>/dev/null
 }
 
-#
-# Build display and input args based on the host OS.
-#
 build_display_and_input_args() {
     local host_os=""
     [[ "$OSTYPE" == darwin* ]] && host_os="macos" || host_os="linux"
@@ -157,27 +119,11 @@ build_display_and_input_args() {
     fi
 }
 
-#
-# Detect optimal AIO backend based on QEMU build capabilities
-# Note: aio=native requires cache=direct, which conflicts with cache=writeback
-# So for writeback caching, we use threads which is universally supported
-#
-detect_aio_backend() {
-    # For writeback caching, threads is the most compatible option
-    # Native AIO requires cache=direct which conflicts with cache=writeback
-    # io_uring may not be compiled into all QEMU builds
-    echo "threads"
-}
 
-#
-# Build all QEMU arguments for an m68k (Quadra) VM.
-#
 build_m68k_args() {
     info "Building QEMU arguments for m68k (Quadra 800)..."
     set_boot_m68k "$PRAM_FILE" "$BOOT_TARGET"
-
-    local aio_backend
-    aio_backend=$(detect_aio_backend)
+    local aio_backend="threads"
     info "Performance optimizations: CPU=m68040, Storage=writeback+${aio_backend}"
     
     QEMU_ARGS+=(
@@ -201,16 +147,10 @@ build_m68k_args() {
     fi
 }
 
-#
-# Build all QEMU arguments for a ppc (PowerMac) VM.
-#
 build_ppc_args() {
     info "Building QEMU arguments for ppc (PowerMac G4)..."
-    # Enable PMU for stable USB keyboard/mouse support in Mac OS 9.
     local machine_string="${MACHINE_TYPE},via=pmu"
-
-    local aio_backend
-    aio_backend=$(detect_aio_backend)
+    local aio_backend="threads"
     info "Performance optimizations: CPU=G4-7400, Storage=writeback+${aio_backend}"
     
     local hd_i=1 cd_i=2
@@ -240,66 +180,101 @@ build_ppc_args() {
     fi
 }
 
-# --- SCRIPT ENTRY POINT ---
+interactive_launch() {
+    header "Select a Virtual Machine to launch"
+    if ! find_files_with_names "vms" "*.conf" "parent_dir" "-mindepth 2 -maxdepth 2 -type f"; then
+        error "No VM configurations found in 'vms/' directory"
+        info "Create one with: ./run-mac.sh --create-config <vm-name>"
+        die "No VM configurations found"
+    fi
+
+    local vm_choice vm_index
+    vm_choice=$(menu "Choose a VM:" "${FOUND_NAMES[@]}")
+    [[ "$vm_choice" == "QUIT" ]] && exit 0
+    
+    for i in "${!FOUND_NAMES[@]}"; do
+        [[ "${FOUND_NAMES[$i]}" == "$vm_choice" ]] && vm_index="$i" && break
+    done
+    CONFIG_FILE="${FOUND_FILES[$vm_index]}"
+
+    header "Select an ISO file to attach (optional)"
+    local -a iso_options=("None (Boot from Hard Drive)")
+    local ISO_FILES=()
+    if find_files_with_names "iso" "*.iso" "basename" "-maxdepth 1 -type f"; then
+        iso_options+=("${FOUND_NAMES[@]}")
+        ISO_FILES=("${FOUND_FILES[@]}")
+    fi
+
+    local iso_choice
+    iso_choice=$(menu "Choose an ISO:" "${iso_options[@]}")
+    
+    if [[ "$iso_choice" == "NONE" ]] || [[ "$iso_choice" == "None"* ]]; then
+        CD_ISO_FILE=""
+    else
+        for iso in "${ISO_FILES[@]}"; do
+            [[ "$(basename "$iso")" == "$iso_choice" ]] && CD_ISO_FILE="$iso" && break
+        done
+    fi
+
+    if [[ -n "$CD_ISO_FILE" ]]; then
+        local boot_action
+        boot_action=$(menu "How should the ISO be used?" \
+            "Boot from Hard Drive (mount ISO on desktop)" \
+            "Boot from CD/ISO (for OS installation, etc.)")
+        [[ "$boot_action" == *"CD/ISO"* ]] && BOOT_TARGET="cd" || BOOT_TARGET="hd"
+    fi
+}
+
 main() {
     local CONFIG_FILE="" BOOT_TARGET="hd" CD_ISO_FILE="" CREATE_VM_NAME=""
-    local SHORT_OPTS="c:i:" LONG_OPTS="config:,iso:,boot-from-cd,create-config:"
-    local PARSED_OPTS
-    PARSED_OPTS=$(getopt -o "$SHORT_OPTS" -l "$LONG_OPTS" -n "$0" -- "$@") || exit 1
-    eval set -- "$PARSED_OPTS"
+    if [[ $# -eq 0 ]]; then
+        interactive_launch
+    else
+        local SHORT_OPTS="c:i:" LONG_OPTS="config:,iso:,boot-from-cd,create-config:"
+        local PARSED_OPTS
+        PARSED_OPTS=$(getopt -o "$SHORT_OPTS" -l "$LONG_OPTS" -n "$0" -- "$@") || exit 1
+        eval set -- "$PARSED_OPTS"
 
-    while true; do
-        case $1 in
-            --create-config) CREATE_VM_NAME="$2"; shift 2 ;;
-            -c|--config) CONFIG_FILE="$2"; shift 2 ;;
-            -i|--iso) CD_ISO_FILE="$2"; shift 2 ;;
-            --boot-from-cd) BOOT_TARGET="cd"; shift ;;
-            --) shift; break ;;
-        esac
-    done
+        while true; do
+            case $1 in
+                --create-config) CREATE_VM_NAME="$2"; shift 2 ;;
+                -c|--config) CONFIG_FILE="$2"; shift 2 ;;
+                -i|--iso) CD_ISO_FILE="$2"; shift 2 ;;
+                --boot-from-cd) BOOT_TARGET="cd"; shift ;;
+                --) shift; break ;;
+            esac
+        done
+    fi
 
-    [[ -n $CREATE_VM_NAME ]] && { generate_config "$CREATE_VM_NAME"; exit 0; }
-    [[ -z $CONFIG_FILE ]] && die "No config file specified. Use --config"
+    if [[ -n "$CREATE_VM_NAME" ]]; then
+        generate_config "$CREATE_VM_NAME"
+        exit 0
+    fi
+
+    [[ -z "$CONFIG_FILE" ]] && die "No configuration specified or selected"
     require_file "$CONFIG_FILE" "Config file not found"
 
     source "$CONFIG_FILE"
     CD_ISO_FILE="${CD_ISO_FILE:-}"
-
     preflight_checks
-
-    # Define the path for the local QEMU installation
     local LOCAL_QEMU_INSTALL_DIR="qemu-install"
     local QEMU_EXECUTABLE="qemu-system-${ARCH}"
     local qemu_bin_path=""
 
-    # Prioritize the local QEMU build if it exists
     if executable_exists "${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}"; then
         info "Using local QEMU build from './${LOCAL_QEMU_INSTALL_DIR}/'"
         qemu_bin_path="${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}"
-    # Otherwise, fall back to the system's PATH
     elif command_exists "$QEMU_EXECUTABLE"; then
         info "Using system QEMU found in PATH."
         qemu_bin_path="$QEMU_EXECUTABLE"
     else
-        error "QEMU executable '${QEMU_EXECUTABLE}' not found in PATH or in './${LOCAL_QEMU_INSTALL_DIR}/'."
-        info "Please run the install-deps.sh script to build it."
-        die "QEMU executable not found"
+        die "QEMU executable '${QEMU_EXECUTABLE}' not found. Run ./install-deps.sh"
     fi
 
     declare -a QEMU_ARGS
     QEMU_ARGS=("$qemu_bin_path")
-
-
-    # Set host-specific display driver (Cocoa or SDL)
     build_display_and_input_args
-
-    # Build all architecture-specific arguments (machine, RAM, devices, etc.)
-    if [[ $ARCH == m68k ]]; then
-        build_m68k_args
-    else # ppc
-        build_ppc_args
-    fi
-
+    [[ $ARCH == m68k ]] && build_m68k_args || build_ppc_args
     info "Starting QEMU..."
     >&2 echo "---"
     exec "${QEMU_ARGS[@]}"

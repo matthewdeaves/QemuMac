@@ -43,8 +43,7 @@ The project provides a complete QEMU-based classic Macintosh emulation environme
 - IDE device configuration with USB keyboard/mouse support
 
 ### Key Components
-- `run-mac.sh`: Core VM runner with architecture-specific QEMU argument building
-- `launch.sh`: User-friendly menu system for VM and ISO selection
+- `run-mac.sh`: Core VM runner with architecture-specific QEMU argument building and an integrated interactive launcher.
 - `iso-downloader.sh`: Software acquisition from JSON database
 - `vms/`: Directory containing VM configurations and disk images
 - `iso/`: Directory for ISO files and software database
