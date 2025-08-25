@@ -14,22 +14,6 @@ QEMU_GIT_URL="https://gitlab.com/qemu-project/qemu.git"
 QEMU_SOURCE_DIR="qemu-source"
 LOCAL_INSTALL_DIR="qemu-install"
 
-# --- Detect OS ---
-detect_os() {
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "macos"
-    elif file_exists "/etc/os-release"; then
-        . /etc/os-release
-        if [[ "$ID" == "ubuntu" ]] || [[ "$ID" == "debian" ]]; then
-            echo "ubuntu"
-        else
-            echo "unsupported"
-        fi
-    else
-        echo "unsupported"
-    fi
-}
-
 # --- Install system dependencies ---
 install_system_dependencies() {
     local os_type="$1"

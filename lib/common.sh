@@ -3,6 +3,9 @@
 # QemuMac Common Library - Shared utilities for all QemuMac scripts
 #
 
+# Configuration constants
+SHARED_MOUNT_POINT="/tmp/qemu-shared"
+
 # Color constants for consistent output
 C_RED=$(tput setaf 1)
 C_GREEN=$(tput setaf 2)
@@ -20,6 +23,32 @@ header() { echo -e "\n${C_BLUE}--- ${1} ---${C_RESET}" >&2; }
 die() {
     error "$1"
     exit "${2:-1}"
+}
+
+# Downloads a file to a temporary location, verifies checksum, and returns the temp path
+download_file_to_temp() {
+    local url="$1"
+    local md5="$2"
+    
+    local temp_file
+    temp_file=$(mktemp)
+    
+    info "Downloading from: ${url}"
+    # Follow redirects, fail on error, show progress bar, and output to temp file
+    curl --fail -L --progress-bar -o "$temp_file" "$url"
+    
+    if [[ -n "$md5" && "$md5" != "null" ]]; then
+        info "Verifying checksum..."
+        local downloaded_md5
+        downloaded_md5=$(md5sum "$temp_file" | awk '{print $1}')
+        if [[ "$downloaded_md5" != "$md5" ]]; then
+            rm -f "$temp_file"
+            die "Checksum mismatch! Expected ${md5}, got ${downloaded_md5}"
+        fi
+        success "Checksum verified."
+    fi
+    
+    echo "$temp_file"
 }
 
 # File validation functions
@@ -57,6 +86,29 @@ command_exists() {
 
 executable_exists() {
     [[ -x "$1" ]]
+}
+
+require_commands() {
+    for cmd in "$@"; do
+        if ! command_exists "$cmd"; then
+            die "Required command '${cmd}' is not installed."
+        fi
+    done
+}
+
+detect_os() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "macos"
+    elif file_exists "/etc/os-release"; then
+        . /etc/os-release
+        if [[ "$ID" == "ubuntu" ]] || [[ "$ID" == "debian" ]]; then
+            echo "ubuntu"
+        else
+            echo "unsupported"
+        fi
+    else
+        echo "unsupported"
+    fi
 }
 
 ensure_directory() {

@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Software Management
 - `./iso-downloader.sh` - Interactive downloader for operating systems and software from the database
+- Supports `"delivery": "shared"` for direct downloads to the shared disk system
 - Custom software can be added to `iso/custom-software.json` to extend the available downloads
 
 ### File Transfer System
@@ -68,8 +69,9 @@ VM configs are bash files defining variables:
 - **Single shared disk**: 512MB HFS-formatted disk accessible by all VMs
 - **Cross-architecture support**: Works with both m68k (SCSI) and PPC (IDE) VMs
 - **Automatic creation**: Created on first VM run, format as HFS from within Mac OS
-- **Host mounting**: Simple loop mount via `mount-shared.sh` script
+- **Host mounting**: Simple loop mount via `mount-shared.sh` script at `/tmp/qemu-shared`
 - **File transfer**: Easy way to move files between host and all Mac VMs
+- **Direct software delivery**: Software with `"delivery": "shared"` downloads directly to shared disk
 
 ### Display and Input
 - Automatically detects host OS (macOS uses Cocoa, Linux uses SDL)

@@ -14,7 +14,7 @@ SHARED_DISK="$SHARED_DIR/shared-disk.img"
 
 # The directory on the host system where the shared disk will be mounted.
 # This can be changed to any path you prefer (e.g., "~/qemu-shared").
-MOUNT_POINT="/tmp/qemu-shared"
+MOUNT_POINT="$SHARED_MOUNT_POINT"
 OPERATION="mount"
 
 # Parse arguments

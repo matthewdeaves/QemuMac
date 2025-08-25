@@ -40,7 +40,7 @@ This will guide you through selecting a VM, attaching an ISO, and choosing boot 
 ```bash
 ./iso-downloader.sh
 ```
-Downloads Mac OS installers and software from curated database.
+Downloads Mac OS installers and software from curated database. Software marked with `"delivery": "shared"` downloads directly to the shared disk for immediate access in VMs.
 
 **Custom Software**: Create `iso/custom-software.json` to add your own download sources. The script will automatically merge it with the default database. Use the same structure as `iso/software-database.json`.
 
@@ -78,7 +78,7 @@ A 512MB shared disk (HFS format) accessible by all VMs for easy file transfer be
 # 2. Mount shared disk on host (requires hfsprogs)
 ./mount-shared.sh
 
-# 3. Copy files to /tmp/qemu-shared on host
+# 3. Copy files to shared mount point on host (default: /tmp/qemu-shared)
 cp ~/myfiles/* /tmp/qemu-shared/
 
 # 4. Unmount when done

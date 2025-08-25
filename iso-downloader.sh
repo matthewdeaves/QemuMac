@@ -15,11 +15,7 @@ ISO_DOWNLOAD_DIR="iso"
 ROM_DOWNLOAD_DIR="roms"
 
 check_dependencies() {
-    for cmd in jq curl unzip; do
-        if ! command_exists "$cmd"; then
-            die "Required command '${cmd}' is not installed."
-        fi
-    done
+    require_commands jq curl unzip
 }
 
 load_database() {
@@ -60,6 +56,33 @@ select_item() {
     esac
 }
 
+# Handle delivery to the shared disk
+_handle_shared_delivery() {
+    local temp_file="$1"
+    local filename="$2"
+    
+    info "Mounting shared drive..."
+    if ! "$(dirname "$0")/mount-shared.sh"; then
+        die "Failed to mount shared drive"
+    fi
+    
+    local dest_path="${SHARED_MOUNT_POINT}/${filename}"
+    
+    if file_exists "$dest_path"; then
+        info "File already exists at '${dest_path}', skipping copy."
+        rm -f "$temp_file" # Clean up the unused temp file
+    else
+        info "Copying file to shared drive..."
+        mv "$temp_file" "$dest_path"
+    fi
+    
+    info "Unmounting shared drive..."
+    "$(dirname "$0")/mount-shared.sh" -u
+    
+    success "Successfully delivered to shared drive:"
+    echo "  ${C_BLUE}${filename}${C_RESET}"
+}
+
 download_file() {
     local software_db="$1"
     local choice="$2"
@@ -69,46 +92,61 @@ download_file() {
     
     info "Preparing to download '${C_BLUE}${selected_name}${C_RESET}'"
     
-    # Get all item details in one call
+    # Get all item details
     local item
     item=$(db_item "$software_db" "$selected_key" "$item_type")
     
-    local url filename nice_filename
+    local url filename nice_filename md5 delivery
     url=$(echo "$item" | jq -r '.url')
     filename=$(echo "$item" | jq -r '.filename')
     nice_filename=$(echo "$item" | jq -r '.nice_filename // .filename')
+    md5=$(echo "$item" | jq -r '.md5')
+    delivery=$(echo "$item" | jq -r '.delivery // "iso"')
     
-    # Determine destination
+    # Download and verify the file
+    local temp_file
+    temp_file=$(download_file_to_temp "$url" "$md5")
+    trap "rm -f '$temp_file'" EXIT
+    
+    # Handle delivery
+    if [[ "$delivery" == "shared" ]]; then
+        _handle_shared_delivery "$temp_file" "$filename"
+        trap - EXIT # The temp file was moved or deleted
+        return
+    fi
+    
+    # Default delivery to iso/ or roms/
     local dest_path
     if [[ "$item_type" == "rom" ]]; then
-        ensure_directory "$ROM_DOWNLOAD_DIR" "Creating ROM download directory"
+        ensure_directory "$ROM_DOWNLOAD_DIR"
+        # Special case for the main Quadra 800 ROM
         if [[ "$selected_key" == "quadra800" ]]; then
             dest_path="${ROM_DOWNLOAD_DIR}/800.ROM"
         else
             dest_path="${ROM_DOWNLOAD_DIR}/${filename}"
         fi
     else
-        ensure_directory "$ISO_DOWNLOAD_DIR" "Creating ISO download directory"
+        ensure_directory "$ISO_DOWNLOAD_DIR"
         dest_path="${ISO_DOWNLOAD_DIR}/${nice_filename}"
     fi
     
     file_exists "$dest_path" && die "File already exists at '${dest_path}'"
     
-    # Download
-    info "Downloading from: ${url}"
+    # Move the file to its final destination
     if [[ "$url" == *.zip ]]; then
-        # Handle zip files
+        info "Extracting from zip archive..."
         local temp_dir
         temp_dir=$(mktemp -d)
-        trap "rm -rf '$temp_dir'" EXIT
-        
-        curl --fail --location --progress-bar -o "${temp_dir}/archive.zip" "$url"
-        unzip -q "${temp_dir}/archive.zip" -d "$temp_dir"
+        # Unzip the downloaded temp file, not the url
+        unzip -q "$temp_file" -d "$temp_dir"
         mv "${temp_dir}/${filename}" "$dest_path"
+        rm -rf "$temp_dir"
+        rm -f "$temp_file" # remove original zip download
     else
-        # Direct download
-        curl --fail --location --progress-bar -o "$dest_path" "$url"
+        mv "$temp_file" "$dest_path"
     fi
+    
+    trap - EXIT # The temp file was moved
     
     success "Successfully downloaded and installed:"
     echo "  ${C_BLUE}${dest_path}${C_RESET}"

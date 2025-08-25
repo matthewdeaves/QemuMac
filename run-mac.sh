@@ -103,8 +103,8 @@ set_boot_m68k() {
 }
 
 build_display_and_input_args() {
-    local host_os=""
-    [[ "$OSTYPE" == darwin* ]] && host_os="macos" || host_os="linux"
+    local host_os
+    host_os=$(detect_os)
 
     info "Configuring display and input devices for host OS..."
     if [[ "$host_os" == "macos" ]]; then

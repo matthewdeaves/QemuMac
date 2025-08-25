@@ -100,6 +100,19 @@
       "url": "http://files.macos9lives.com/MacOS%20Operating%20Systems/Mac%20OS%209.2.2%20Universal%20Install/MacOS%20922%20Universal.iso",
       "filename": "MacOS 922 Universal.iso",
       "md5": "2d83af9f8d15ce622c6ae73ab86c27dd"
+    },
+    "warcraft2": {
+      "name": "Warcraft II",
+      "description": "Warcraft II: Tides of Darkness, a classic real-time strategy game.",
+      "category": "Games",
+      "architectures": [
+        "m68k",
+        "ppc"
+      ],
+      "url": "https://download.macintoshgarden.org/games/WarcraftII.sit",
+      "filename": "WarcraftII.sit",
+      "md5": "86203db1dee53a0f99c4960992809fa9",
+      "delivery": "shared"
     }
   },
   "roms": {
