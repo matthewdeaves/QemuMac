@@ -20,40 +20,37 @@ main() {
     header "Select a Virtual Machine to launch"
 
     # Find all .conf files in the vms/ directory structure.
-    # 'mapfile -t' reads the output of the find command directly into an array.
-    mapfile -t CONFIG_FILES < <(find vms -mindepth 2 -maxdepth 2 -type f -name "*.conf" | sort)
-
-    if [[ ${#CONFIG_FILES[@]} -eq 0 ]]; then
+    if ! find_files_with_names "vms" "*.conf" "parent_dir" "-mindepth 2 -maxdepth 2 -type f"; then
         error "No VM configuration files (.conf) found in the 'vms/' directory."
         info "You can create one using: ./run-mac.sh --create-config <vm-name>"
         die "No VM configurations found"
     fi
 
-    # Create a user-friendly list of VM names from their config file paths.
-    # This makes the menu much cleaner than showing the full path.
-    local -a vm_options
-    for conf_path in "${CONFIG_FILES[@]}"; do
-        # Extract the vm name, e.g., "powermac_g4" from "vms/powermac_g4/powermac_g4.conf"
-        vm_options+=("$(basename "$(dirname "$conf_path")")")
-    done
-
     # Use menu utility to select VM
-    local vm_index
-    vm_index=$(menu_files "Choose a VM:" "${CONFIG_FILES[@]}")
-    SELECTED_CONFIG="${CONFIG_FILES[$vm_index]}"
-    info "You selected VM: ${C_BLUE}${vm_options[$vm_index]}${C_RESET}"
+    local vm_choice vm_index=""
+    vm_choice=$(menu "Choose a VM:" "${FOUND_NAMES[@]}")
+    
+    [[ "$vm_choice" == "QUIT" ]] && exit 0
+    
+    # Find index of selected VM
+    for i in "${!FOUND_NAMES[@]}"; do
+        [[ "${FOUND_NAMES[$i]}" == "$vm_choice" ]] && vm_index="$i" && break
+    done
+    
+    SELECTED_CONFIG="${FOUND_FILES[$vm_index]}"
+    info "You selected VM: ${C_BLUE}${vm_choice}${C_RESET}"
 
     # --- Step 2: Select an ISO file to attach ---
     header "Select an ISO file to attach (optional)"
 
     # Find all .iso files in the iso/ directory.
-    mapfile -t ISO_FILES < <(find iso -maxdepth 1 -type f -name "*.iso" | sort)
-
-    # Create a new list of options, starting with "None" for convenience.
     local -a iso_options=("None (Boot from Hard Drive)")
-    for iso_path in "${ISO_FILES[@]}"; do
-        iso_options+=("$(basename "$iso_path")")
-    done
+    local ISO_FILES=()
+    
+    if find_files_with_names "iso" "*.iso" "basename" "-maxdepth 1 -type f"; then
+        iso_options+=("${FOUND_NAMES[@]}")
+        ISO_FILES=("${FOUND_FILES[@]}")
+    fi
 
     local SELECTED_ISO=""
 

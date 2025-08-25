@@ -114,6 +114,54 @@ menu_files() {
     done
 }
 
+# File discovery utility functions
+
+# Find files and extract display names for menus
+# Sets global arrays FOUND_FILES and FOUND_NAMES
+find_files_with_names() {
+    local find_path="$1" pattern="$2" name_extractor="$3" 
+    local extra_args="${4:-}"
+    
+    local files=()
+    if [[ -n "$extra_args" ]]; then
+        mapfile -t files < <(find "$find_path" $extra_args -name "$pattern" | sort)
+    else
+        mapfile -t files < <(find "$find_path" -name "$pattern" | sort)
+    fi
+    
+    [[ ${#files[@]} -eq 0 ]] && return 1
+    
+    local names=()
+    case "$name_extractor" in
+        "parent_dir") 
+            for f in "${files[@]}"; do names+=("$(basename "$(dirname "$f")")"); done ;;
+        "basename"|*)
+            for f in "${files[@]}"; do names+=("$(basename "$f")"); done ;;
+    esac
+    
+    # Return both arrays via global variables (bash limitation)
+    FOUND_FILES=("${files[@]}")
+    FOUND_NAMES=("${names[@]}")
+    return 0
+}
+
+# Simple binary choice with default
+ask_choice() {
+    local prompt="$1" option1="$2" option2="$3" default="${4:-1}"
+    
+    echo
+    echo "${C_YELLOW}${prompt}${C_RESET}"
+    echo "  1) ${option1}"
+    echo "  2) ${option2}"
+    read -rp "Choice [1-2]: " choice
+    
+    case "${choice:-$default}" in
+        1) echo "1" ;;
+        2) echo "2" ;;
+        *) die "Invalid choice. Please enter 1 or 2." ;;
+    esac
+}
+
 # Database utility functions for JSON handling
 
 # Load database once, cache in variable  

@@ -37,12 +37,6 @@ select_category() {
     menu "Choose a category:" "${categories[@]}"
 }
 
-build_software_options() {
-    local software_db="$1"
-    local category="$2"
-    
-    db_items "$software_db" "$category"
-}
 
 select_item() {
     local software_db="$1"
@@ -51,7 +45,7 @@ select_item() {
     header "Select an item to download"
     
     local software_options
-    mapfile -t software_options < <(build_software_options "$software_db" "$category" | sort)
+    mapfile -t software_options < <(db_items "$software_db" "$category" | sort)
     
     # Build menu options with special items
     local options=("${software_options[@]}" "Back to Categories")

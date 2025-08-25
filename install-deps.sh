@@ -265,52 +265,37 @@ main() {
     info "Detected OS: $os_type"
     
     # Ask if user wants to install from source
-    local install_from_source
-    echo
-    echo "${C_YELLOW}Do you want to install QEMU from source?${C_RESET}"
-    echo "  1) Yes - Build latest QEMU from Git (recommended for latest features)"
-    echo "  2) No - Exit (use package manager manually if needed)"
-    read -rp "Choice [1-2]: " choice
-    
-    case "$choice" in
-        1|"")
-            install_from_source="yes"
-            ;;
-        2)
-            info "You can install QEMU using:"
-            if [[ "$os_type" == "macos" ]]; then
-                echo "  brew install qemu"
-            else
-                echo "  sudo apt-get install qemu-system-m68k qemu-system-ppc"
-            fi
-            exit 0
-            ;;
-        *)
-            die "Invalid choice"
-            ;;
-    esac
+    local source_choice
+    source_choice=$(ask_choice \
+        "Do you want to install QEMU from source?" \
+        "Yes - Build latest QEMU from Git (recommended for latest features)" \
+        "No - Exit (use package manager manually if needed)")
+
+    if [[ "$source_choice" == "2" ]]; then
+        info "You can install QEMU using:"
+        if [[ "$os_type" == "macos" ]]; then
+            echo "  brew install qemu"
+        else
+            echo "  sudo apt-get install qemu-system-m68k qemu-system-ppc"
+        fi
+        exit 0
+    fi
     
     # Ask for installation type (local or global)
-    local install_type
-    echo
-    echo "${C_YELLOW}Where do you want to install QEMU?${C_RESET}"
-    echo "  1) Local - Install in project folder (./qemu-install/)"
-    echo "  2) Global - Install system-wide in /usr/local"
-    read -rp "Choice [1-2]: " choice
+    local install_choice
+    install_choice=$(ask_choice \
+        "Where do you want to install QEMU?" \
+        "Local - Install in project folder (./qemu-install/)" \
+        "Global - Install system-wide in /usr/local")
     
-    case "$choice" in
-        1|"")
-            install_type="local"
-            info "Will install QEMU locally in ${LOCAL_INSTALL_DIR}/"
-            ;;
-        2)
-            install_type="global"
-            info "Will install QEMU globally in /usr/local"
-            ;;
-        *)
-            die "Invalid choice"
-            ;;
-    esac
+    local install_type
+    if [[ "$install_choice" == "1" ]]; then
+        install_type="local"
+        info "Will install QEMU locally in ${LOCAL_INSTALL_DIR}/"
+    else
+        install_type="global"
+        info "Will install QEMU globally in /usr/local"
+    fi
     
     # Install system dependencies
     install_system_dependencies "$os_type"
