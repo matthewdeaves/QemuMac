@@ -1,4 +1,4 @@
-# Qemu2 - Classic Macintosh Emulation
+# QemuMac - Classic Macintosh Emulation
 
 A collection of scripts for running classic Macintosh VMs using QEMU, supporting both 68k (Quadra 800) and PowerPC (PowerMac G4) architectures.
 
@@ -40,7 +40,7 @@ This will guide you through selecting a VM, attaching an ISO, and choosing boot 
 ```bash
 ./iso-downloader.sh
 ```
-Downloads Mac OS installers and software from curated database. Software marked with `"delivery": "shared"` downloads directly to the shared disk for immediate access in VMs.
+Downloads Mac OS installers and software from curated database. Software marked with `"delivery": "shared"` downloads directly to the shared disk for immediate access in VMs. You need to have formatted the shared drive in an emulated machine before using this option!
 
 **Custom Software**: Create `iso/custom-software.json` to add your own download sources. The script will automatically merge it with the default database. Use the same structure as `iso/software-database.json`.
 
