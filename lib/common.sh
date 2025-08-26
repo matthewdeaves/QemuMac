@@ -29,11 +29,12 @@ die() {
 download_file_to_temp() {
     local url="$1"
     local md5="$2"
+    local quiet="${3:-false}"
     
     local temp_file
     temp_file=$(mktemp)
     
-    info "Downloading from: ${url}"
+    [[ "$quiet" != "true" ]] && info "Downloading from: ${url}"
     # Follow redirects, fail on error, show progress bar, and output to temp file
     curl --fail -L --progress-bar -o "$temp_file" "$url"
     
@@ -49,6 +50,64 @@ download_file_to_temp() {
     fi
     
     echo "$temp_file"
+}
+
+# Download file and place in final destination with automatic extraction
+download_and_place_file() {
+    local url="$1" md5="$2" dest_path="$3" filename="$4"
+    
+    # Ensure destination directory exists
+    ensure_directory "$(dirname "$dest_path")"
+    
+    # Check if file already exists
+    if file_exists "$dest_path"; then
+        info "File already exists: $(basename "$dest_path")"
+        return 0
+    fi
+    
+    info "Downloading: $(basename "$dest_path")"
+    
+    # Download to temp location
+    local temp_file
+    temp_file=$(download_file_to_temp "$url" "$md5" "true")
+    
+    # Handle ZIP extraction or direct move
+    if [[ "$url" == *.zip ]]; then
+        info "Extracting from zip archive..."
+        local temp_dir
+        temp_dir=$(mktemp -d)
+        unzip -q "$temp_file" -d "$temp_dir"
+        mv "${temp_dir}/${filename}" "$dest_path"
+        rm -rf "$temp_dir"
+        rm -f "$temp_file"
+    else
+        mv "$temp_file" "$dest_path"
+    fi
+    
+    success "File ready: $dest_path"
+    echo "$dest_path"  # Return the final path
+}
+
+# Resolve final download path based on item type and metadata
+resolve_download_path() {
+    local item_type="$1" selected_key="$2" filename="$3" nice_filename="$4"
+    
+    local dest_path
+    case "$item_type" in
+        "rom")
+            # Special case for main Quadra 800 ROM
+            if [[ "$selected_key" == "quadra800" ]]; then
+                dest_path="roms/800.ROM"
+            else
+                dest_path="roms/${filename}"
+            fi
+            ;;
+        "cd"|*)
+            dest_path="iso/${nice_filename}"
+            ;;
+    esac
+    
+    echo "$dest_path"
 }
 
 # File validation functions

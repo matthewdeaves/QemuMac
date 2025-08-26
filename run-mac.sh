@@ -9,8 +9,6 @@ generate_config() {
     local arch_choice arch
 
     dir_exists "$vm_dir" && die "VM '${vm_name}' already exists at '${vm_dir}'."
-
-    local arch_choice
     arch_choice=$(menu "Choose an architecture for '${vm_name}':" \
         "m68k (Macintosh Quadra)" \
         "ppc (PowerMac G4)")
@@ -22,6 +20,48 @@ generate_config() {
 
     info "Creating new VM: ${vm_name} (${arch})"
     ensure_directory "$vm_dir" "Creating VM directory"
+    
+    # Load software database for installer selection
+    local software_db installer_choice
+    software_db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+    
+    # Get architecture-compatible installers
+    header "Select Default Installer (Optional)"
+    info "Choose an installer that will be automatically downloaded and used on first run:"
+    
+    local installer_options=("None (manual setup)")
+    local installer_keys=("")
+    
+    # Filter installers by architecture
+    while IFS= read -r item; do
+        if [[ -n "$item" ]]; then
+            local key name
+            IFS=':' read -r key name _ <<< "$item"
+            local installer_item
+            installer_item=$(db_item "$software_db" "$key" "cd")
+            local architectures
+            architectures=$(echo "$installer_item" | jq -r '.architectures[]?' 2>/dev/null)
+            
+            # Check if this installer supports the selected architecture
+            if echo "$architectures" | grep -q "^${arch}$"; then
+                installer_options+=("$name")
+                installer_keys+=("$key")
+            fi
+        fi
+    done < <(echo "$software_db" | jq -r '.cds | to_entries[] | "\(.key):\(.value.name):cd"')
+    
+    installer_choice=$(menu "Choose a default installer:" "${installer_options[@]}")
+    
+    local default_installer_line=""
+    if [[ "$installer_choice" != "None"* && "$installer_choice" != "QUIT" ]]; then
+        # Find the corresponding key for the selected installer
+        for i in "${!installer_options[@]}"; do
+            if [[ "${installer_options[$i]}" == "$installer_choice" ]]; then
+                default_installer_line="DEFAULT_INSTALLER=\"${installer_keys[$i]}\""
+                break
+            fi
+        done
+    fi
 
     if [[ "$arch" == "m68k" ]]; then
         cat > "$conf_file" << EOL
@@ -35,6 +75,7 @@ HD_IMAGE="${vm_dir}/hdd.qcow2"
 HD_SCSI_ID=0
 CD_SCSI_ID=2
 SHARED_SCSI_ID=4
+$([ -n "$default_installer_line" ] && echo "$default_installer_line")
 EOL
     else # ppc
         cat > "$conf_file" << EOL
@@ -44,6 +85,7 @@ MACHINE_TYPE="mac99"
 RAM_SIZE="512M"
 HD_SIZE="10G"
 HD_IMAGE="${vm_dir}/hdd.qcow2"
+$([ -n "$default_installer_line" ] && echo "$default_installer_line")
 EOL
     fi
     success "Config created at: ${C_BLUE}${conf_file}${C_RESET}"
@@ -51,10 +93,55 @@ EOL
     >&2 echo "  ./run-mac.sh --config ${conf_file}"
 }
 
+setup_first_run_installer() {
+    local installer_key="$1"
+    
+    header "Setting up first-run installer"
+    info "VM appears to be new - setting up installer media automatically"
+    
+    # Load the software database
+    local software_db
+    software_db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+    
+    # Get installer details from database
+    local installer_item filename nice_filename url md5
+    installer_item=$(db_item "$software_db" "$installer_key" "cd")
+    
+    if [[ "$installer_item" == "null" ]]; then
+        error "Installer '$installer_key' not found in software database"
+        info "Continuing without installer - you'll need to attach one manually"
+        return 1
+    fi
+    
+    filename=$(echo "$installer_item" | jq -r '.filename')
+    nice_filename=$(echo "$installer_item" | jq -r '.nice_filename // .filename')
+    url=$(echo "$installer_item" | jq -r '.url')
+    md5=$(echo "$installer_item" | jq -r '.md5')
+    
+    local iso_path
+    iso_path=$(resolve_download_path "cd" "$installer_key" "$filename" "$nice_filename")
+    download_and_place_file "$url" "$md5" "$iso_path" "$filename"
+    
+    # Set up for booting from the installer
+    CD_ISO_FILE="$iso_path"
+    BOOT_TARGET="cd"
+    info "Configured to boot from installer media"
+    
+    return 0
+}
+
 preflight_checks() {
+    local first_run=false
+    
     if ! file_exists "$HD_IMAGE"; then
         info "Hard drive not found. Creating '${HD_IMAGE}' (${HD_SIZE})."
         qemu-img create -f qcow2 "$HD_IMAGE" "$HD_SIZE" > /dev/null
+        first_run=true
+    fi
+    
+    # Check for first-run installer setup
+    if [[ "$first_run" == true && -n "${DEFAULT_INSTALLER:-}" ]]; then
+        setup_first_run_installer "$DEFAULT_INSTALLER"
     fi
 
     if [[ "$ARCH" == "m68k" ]]; then
@@ -196,36 +283,55 @@ interactive_launch() {
         [[ "${FOUND_NAMES[$i]}" == "$vm_choice" ]] && vm_index="$i" && break
     done
     CONFIG_FILE="${FOUND_FILES[$vm_index]}"
-
-    header "Select an ISO file to attach (optional)"
-    local -a iso_options=("None (Boot from Hard Drive)")
-    local ISO_FILES=()
-    if find_files_with_names "iso" "*.iso" "basename" "-maxdepth 1 -type f"; then
-        iso_options+=("${FOUND_NAMES[@]}")
-        ISO_FILES=("${FOUND_FILES[@]}")
-    fi
-    if find_files_with_names "iso" "*.toast" "basename" "-maxdepth 1 -type f"; then
-        iso_options+=("${FOUND_NAMES[@]}")
-        ISO_FILES+=("${FOUND_FILES[@]}")
-    fi
-
-    local iso_choice
-    iso_choice=$(menu "Choose an ISO:" "${iso_options[@]}")
     
-    if [[ "$iso_choice" == "NONE" ]] || [[ "$iso_choice" == "None"* ]]; then
-        CD_ISO_FILE=""
-    else
-        for iso in "${ISO_FILES[@]}"; do
-            [[ "$(basename "$iso")" == "$iso_choice" ]] && CD_ISO_FILE="$iso" && break
-        done
+    # Load config to check for first-run + default installer scenario
+    source "$CONFIG_FILE"
+    
+    # Check if this is a first-run with default installer
+    local skip_iso_selection=false
+    if [[ ! -f "$HD_IMAGE" && -n "${DEFAULT_INSTALLER:-}" ]]; then
+        skip_iso_selection=true
+        local software_db installer_item installer_name
+        software_db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+        installer_item=$(db_item "$software_db" "$DEFAULT_INSTALLER" "cd")
+        installer_name=$(echo "$installer_item" | jq -r '.name')
+        
+        header "First Run Detected"
+        info "This VM will automatically use the default installer: ${C_BLUE}${installer_name}${C_RESET}"
+        CD_ISO_FILE=""  # Will be set by setup_first_run_installer()
     fi
+    
+    if [[ "$skip_iso_selection" == false ]]; then
+        header "Select an ISO file to attach (optional)"
+        local -a iso_options=("None (Boot from Hard Drive)")
+        local ISO_FILES=()
+        if find_files_with_names "iso" "*.iso" "basename" "-maxdepth 1 -type f"; then
+            iso_options+=("${FOUND_NAMES[@]}")
+            ISO_FILES=("${FOUND_FILES[@]}")
+        fi
+        if find_files_with_names "iso" "*.toast" "basename" "-maxdepth 1 -type f"; then
+            iso_options+=("${FOUND_NAMES[@]}")
+            ISO_FILES+=("${FOUND_FILES[@]}")
+        fi
 
-    if [[ -n "$CD_ISO_FILE" ]]; then
-        local boot_action
-        boot_action=$(menu "How should the ISO be used?" \
-            "Boot from Hard Drive (mount ISO on desktop)" \
-            "Boot from CD/ISO (for OS installation, etc.)")
-        [[ "$boot_action" == *"CD/ISO"* ]] && BOOT_TARGET="cd" || BOOT_TARGET="hd"
+        local iso_choice
+        iso_choice=$(menu "Choose an ISO:" "${iso_options[@]}")
+        
+        if [[ "$iso_choice" == "NONE" ]] || [[ "$iso_choice" == "None"* ]]; then
+            CD_ISO_FILE=""
+        else
+            for iso in "${ISO_FILES[@]}"; do
+                [[ "$(basename "$iso")" == "$iso_choice" ]] && CD_ISO_FILE="$iso" && break
+            done
+        fi
+
+        if [[ -n "$CD_ISO_FILE" ]]; then
+            local boot_action
+            boot_action=$(menu "How should the ISO be used?" \
+                "Boot from Hard Drive (mount ISO on desktop)" \
+                "Boot from CD/ISO (for OS installation, etc.)")
+            [[ "$boot_action" == *"CD/ISO"* ]] && BOOT_TARGET="cd" || BOOT_TARGET="hd"
+        fi
     fi
 }
 

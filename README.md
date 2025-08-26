@@ -55,12 +55,27 @@ A 512MB shared disk (HFS format) accessible by all VMs for easy file transfer be
 ```bash
 ./run-mac.sh --create-config my_mac
 ```
+During VM creation, you can optionally select a default installer that will be automatically downloaded and configured on first run.
 
 ## Usage Examples
 
 ### Installing Mac OS (typical workflow)
+
+**Option 1: With Default Installer (Recommended)**
 ```bash
-# 1. Create VM
+# 1. Create VM and select a default installer during setup
+./run-mac.sh --create-config quadra_fresh
+
+# 2. First boot automatically downloads installer and boots from CD
+./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
+
+# 3. After installation, subsequent boots use hard drive
+./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
+```
+
+**Option 2: Manual Installer Setup**
+```bash
+# 1. Create VM (skip default installer)
 ./run-mac.sh --create-config quadra_fresh
 
 # 2. Boot from install disc, format hard drive

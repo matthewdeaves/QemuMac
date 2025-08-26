@@ -128,36 +128,11 @@ download_file() {
         return
     fi
     
-    # Default delivery to iso/ or roms/
+    # Resolve destination path and download file
     local dest_path
-    if [[ "$item_type" == "rom" ]]; then
-        ensure_directory "$ROM_DOWNLOAD_DIR"
-        # Special case for the main Quadra 800 ROM
-        if [[ "$selected_key" == "quadra800" ]]; then
-            dest_path="${ROM_DOWNLOAD_DIR}/800.ROM"
-        else
-            dest_path="${ROM_DOWNLOAD_DIR}/${filename}"
-        fi
-    else
-        ensure_directory "$ISO_DOWNLOAD_DIR"
-        dest_path="${ISO_DOWNLOAD_DIR}/${nice_filename}"
-    fi
-    
+    dest_path=$(resolve_download_path "$item_type" "$selected_key" "$filename" "$nice_filename")
     file_exists "$dest_path" && die "File already exists at '${dest_path}'"
-    
-    # Move the file to its final destination
-    if [[ "$url" == *.zip ]]; then
-        info "Extracting from zip archive..."
-        local temp_dir
-        temp_dir=$(mktemp -d)
-        # Unzip the downloaded temp file, not the url
-        unzip -q "$temp_file" -d "$temp_dir"
-        mv "${temp_dir}/${filename}" "$dest_path"
-        rm -rf "$temp_dir"
-        rm -f "$temp_file" # remove original zip download
-    else
-        mv "$temp_file" "$dest_path"
-    fi
+    download_and_place_file "$url" "$md5" "$dest_path" "$filename"
     
     trap - EXIT # The temp file was moved
     

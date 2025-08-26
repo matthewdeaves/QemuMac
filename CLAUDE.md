@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./run-mac.sh --config <vm_config_file>` - Launch a specific VM configuration
 - `./run-mac.sh --config <vm_config_file> --iso <iso_file>` - Launch VM with attached ISO
 - `./run-mac.sh --config <vm_config_file> --iso <iso_file> --boot-from-cd` - Boot from CD/ISO
-- `./run-mac.sh --create-config <vm_name>` - Create new VM configuration interactively
+- `./run-mac.sh --create-config <vm_name>` - Create new VM configuration interactively with optional default installer selection
 
 ### Software Management
 - `./iso-downloader.sh` - Interactive downloader for operating systems and software from the database
@@ -60,10 +60,17 @@ VM configs are bash files defining variables:
 - `HD_IMAGE`: Path to disk image
 - Architecture-specific settings (PRAM_FILE, SCSI IDs for m68k)
 - `SHARED_SCSI_ID`: SCSI ID for shared disk (m68k only, defaults to 4)
+- `DEFAULT_INSTALLER`: Optional installer key for first-run automatic setup
 
 ### Boot Device Handling
 - **m68k**: PRAM file is patched with SCSI RefNum calculations for boot device selection
 - **PPC**: Uses QEMU's bootindex parameter for IDE devices
+
+### First-Run Installer System
+- **Automatic Setup**: VMs with `DEFAULT_INSTALLER` automatically download and configure installer on first boot
+- **Architecture Filtering**: Only compatible installers are offered during VM creation
+- **Seamless Experience**: First boot automatically boots from installer, subsequent boots use hard drive
+- **Optional Feature**: Can be skipped during VM creation for manual setup
 
 ### Shared Disk System
 - **Single shared disk**: 512MB HFS-formatted disk accessible by all VMs

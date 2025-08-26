@@ -12,18 +12,6 @@
       "filename": "Apple Legacy Recovery.iso",
       "md5": "817db4bd447e77706a64959070ded9c8"
     },
-    "macos86": {
-      "name": "Mac OS 8.6 Internal Edition",
-      "description": "Mac OS 8.6 Internal Edition - bootable installation disc, one of the most stable versions of Mac OS 8.",
-      "category": "Operating Systems",
-      "architectures": [
-        "m68k",
-        "ppc"
-      ],
-      "url": "https://archive.org/download/10.7-lion/Mac%20OS%208.6%20Internal%20Edition.iso",
-      "filename": "Mac OS 8.6 Internal Edition.iso",
-      "md5": ""
-    },
     "marathon_trilogy": {
       "name": "Marathon Trilogy",
       "description": "Classic sci-fi first-person shooter trilogy by Bungie - Marathon, Marathon 2: Durandal, and Marathon Infinity.",
