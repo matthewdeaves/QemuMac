@@ -43,8 +43,13 @@ select_item() {
     local software_options
     mapfile -t software_options < <(db_items "$software_db" "$category" | sort)
     
-    # Build menu options with special items
-    local options=("${software_options[@]}" "Back to Categories")
+    # Extract display names for menu, keep mapping simple
+    local display_options=()
+    for item in "${software_options[@]}"; do
+        display_options+=("$(echo "$item" | cut -d: -f2)")
+    done
+    
+    local options=("${display_options[@]}" "Back to Categories")
     
     local choice
     choice=$(menu "Select the software you want to download:" "${options[@]}")
@@ -52,7 +57,15 @@ select_item() {
     case "$choice" in
         "QUIT") echo "quit" ;;
         "BACK"|"Back"*) echo "back" ;;
-        *) echo "$choice" ;;
+        *) 
+            # Find matching original item
+            for item in "${software_options[@]}"; do
+                if [[ "$(echo "$item" | cut -d: -f2)" == "$choice" ]]; then
+                    echo "$item"
+                    return
+                fi
+            done
+            ;;
     esac
 }
 
