@@ -61,12 +61,13 @@ install_system_dependencies() {
             libvde-dev \
             libvdeplug-dev \
             libusb-1.0-0-dev \
-            libusbredir-dev \
+            libusbredirhost-dev \
+            libusbredirparser-dev \
             libssh-dev \
-            libncurses5-dev \
+            libncurses-dev \
             libgnutls28-dev \
-            libnettle8-dev \
-            libjpeg8-dev \
+            nettle-dev \
+            libjpeg-dev \
             libpng-dev \
             curl \
             unzip \

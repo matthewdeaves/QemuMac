@@ -201,10 +201,10 @@ find_files_with_names() {
 ask_choice() {
     local prompt="$1" option1="$2" option2="$3" default="${4:-1}"
     
-    echo
-    echo "${C_YELLOW}${prompt}${C_RESET}"
-    echo "  1) ${option1}"
-    echo "  2) ${option2}"
+    echo >&2
+    echo "${C_YELLOW}${prompt}${C_RESET}" >&2
+    echo "  1) ${option1}" >&2
+    echo "  2) ${option2}" >&2
     read -rp "Choice [1-2]: " choice
     
     case "${choice:-$default}" in
