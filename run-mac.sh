@@ -130,6 +130,43 @@ setup_first_run_installer() {
     return 0
 }
 
+setup_rom_if_missing() {
+    local rom_path="$1"
+    
+    # Check if ROM already exists
+    if file_exists "$rom_path"; then
+        return 0
+    fi
+    
+    header "Setting up m68k ROM"
+    info "ROM file not found - downloading automatically"
+    
+    # Load the software database
+    local software_db
+    software_db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+    
+    # Get ROM details from database
+    local rom_item filename url md5
+    rom_item=$(db_item "$software_db" "quadra800" "rom")
+    
+    if [[ "$rom_item" == "null" ]]; then
+        error "ROM 'quadra800' not found in software database"
+        die "Unable to auto-download ROM file. Please obtain '${rom_path}' manually"
+    fi
+    
+    filename=$(echo "$rom_item" | jq -r '.filename')
+    url=$(echo "$rom_item" | jq -r '.url')
+    md5=$(echo "$rom_item" | jq -r '.md5')
+    
+    local dest_path
+    dest_path=$(resolve_download_path "rom" "quadra800" "$filename" "$filename")
+    download_and_place_file "$url" "$md5" "$dest_path" "$filename"
+    
+    success "ROM file successfully downloaded and installed"
+    
+    return 0
+}
+
 preflight_checks() {
     local first_run=false
     
@@ -150,7 +187,7 @@ preflight_checks() {
             dd if=/dev/zero of="$PRAM_FILE" bs=256 count=1 &>/dev/null
         fi
         local m68k_rom_file="roms/800.ROM"
-        require_file "$m68k_rom_file" "Required m68k ROM file not found at: ${m68k_rom_file}"
+        setup_rom_if_missing "$m68k_rom_file"
     fi
 
     [[ -n "$CD_ISO_FILE" ]] && require_file "$CD_ISO_FILE" "ISO file '${CD_ISO_FILE}' is specified but not found."

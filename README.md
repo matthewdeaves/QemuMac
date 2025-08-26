@@ -6,7 +6,7 @@ A collection of scripts for running classic Macintosh VMs using QEMU, supporting
 
 - QEMU 10.x (tested with 10.0.92/v10.1.0-rc2)
 - Dependencies: `jq`, `curl`, `unzip`
-- ROM file: `roms/800.ROM` (for 68k VMs)
+- ROM file: `roms/800.ROM` (for 68k VMs, auto-downloaded on first run)
 
 ### Installing Dependencies
 
@@ -112,12 +112,12 @@ cp ~/myfiles/* /tmp/qemu-shared/
 
 - `vms/` - VM configurations and disk images
 - `iso/` - ISO files and software database
-- `roms/` - ROM files (800.ROM required for 68k)
+- `roms/` - ROM files (800.ROM auto-downloaded for 68k VMs)
 - `shared/` - Shared disk accessible by all VMs (auto-created)
 
 ## Architectures
 
-- **68k (Quadra 800)**: 128M RAM, 2G disk, requires ROM file
+- **68k (Quadra 800)**: 128M RAM, 2G disk, ROM file auto-downloaded
 - **PPC (PowerMac G4)**: 512M RAM, 10G disk, no ROM needed
 
 ## Performance Optimizations
@@ -136,8 +136,7 @@ QemuMac includes built-in performance optimizations for the best possible emulat
 
 ### Automatic Detection
 - Performance optimizations are applied automatically
-- Compatible with all QEMU versions and host platforms
-- No configuration required - works out of the box
+- Compatible with QEMU 10.x and macOS and Ubuntu hosts
 
 ## Controls
 

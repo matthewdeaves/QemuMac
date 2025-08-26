@@ -31,7 +31,7 @@ The project provides a complete QEMU-based classic Macintosh emulation environme
 
 **m68k Architecture (Macintosh Quadra):**
 - Uses `qemu-system-m68k` with q800 machine type
-- Requires ROM file at `roms/800.ROM`
+- ROM file at `roms/800.ROM` (auto-downloaded on first run)
 - Uses PRAM file for boot device selection (SCSI-based)
 - Typical RAM: 128M, disk: 2G
 - SCSI device configuration with customizable IDs
@@ -48,7 +48,7 @@ The project provides a complete QEMU-based classic Macintosh emulation environme
 - `iso-downloader.sh`: Software acquisition from JSON database
 - `vms/`: Directory containing VM configurations and disk images
 - `iso/`: Directory for ISO files and software database
-- `roms/`: Directory for required ROM files
+- `roms/`: Directory for ROM files (auto-downloaded as needed)
 - `shared/`: Cross-VM shared disk directory (auto-created)
 
 ### Default VM Configurations
@@ -81,6 +81,7 @@ VM configs are bash files defining variables:
 
 ### First-Run Installer System
 - **Automatic Setup**: VMs with `DEFAULT_INSTALLER` automatically download and configure installer on first boot
+- **ROM Auto-Download**: m68k VMs automatically download required ROM file if missing
 - **Architecture Filtering**: Only compatible installers are offered during VM creation
 - **Seamless Experience**: First boot automatically boots from installer, subsequent boots use hard drive
 - **Optional Feature**: Can be skipped during VM creation for manual setup
