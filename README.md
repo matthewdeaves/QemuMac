@@ -63,7 +63,7 @@ During VM creation, you can optionally select a default installer that will be a
 
 **Option 1: With Default Installer (Recommended)**
 ```bash
-# 1. Create VM and select a default installer during setup
+# 1. Create VM and select a default installer during setup (Quadra Requires Apple Legacy Software Recovery CD)
 ./run-mac.sh --create-config quadra_fresh
 
 # 2. First boot automatically downloads installer and boots from CD
@@ -78,8 +78,8 @@ During VM creation, you can optionally select a default installer that will be a
 # 1. Create VM (skip default installer)
 ./run-mac.sh --create-config quadra_fresh
 
-# 2. Boot from install disc, format hard drive
-./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf --iso iso/MacOS922.iso --boot-from-cd
+# 2. Boot from Apple Legacy Recovery disc, format hard drive
+./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf --iso "iso/Apple Legacy Recovery.iso" --boot-from-cd
 
 # 3. After installation, boot normally from hard drive
 ./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
@@ -90,13 +90,15 @@ During VM creation, you can optionally select a default installer that will be a
 # 1. Start VM and format shared disk as Mac OS Standard (HFS) if needed
 ./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf
 
-# 2. Mount shared disk on host (requires hfsprogs)
+# 2. Shutdown the VM after formatting shared disk
+
+# 3. Mount shared disk on host (requires hfsprogs)
 ./mount-shared.sh
 
-# 3. Copy files to shared mount point on host (default: /tmp/qemu-shared)
+# 4. Copy files to shared mount point on host (default: /tmp/qemu-shared)
 cp ~/myfiles/* /tmp/qemu-shared/
 
-# 4. Unmount when done
+# 5. Unmount when done
 ./mount-shared.sh -u
 ```
 
