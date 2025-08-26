@@ -51,6 +51,19 @@ The project provides a complete QEMU-based classic Macintosh emulation environme
 - `roms/`: Directory for required ROM files
 - `shared/`: Cross-VM shared disk directory (auto-created)
 
+### Default VM Configurations
+The project includes 4 pre-configured VMs ready for immediate use:
+
+**PowerPC VMs:**
+- `vms/power_mac_g4_os9/` - PowerMac G4 with Mac OS 9.2.2 (DEFAULT_INSTALLER="macos922")
+- `vms/power_mac_g4_tiger/` - PowerMac G4 with Mac OS X Tiger (DEFAULT_INSTALLER="macos_x_tiger")
+- `vms/power_mac_g4_leopard/` - PowerMac G4 with Mac OS X Leopard (DEFAULT_INSTALLER="macos_x_leopard")
+
+**68k VM:**
+- `vms/68k_quadra_800/` - Quadra 800 with classic Mac OS (DEFAULT_INSTALLER="apple_legacy_recovery")
+
+All default VMs include automatic installer setup - first boot downloads and configures the OS, subsequent boots use the hard drive.
+
 ### VM Configuration Format
 VM configs are bash files defining variables:
 - `ARCH`: "m68k" or "ppc"

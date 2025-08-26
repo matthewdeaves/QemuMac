@@ -1,0 +1,12 @@
+# Ignore all directories (user-created VMs)
+*/
+
+# But keep the default VM configurations
+!power_mac_g4_os9/
+!power_mac_g4_tiger/
+!power_mac_g4_leopard/
+!68k_quadra_800/
+
+# Always ignore disk images and runtime files
+*.qcow2
+*.img

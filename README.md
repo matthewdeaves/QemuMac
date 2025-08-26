@@ -88,7 +88,7 @@ During VM creation, you can optionally select a default installer that will be a
 ### File Transfer Between Host and VM
 ```bash
 # 1. Start VM and format shared disk as Mac OS Standard (HFS) if needed
-./run-mac.sh --config vms/quadra800/quadra800.conf
+./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf
 
 # 2. Mount shared disk on host (requires hfsprogs)
 ./mount-shared.sh
@@ -103,7 +103,7 @@ cp ~/myfiles/* /tmp/qemu-shared/
 ### Running with Software
 ```bash
 # Boot normally with game disc mounted
-./run-mac.sh --config vms/quadra800/quadra800.conf --iso iso/Marathon.iso
+./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf --iso iso/Marathon.iso
 ```
 
 ## Directory Structure
