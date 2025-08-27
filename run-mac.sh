@@ -350,6 +350,10 @@ interactive_launch() {
             iso_options+=("${FOUND_NAMES[@]}")
             ISO_FILES+=("${FOUND_FILES[@]}")
         fi
+        if find_files_with_names "iso" "*.dmg" "basename" "-maxdepth 1 -type f"; then
+            iso_options+=("${FOUND_NAMES[@]}")
+            ISO_FILES+=("${FOUND_FILES[@]}")
+        fi
 
         local iso_choice
         iso_choice=$(menu "Choose an ISO:" "${iso_options[@]}")
