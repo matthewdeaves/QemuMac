@@ -113,6 +113,32 @@
       "filename": "WarcraftII.sit",
       "md5": "86203db1dee53a0f99c4960992809fa9",
       "delivery": "shared"
+    },
+    "stuffit_expander_55_img": {
+      "name": "StuffIt Expander 5.5 (IMG)",
+      "description": "StuffIt Expander 5.5 - Free decompression utility for Mac OS in IMG disk image format, capable of expanding StuffIt archives and many other compressed file formats.",
+      "category": "Utilities",
+      "architectures": [
+        "m68k",
+        "ppc"
+      ],
+      "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/Garden/apps/stuffit_expander_5.5.img",
+      "filename": "stuffit_expander_5.5.img",
+      "md5": "6675833ccbf24d9f8958806b52b91fbb",
+      "delivery": "shared"
+    },
+    "stuffit_expander_55_dsk": {
+      "name": "StuffIt Expander 5.5 (DSK)",
+      "description": "StuffIt Expander 5.5 - Free decompression utility for Mac OS in DSK disk image format, capable of expanding StuffIt archives and many other compressed file formats.",
+      "category": "Utilities",
+      "architectures": [
+        "m68k",
+        "ppc"
+      ],
+      "url": "ftp://macgarden:publicdl@repo1.macintoshgarden.org/Garden/apps/StuffItExpander55.dsk",
+      "filename": "StuffItExpander55.dsk",
+      "md5": "85ea8bcd0d0fbce7de0bf84efc6d1376",
+      "delivery": "shared"
     }
   },
   "roms": {

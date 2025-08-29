@@ -109,12 +109,18 @@ download_file() {
     local item
     item=$(db_item "$software_db" "$selected_key" "$item_type")
     
-    local url filename nice_filename md5 delivery
+    local url filename nice_filename md5 delivery serial
     url=$(echo "$item" | jq -r '.url')
     filename=$(echo "$item" | jq -r '.filename')
     nice_filename=$(echo "$item" | jq -r '.nice_filename // .filename')
     md5=$(echo "$item" | jq -r '.md5')
     delivery=$(echo "$item" | jq -r '.delivery // "iso"')
+    serial=$(echo "$item" | jq -r '.serial // null')
+    
+    # Display serial number if available
+    if [[ "$serial" != "null" && -n "$serial" ]]; then
+        info "Serial number: ${C_GREEN}${serial}${C_RESET}"
+    fi
     
     # Download and verify the file
     local temp_file
