@@ -172,7 +172,7 @@ preflight_checks() {
     
     if ! file_exists "$HD_IMAGE"; then
         info "Hard drive not found. Creating '${HD_IMAGE}' (${HD_SIZE})."
-        qemu-img create -f qcow2 "$HD_IMAGE" "$HD_SIZE" > /dev/null
+        "$qemu_img_path" create -f qcow2 "$HD_IMAGE" "$HD_SIZE" > /dev/null
         first_run=true
     fi
     
@@ -197,7 +197,7 @@ preflight_checks() {
     if ! file_exists "$shared_disk"; then
         info "Shared disk not found. Creating '${shared_disk}' (512M)."
         ensure_directory "$shared_dir"
-        qemu-img create -f raw "$shared_disk" 512M > /dev/null
+        "$qemu_img_path" create -f raw "$shared_disk" 512M > /dev/null
         success "Shared disk created (unformatted)"
         info "Format as Mac OS Standard from within your Mac VM"
         info "Then mount with: ./mount-shared.sh"
@@ -419,20 +419,24 @@ main() {
 
     source "$CONFIG_FILE"
     CD_ISO_FILE="${CD_ISO_FILE:-}"
-    preflight_checks
     local LOCAL_QEMU_INSTALL_DIR="qemu-install"
     local QEMU_EXECUTABLE="qemu-system-${ARCH}"
     local qemu_bin_path=""
+    local qemu_img_path="qemu-img"
 
     if executable_exists "${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}"; then
         info "Using local QEMU build from './${LOCAL_QEMU_INSTALL_DIR}/'"
         qemu_bin_path="${LOCAL_QEMU_INSTALL_DIR}/bin/${QEMU_EXECUTABLE}"
+        qemu_img_path="${LOCAL_QEMU_INSTALL_DIR}/bin/qemu-img"
     elif command_exists "$QEMU_EXECUTABLE"; then
         info "Using system QEMU found in PATH."
         qemu_bin_path="$QEMU_EXECUTABLE"
+        qemu_img_path="qemu-img"
     else
         die "QEMU executable '${QEMU_EXECUTABLE}' not found. Run ./install-deps.sh"
     fi
+    
+    preflight_checks
 
     declare -a QEMU_ARGS
     QEMU_ARGS=("$qemu_bin_path")
