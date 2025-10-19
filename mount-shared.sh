@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # QemuMac Shared Disk Mounter - Simple script to mount the shared disk
 #

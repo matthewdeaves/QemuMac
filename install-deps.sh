@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # QemuMac Dependency Installer - Installs QEMU and required dependencies
 # Supports both macOS and Ubuntu/Debian Linux
