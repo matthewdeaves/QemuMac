@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -Euo pipefail
 source "$(dirname "$0")/lib/common.sh"
 

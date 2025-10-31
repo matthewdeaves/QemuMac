@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # QemuMac Common Library - Shared utilities for all QemuMac scripts
 #

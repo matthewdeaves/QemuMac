@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # QemuMac Asset Downloader - A simple script to download software and ROMs.
 #
