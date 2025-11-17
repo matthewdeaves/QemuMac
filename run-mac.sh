@@ -167,6 +167,37 @@ setup_rom_if_missing() {
     return 0
 }
 
+check_shared_disk_available() {
+    local shared_disk="$1"
+
+    # Check if shared disk exists first
+    if ! file_exists "$shared_disk"; then
+        # Doesn't exist yet, so it's available
+        return 0
+    fi
+
+    # Check if another process has the file open
+    # Try lsof first (works on both macOS and Linux)
+    if command_exists "lsof"; then
+        if lsof "$shared_disk" &>/dev/null; then
+            # File is in use by another process
+            return 1
+        fi
+    elif command_exists "fuser"; then
+        # Fall back to fuser on Linux systems
+        if fuser "$shared_disk" &>/dev/null; then
+            # File is in use by another process
+            return 1
+        fi
+    else
+        # Neither command available, assume available (safe default for single-VM case)
+        return 0
+    fi
+
+    # File exists but not in use
+    return 0
+}
+
 preflight_checks() {
     local first_run=false
     
@@ -191,16 +222,28 @@ preflight_checks() {
     fi
 
     [[ -n "$CD_ISO_FILE" ]] && require_file "$CD_ISO_FILE" "ISO file '${CD_ISO_FILE}' is specified but not found."
-    
+
     local shared_dir="shared"
     local shared_disk="$shared_dir/shared-disk.img"
-    if ! file_exists "$shared_disk"; then
-        info "Shared disk not found. Creating '${shared_disk}' (512M)."
-        ensure_directory "$shared_dir"
-        "$qemu_img_path" create -f raw "$shared_disk" 512M > /dev/null
-        success "Shared disk created (unformatted)"
-        info "Format as Mac OS Standard from within your Mac VM"
-        info "Then mount with: ./mount-shared.sh"
+
+    # Check if shared disk is available (not locked by another VM)
+    if check_shared_disk_available "$shared_disk"; then
+        SHARED_DISK_AVAILABLE=true
+
+        if ! file_exists "$shared_disk"; then
+            info "Shared disk not found. Creating '${shared_disk}' (512M)."
+            ensure_directory "$shared_dir"
+            "$qemu_img_path" create -f raw "$shared_disk" 512M > /dev/null
+            success "Shared disk created (unformatted)"
+            info "Format as Mac OS Standard from within your Mac VM"
+            info "Then mount with: ./mount-shared.sh"
+        fi
+    else
+        SHARED_DISK_AVAILABLE=false
+        header "Shared Disk Unavailable"
+        info "Shared disk is in use by another VM - launching without shared disk"
+        info "This VM will not have access to ${C_BLUE}${shared_disk}${C_RESET}"
+        info "Close other VMs to regain shared disk access"
     fi
 }
 
@@ -260,9 +303,13 @@ build_m68k_args() {
         -drive "file=${PRAM_FILE},format=raw,if=mtd"
         -device scsi-hd,scsi-id=$HD_SCSI_ID,drive=hd0
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
-        -device scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0
-        -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
     )
+    if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
+        QEMU_ARGS+=(
+            -device scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0
+            -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
+        )
+    fi
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
             -device scsi-cd,scsi-id=$CD_SCSI_ID,drive=cd0
@@ -293,9 +340,13 @@ build_ppc_args() {
         -device usb-kbd,bus=ohci.0
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
         -device ide-hd,bus=ide.0,unit=0,drive=hd0,bootindex=$hd_i
-        -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
-        -device ide-hd,bus=ide.1,unit=0,drive=shared0
     )
+    if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
+        QEMU_ARGS+=(
+            -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
+            -device ide-hd,bus=ide.1,unit=0,drive=shared0
+        )
+    fi
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
             -drive "file=${CD_ISO_FILE},format=raw,cache=writeback,aio=${aio_backend},if=none,id=cd0,media=cdrom"
@@ -332,10 +383,11 @@ interactive_launch() {
         software_db=$(db_load "iso/software-database.json" "iso/custom-software.json")
         installer_item=$(db_item "$software_db" "$DEFAULT_INSTALLER" "cd")
         installer_name=$(echo "$installer_item" | jq -r '.name')
-        
+
         header "First Run Detected"
         info "This VM will automatically use the default installer: ${C_BLUE}${installer_name}${C_RESET}"
         CD_ISO_FILE=""  # Will be set by setup_first_run_installer()
+        BOOT_TARGET="cd"  # Boot from CD on first run
     fi
     
     if [[ "$skip_iso_selection" == false ]]; then
