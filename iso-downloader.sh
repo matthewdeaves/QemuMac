@@ -121,26 +121,20 @@ download_file() {
     if [[ "$serial" != "null" && -n "$serial" ]]; then
         info "Serial number: ${C_GREEN}${serial}${C_RESET}"
     fi
-    
-    # Download and verify the file
-    local temp_file
-    temp_file=$(download_file_to_temp "$url" "$md5")
-    trap "rm -f '$temp_file'" EXIT
-    
+
     # Handle delivery
     if [[ "$delivery" == "shared" ]]; then
+        local temp_file
+        temp_file=$(download_file_to_temp "$url" "$md5")
         _handle_shared_delivery "$temp_file" "$filename"
-        trap - EXIT # The temp file was moved or deleted
         return
     fi
-    
+
     # Resolve destination path and download file
     local dest_path
     dest_path=$(resolve_download_path "$item_type" "$selected_key" "$filename" "$nice_filename")
     file_exists "$dest_path" && die "File already exists at '${dest_path}'"
     download_and_place_file "$url" "$md5" "$dest_path" "$filename"
-    
-    trap - EXIT # The temp file was moved
     
     success "Successfully downloaded and installed:"
     echo "  ${C_BLUE}${dest_path}${C_RESET}"
