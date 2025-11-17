@@ -46,6 +46,8 @@ install_system_dependencies() {
             git \
             build-essential \
             python3 \
+            python3-venv \
+            python3-dev \
             ninja-build \
             libglib2.0-dev \
             libfdt-dev \
