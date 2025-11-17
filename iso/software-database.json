@@ -97,7 +97,7 @@
       "architectures": [
         "ppc"
       ],
-      "url": "http://files.macos9lives.com/MacOS%20Operating%20Systems/Mac%20OS%209.2.2%20Universal%20Install/MacOS%20922%20Universal.iso",
+      "url": "https://archive.org/download/mac-os-922-universal/MacOS%20922%20Universal.iso",
       "filename": "MacOS 922 Universal.iso",
       "md5": "2d83af9f8d15ce622c6ae73ab86c27dd"
     },
