@@ -34,7 +34,9 @@ For the most user-friendly experience, run the script without any arguments to o
 ./run-mac.sh
 ```
 
-This will guide you through selecting a VM, attaching an ISO, and choosing boot options.
+This will show all available VMs with descriptions (e.g., "68k_quadra_800 - Mac OS 7.6.1") and guide you through selecting a VM, attaching an ISO, and choosing boot options.
+
+**Note**: Multiple VMs can run simultaneously. The first VM to start gets access to the shared disk; additional VMs run without it.
 
 ### 2. Download Software
 ```bash
@@ -49,13 +51,16 @@ Downloads Mac OS installers and software from curated database. Software marked 
 ./mount-shared.sh        # Mount shared disk on host
 ./mount-shared.sh -u     # Unmount shared disk
 ```
-A 512MB shared disk (HFS format) accessible by all VMs for easy file transfer between host and guests.
+A 512MB shared disk (HFS format) accessible by all VMs for easy file transfer between host and guests. Only one VM can access the shared disk at a time (first-come, first-served). Additional VMs can run without the shared disk.
 
 ### 4. Create New VM
 ```bash
 ./run-mac.sh --create-config my_mac
 ```
-During VM creation, you can optionally select a default installer that will be automatically downloaded and configured on first run.
+During VM creation, you can:
+- Choose architecture (m68k Quadra 800 or PPC PowerMac G4)
+- Optionally select a default installer that will be automatically downloaded and configured on first run
+- Add a DESCRIPTION field to your config for easy identification in the VM menu
 
 ## Usage Examples
 
@@ -108,6 +113,18 @@ cp ~/myfiles/* /tmp/qemu-shared/
 ./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf --iso iso/Marathon.iso
 ```
 
+## Default VMs
+
+The project includes 5 pre-configured VMs ready to use:
+
+- **68k_quadra_800** - Mac OS 7.6.1 (Quadra 800, 128M RAM, 2G disk)
+- **68k_quadra_800_os753** - Mac OS 7.5.3 (Quadra 800, 128M RAM, 2G disk)
+- **power_mac_g4_os9** - Mac OS 9.2.2 (PowerMac G4, 512M RAM, 10G disk)
+- **power_mac_g4_tiger** - Mac OS X Tiger 10.4 (PowerMac G4, 512M RAM, 10G disk)
+- **power_mac_g4_leopard** - Mac OS X Leopard 10.5.6 (PowerMac G4, 512M RAM, 10G disk)
+
+All default VMs include automatic installer setup on first boot.
+
 ## Directory Structure
 
 - `vms/` - VM configurations and disk images
@@ -115,30 +132,23 @@ cp ~/myfiles/* /tmp/qemu-shared/
 - `roms/` - ROM files (800.ROM auto-downloaded for 68k VMs)
 - `shared/` - Shared disk accessible by all VMs (auto-created)
 
-## Architectures
+## Features
 
-- **68k (Quadra 800)**: 128M RAM, 2G disk, ROM file auto-downloaded
-- **PPC (PowerMac G4)**: 512M RAM, 10G disk, no ROM needed
-
-## Performance Optimizations
-
-QemuMac includes built-in performance optimizations for the best possible emulation experience:
-
-### Storage I/O Optimization
-- **Writeback caching**: 50-80% faster disk operations
-- **Compatible AIO backend**: Universal threading support
-- **Zero detection**: Space-efficient storage
-
-### CPU Accuracy
-- **Authentic CPU models**: m68040 for Quadra 800, PowerMac G4-7400 for PPC
-- **Proper instruction timing**: Improved compatibility and performance
-- **Architecture-specific optimizations**: Tailored for each Mac model
-
-### Automatic Detection
-- Performance optimizations are applied automatically
-- Compatible with QEMU 10.x and macOS and Ubuntu hosts
+- **Concurrent VM Support**: Run multiple VMs simultaneously (first-come, first-served for shared disk)
+- **Automatic Installers**: First-run VMs auto-download and boot from installer media
+- **Cross-Platform**: Works on macOS and Linux (Ubuntu/Debian)
+- **File Transfer**: Shared 512MB HFS disk accessible by all VMs
+- **Performance Optimized**: Writeback caching, authentic CPU models (m68040, G4-7400)
+- **User-Friendly**: Interactive menus with VM descriptions for easy selection
 
 ## Controls
 
 - **Linux**: Right-Ctrl+G to release mouse
 - **macOS**: Native Cocoa interface
+
+## Technical Details
+
+- **QEMU 10.x** with m68k and ppc support
+- **Storage optimization**: Writeback caching (50-80% faster), AIO threading, zero detection
+- **CPU models**: m68040 (Quadra 800), G4-7400 (PowerMac G4)
+- **ROM**: 800.ROM auto-downloaded for 68k VMs on first run
