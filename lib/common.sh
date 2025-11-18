@@ -189,10 +189,12 @@ menu() {
     local prompt="$1"
     shift
     local options=("$@")
-    
+
     # Always add Quit if not present
     [[ ! " ${options[*]} " =~ " Quit " ]] && options+=("Quit")
-    
+
+    # Set COLUMNS to 1 to force one option per line in select menu
+    local COLUMNS=1
     PS3="${C_YELLOW}${prompt} ${C_RESET}"
     select choice in "${options[@]}"; do
         case "$choice" in

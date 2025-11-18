@@ -6,6 +6,7 @@
 !power_mac_g4_tiger/
 !power_mac_g4_leopard/
 !68k_quadra_800/
+!68k_quadra_800_os753/
 
 # Always ignore disk images and runtime files
 *.qcow2

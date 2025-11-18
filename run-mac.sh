@@ -363,12 +363,31 @@ interactive_launch() {
         die "No VM configurations found"
     fi
 
+    # Build menu entries with descriptions (if available)
+    local -a MENU_ENTRIES=()
+    for i in "${!FOUND_FILES[@]}"; do
+        local vm_name="${FOUND_NAMES[$i]}"
+        local config_file="${FOUND_FILES[$i]}"
+
+        # Source config to read DESCRIPTION (in subshell to avoid polluting variables)
+        local description
+        description=$(source "$config_file" 2>/dev/null && echo "${DESCRIPTION:-}")
+
+        # Build menu entry with description if available
+        if [[ -n "$description" ]]; then
+            MENU_ENTRIES+=("${vm_name} - ${description}")
+        else
+            MENU_ENTRIES+=("${vm_name}")
+        fi
+    done
+
     local vm_choice vm_index
-    vm_choice=$(menu "Choose a VM:" "${FOUND_NAMES[@]}")
+    vm_choice=$(menu "Choose a VM:" "${MENU_ENTRIES[@]}")
     [[ "$vm_choice" == "QUIT" ]] && exit 0
-    
-    for i in "${!FOUND_NAMES[@]}"; do
-        [[ "${FOUND_NAMES[$i]}" == "$vm_choice" ]] && vm_index="$i" && break
+
+    # Match selection back to original index
+    for i in "${!MENU_ENTRIES[@]}"; do
+        [[ "${MENU_ENTRIES[$i]}" == "$vm_choice" ]] && vm_index="$i" && break
     done
     CONFIG_FILE="${FOUND_FILES[$vm_index]}"
     
