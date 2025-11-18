@@ -240,7 +240,6 @@ preflight_checks() {
         fi
     else
         SHARED_DISK_AVAILABLE=false
-        header "Shared Disk Unavailable"
         info "Shared disk is in use by another VM - launching without shared disk"
         info "This VM will not have access to ${C_BLUE}${shared_disk}${C_RESET}"
         info "Close other VMs to regain shared disk access"
