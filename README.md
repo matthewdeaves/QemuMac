@@ -67,16 +67,22 @@ During VM creation, you can:
 ### Installing Mac OS (typical workflow)
 
 **Option 1: With Default Installer (Recommended)**
+
+The easiest way to set up a new VM - no manual downloads needed! If a VM has a `DEFAULT_INSTALLER` configured, the first boot automatically downloads the installer ISO and boots from it.
+
 ```bash
 # 1. Create VM and select a default installer during setup (Quadra Requires Apple Legacy Software Recovery CD)
 ./run-mac.sh --create-config quadra_fresh
 
-# 2. First boot automatically downloads installer and boots from CD
+# 2. First boot auto-downloads installer ISO and boots from CD
+#    Simply format the drive and install the OS - no manual downloads needed!
 ./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
 
-# 3. After installation, subsequent boots use hard drive
+# 3. After installation, subsequent boots automatically use hard drive
 ./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
 ```
+
+**Note:** All default VMs (68k_quadra_800, power_mac_g4_os9, power_mac_g4_tiger, power_mac_g4_leopard) have DEFAULT_INSTALLER pre-configured and work this way out of the box.
 
 **Option 2: Manual Installer Setup**
 ```bash
@@ -88,6 +94,28 @@ During VM creation, you can:
 
 # 3. After installation, boot normally from hard drive
 ./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
+```
+
+**Mac OS X 10.5 Leopard Installation Workaround**
+
+The `power_mac_g4_leopard` VM requires special steps during initial setup:
+
+```bash
+# 1. First boot auto-downloads and runs Leopard installer
+./run-mac.sh --config vms/power_mac_g4_leopard/power_mac_g4_leopard.conf
+
+# 2. Let installation complete (installer will show "installation failed" - this is expected)
+
+# 3. Choose the hard drive as startup disk
+
+# 4. Machine will reboot from installer CD again
+
+# 5. When language selection screen appears, close the VM window
+
+# 6. Relaunch VM - it will now boot from hard drive automatically
+./run-mac.sh --config vms/power_mac_g4_leopard/power_mac_g4_leopard.conf
+
+# 7. Mac OS 10.5 will boot successfully
 ```
 
 ### File Transfer Between Host and VM
