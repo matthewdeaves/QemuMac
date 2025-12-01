@@ -139,6 +139,18 @@
       "filename": "StuffItExpander55.dsk",
       "md5": "85ea8bcd0d0fbce7de0bf84efc6d1376",
       "delivery": "shared"
+    },
+    "simtower": {
+      "name": "SimTower - The Vertical Empire",
+      "description": "SimTower (1994) - Build and manage a towering skyscraper, balancing residential spaces with commercial facilities and essential services. Master elevator management to keep occupants happy as you progress through a star-rating system. Supports System 6.x through Mac OS 9.",
+      "category": "Games",
+      "architectures": [
+        "m68k",
+        "ppc"
+      ],
+      "url": "https://archive.org/download/sim-tower_202512/SimTower.iso",
+      "filename": "SimTower.iso",
+      "md5": "66dda0b1af929fe652c1e601d19aa460"
     }
   },
   "roms": {
