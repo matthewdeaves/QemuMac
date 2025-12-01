@@ -73,21 +73,21 @@ select_item() {
 _handle_shared_delivery() {
     local temp_file="$1"
     local filename="$2"
-    
+
     info "Mounting shared drive..."
     if ! "$(dirname "$0")/mount-shared.sh"; then
         die "Failed to mount shared drive"
     fi
-    
+
     local dest_path="${SHARED_MOUNT_POINT}/${filename}"
-    
+
     if file_exists "$dest_path"; then
-        info "File already exists at '${dest_path}', skipping copy."
-        rm -f "$temp_file" # Clean up the unused temp file
+        info "File already exists, replacing..."
     else
         info "Copying file to shared drive..."
-        mv "$temp_file" "$dest_path"
     fi
+
+    mv -f "$temp_file" "$dest_path"
     
     info "Unmounting shared drive..."
     "$(dirname "$0")/mount-shared.sh" -u

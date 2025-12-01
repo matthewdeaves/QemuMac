@@ -32,7 +32,8 @@ mount_shared() {
     require_file "$SHARED_DISK" "Shared disk not found. Run a VM first to create it."
     
     if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
-        die "Shared disk already mounted at: $MOUNT_POINT"
+        error "Shared disk already mounted at: $MOUNT_POINT"
+        die "To unmount, run: ${C_BLUE}./mount-shared.sh -u${C_RESET}"
     fi
     
     ensure_directory "$MOUNT_POINT"

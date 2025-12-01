@@ -151,6 +151,32 @@
       "url": "https://archive.org/download/sim-tower_202512/SimTower.iso",
       "filename": "SimTower.iso",
       "md5": "66dda0b1af929fe652c1e601d19aa460"
+    },
+    "simcity2000": {
+      "name": "SimCity 2000",
+      "description": "SimCity 2000 - The classic city-building simulation game where you design, build, and manage your own metropolis.",
+      "category": "Games",
+      "architectures": [
+        "m68k",
+        "ppc"
+      ],
+      "url": "http://old.mac.gdn/games/simcity2000.sit",
+      "filename": "simcity2000.sit",
+      "md5": "8b4ac368b906c38174110eaa4fcc6286",
+      "delivery": "shared"
+    },
+    "stuffit_deluxe_501": {
+      "name": "StuffIt Deluxe 5.0.1",
+      "description": "StuffIt Deluxe 5.0.1 - Professional compression and archiving utility by Aladdin Systems. Features advanced compression algorithms, archive management, and resource fork handling for Mac files. Registration key: DLXF-0835-nnn225 where nnn is any number between 001 and 999 (e.g., DLXF-0835-123225).",
+      "category": "Utilities",
+      "architectures": [
+        "m68k",
+        "ppc"
+      ],
+      "url": "http://old.mac.gdn/apps/STUFFIT_DLX_SS_501.iso_.zip",
+      "filename": "STUFFIT_DLX_SS_501.ISO",
+      "md5": "817f3b95dec74012be29895e5a4beb36",
+      "nice_filename": "STUFFIT_DLX_SS_501.iso"
     }
   },
   "roms": {
