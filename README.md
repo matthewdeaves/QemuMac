@@ -118,6 +118,19 @@ The `power_mac_g4_leopard` VM requires special steps during initial setup:
 # 7. Mac OS 10.5 will boot successfully
 ```
 
+**Tip: Installing Disk Copy 6.3.3 (Classic Mac OS)**
+
+For classic Mac OS systems (68k and Mac OS 9), it's recommended to copy Disk Copy 6.3.3 from the Apple Legacy Recovery disc to your hard drive. This utility is essential for mounting and creating disk images.
+
+```bash
+# 1. Boot with Apple Legacy Recovery disc mounted
+./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf --iso "iso/Apple Legacy Recovery.iso"
+
+# 2. In Mac OS, copy Disk Copy 6.3.3 from the CD to your hard drive
+
+# 3. Keep it handy for working with disk images and ISOs
+```
+
 ### File Transfer Between Host and VM
 ```bash
 # 1. Start VM and format shared disk as Mac OS Standard (HFS) if needed

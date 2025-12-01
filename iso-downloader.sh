@@ -37,30 +37,32 @@ select_category() {
 select_item() {
     local software_db="$1"
     local category="$2"
-    
+
     header "Select an item to download"
-    
+
     local software_options
     mapfile -t software_options < <(db_items "$software_db" "$category" | sort)
-    
-    # Extract display names for menu, keep mapping simple
+
+    # Extract display names for menu
     local display_options=()
     for item in "${software_options[@]}"; do
         display_options+=("$(echo "$item" | cut -d: -f2)")
     done
-    
+
     local options=("${display_options[@]}" "Back to Categories")
-    
+
     local choice
     choice=$(menu "Select the software you want to download:" "${options[@]}")
-    
+
     case "$choice" in
         "QUIT") echo "quit" ;;
         "BACK"|"Back"*) echo "back" ;;
-        *) 
-            # Find matching original item
+        *)
+            # Find matching original item by comparing the name part
             for item in "${software_options[@]}"; do
-                if [[ "$(echo "$item" | cut -d: -f2)" == "$choice" ]]; then
+                local item_name
+                item_name=$(echo "$item" | cut -d: -f2)
+                if [[ "$item_name" == "$choice" ]]; then
                     echo "$item"
                     return
                 fi
@@ -99,16 +101,16 @@ _handle_shared_delivery() {
 download_file() {
     local software_db="$1"
     local choice="$2"
-    
-    # Parse choice
-    IFS=':' read -r selected_key selected_name item_type <<< "$choice"
-    
+
+    # Parse choice (format: key:name:description:type)
+    IFS=':' read -r selected_key selected_name selected_description item_type <<< "$choice"
+
     info "Preparing to download '${C_BLUE}${selected_name}${C_RESET}'"
-    
+
     # Get all item details
     local item
     item=$(db_item "$software_db" "$selected_key" "$item_type")
-    
+
     local url filename nice_filename md5 delivery serial
     url=$(echo "$item" | jq -r '.url')
     filename=$(echo "$item" | jq -r '.filename')
@@ -116,7 +118,7 @@ download_file() {
     md5=$(echo "$item" | jq -r '.md5')
     delivery=$(echo "$item" | jq -r '.delivery // "iso"')
     serial=$(echo "$item" | jq -r '.serial // null')
-    
+
     # Display serial number if available
     if [[ "$serial" != "null" && -n "$serial" ]]; then
         info "Serial number: ${C_GREEN}${serial}${C_RESET}"
@@ -127,6 +129,13 @@ download_file() {
         local temp_file
         temp_file=$(download_file_to_temp "$url" "$md5")
         _handle_shared_delivery "$temp_file" "$filename"
+
+        # Display description after successful download
+        if [[ -n "$selected_description" ]]; then
+            echo ""
+            echo -e "${C_BLUE}About ${selected_name}:${C_RESET}" >&2
+            echo "  ${selected_description}" >&2
+        fi
         return
     fi
 
@@ -135,9 +144,16 @@ download_file() {
     dest_path=$(resolve_download_path "$item_type" "$selected_key" "$filename" "$nice_filename")
     file_exists "$dest_path" && die "File already exists at '${dest_path}'"
     download_and_place_file "$url" "$md5" "$dest_path" "$filename"
-    
+
     success "Successfully downloaded and installed:"
     echo "  ${C_BLUE}${dest_path}${C_RESET}"
+
+    # Display description after successful download
+    if [[ -n "$selected_description" ]]; then
+        echo ""
+        echo -e "${C_BLUE}About ${selected_name}:${C_RESET}" >&2
+        echo "  ${selected_description}" >&2
+    fi
 }
 
 main() {

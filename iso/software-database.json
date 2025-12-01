@@ -14,7 +14,7 @@
     },
     "marathon_trilogy": {
       "name": "Marathon Trilogy",
-      "description": "Classic sci-fi first-person shooter trilogy by Bungie - Marathon, Marathon 2: Durandal, and Marathon Infinity.",
+      "description": "Classic sci-fi first-person shooter trilogy by Bungie - Marathon, Marathon 2 Durandal, and Marathon Infinity.",
       "category": "Games",
       "architectures": [
         "m68k"
@@ -25,7 +25,7 @@
     },
     "game_pack_2": {
       "name": "Game Pack 2",
-      "description": "Classic LucasArts adventure games: The Secret of Monkey Island, Monkey Island 2: LeChuck's Revenge, and Indiana Jones and the Fate of Atlantis. All games have copy protection removed for easy play.",
+      "description": "Classic LucasArts adventure games - The Secret of Monkey Island, Monkey Island 2 LeChuck's Revenge, and Indiana Jones and the Fate of Atlantis. All games have copy protection removed for easy play.",
       "category": "Games",
       "architectures": [
         "m68k"
@@ -103,7 +103,7 @@
     },
     "warcraft2": {
       "name": "Warcraft II",
-      "description": "Warcraft II: Tides of Darkness, a classic real-time strategy game.",
+      "description": "Warcraft II Tides of Darkness, a classic real-time strategy game. Note - This is a StuffIt archive (.sit) download StuffIt Expander from the Utilities section to extract it.",
       "category": "Games",
       "architectures": [
         "m68k",
@@ -154,7 +154,7 @@
     },
     "simcity2000": {
       "name": "SimCity 2000",
-      "description": "SimCity 2000 - The classic city-building simulation game where you design, build, and manage your own metropolis.",
+      "description": "SimCity 2000 - The classic city-building simulation game where you design, build, and manage your own metropolis. Note - This is a StuffIt archive (.sit) download StuffIt Expander from the Utilities section to extract it.",
       "category": "Games",
       "architectures": [
         "m68k",
@@ -167,7 +167,7 @@
     },
     "stuffit_deluxe_501": {
       "name": "StuffIt Deluxe 5.0.1",
-      "description": "StuffIt Deluxe 5.0.1 - Professional compression and archiving utility by Aladdin Systems. Features advanced compression algorithms, archive management, and resource fork handling for Mac files. Registration key: DLXF-0835-nnn225 where nnn is any number between 001 and 999 (e.g., DLXF-0835-123225).",
+      "description": "StuffIt Deluxe 5.0.1 - Professional compression and archiving utility by Aladdin Systems. Features advanced compression algorithms, archive management, and resource fork handling for Mac files. Registration key DLXF-0835-nnn225 where nnn is any number between 001 and 999 (e.g. DLXF-0835-123225).",
       "category": "Utilities",
       "architectures": [
         "m68k",
