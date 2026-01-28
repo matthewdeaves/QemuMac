@@ -6,12 +6,20 @@
 # Configuration constants
 SHARED_MOUNT_POINT="/tmp/qemu-shared"
 
-# Color constants for consistent output
-C_RED=$(tput setaf 1)
-C_GREEN=$(tput setaf 2)
-C_YELLOW=$(tput setaf 3)
-C_BLUE=$(tput setaf 4)
-C_RESET=$(tput sgr0)
+# Color constants for consistent output (gracefully handle missing terminal)
+if [[ -t 1 ]] && [[ -n "${TERM:-}" ]]; then
+    C_RED=$(tput setaf 1 2>/dev/null || echo "")
+    C_GREEN=$(tput setaf 2 2>/dev/null || echo "")
+    C_YELLOW=$(tput setaf 3 2>/dev/null || echo "")
+    C_BLUE=$(tput setaf 4 2>/dev/null || echo "")
+    C_RESET=$(tput sgr0 2>/dev/null || echo "")
+else
+    C_RED=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_BLUE=""
+    C_RESET=""
+fi
 
 # Helper functions for colored output
 info() { echo -e "${C_YELLOW}Info: ${1}${C_RESET}" >&2; }
@@ -236,10 +244,15 @@ find_files_with_names() {
     local extra_args="${4:-}"
     
     local files=()
+    local line
     if [[ -n "$extra_args" ]]; then
-        mapfile -t files < <(find "$find_path" $extra_args -name "$pattern" | sort)
+        while IFS= read -r line; do
+            files+=("$line")
+        done < <(find "$find_path" $extra_args -name "$pattern" | sort)
     else
-        mapfile -t files < <(find "$find_path" -name "$pattern" | sort)
+        while IFS= read -r line; do
+            files+=("$line")
+        done < <(find "$find_path" -name "$pattern" | sort)
     fi
     
     [[ ${#files[@]} -eq 0 ]] && return 1

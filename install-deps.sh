@@ -29,7 +29,7 @@ install_system_dependencies() {
         fi
         
         info "Installing required dependencies via Homebrew..."
-        brew install libffi gettext glib pkg-config pixman ninja meson
+        brew install libffi gettext glib pkg-config pixman ninja meson jq curl unzip
         
         info "Installing optional but recommended dependencies..."
         brew install sdl2 gtk+3 libusb vde nettle gnutls || true
@@ -259,6 +259,18 @@ main() {
         "No - Exit (use package manager manually if needed)")
 
     if [[ "$source_choice" == "2" ]]; then
+        # Still install minimal runtime dependencies needed by QemuMac scripts
+        header "Installing Runtime Dependencies"
+        if [[ "$os_type" == "macos" ]]; then
+            info "Installing runtime dependencies via Homebrew..."
+            brew install jq curl unzip hfsutils || true
+        else
+            info "Installing runtime dependencies via apt..."
+            sudo apt-get update
+            sudo apt-get install -y jq curl unzip hfsprogs || true
+        fi
+        success "Runtime dependencies installed"
+
         info "You can install QEMU using:"
         if [[ "$os_type" == "macos" ]]; then
             echo "  brew install qemu"
