@@ -784,7 +784,8 @@ jobs:
 
       - name: Verify Ubuntu dependencies include jq
         run: |
-          if grep -A30 'ubuntu' install-deps.sh | grep -q 'jq'; then
+          # jq is in the recommended dependencies section for Ubuntu
+          if grep -q 'apt-get install.*jq' install-deps.sh; then
             echo "✓ jq included in Ubuntu dependencies"
           else
             echo "✗ jq missing from Ubuntu dependencies"
