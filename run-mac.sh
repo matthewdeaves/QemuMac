@@ -12,7 +12,8 @@ generate_config() {
     arch_choice=$(menu "Choose an architecture for '${vm_name}':" \
         "m68k (Macintosh Quadra)" \
         "ppc (PowerMac G4)")
-    
+    [[ "$arch_choice" == "QUIT" ]] && exit 0
+
     case $arch_choice in
         "m68k (Macintosh Quadra)") arch="m68k";;
         "ppc (PowerMac G4)") arch="ppc";;
@@ -51,9 +52,10 @@ generate_config() {
     done < <(echo "$software_db" | jq -r '.cds | to_entries[] | "\(.key):\(.value.name):cd"')
     
     installer_choice=$(menu "Choose a default installer:" "${installer_options[@]}")
-    
+    [[ "$installer_choice" == "QUIT" ]] && exit 0
+
     local default_installer_line=""
-    if [[ "$installer_choice" != "None"* && "$installer_choice" != "QUIT" ]]; then
+    if [[ "$installer_choice" != "None"* ]]; then
         # Find the corresponding key for the selected installer
         for i in "${!installer_options[@]}"; do
             if [[ "${installer_options[$i]}" == "$installer_choice" ]]; then
@@ -439,7 +441,8 @@ interactive_launch() {
 
         local iso_choice
         iso_choice=$(menu "Choose an ISO:" "${iso_options[@]}")
-        
+        [[ "$iso_choice" == "QUIT" ]] && exit 0
+
         if [[ "$iso_choice" == "NONE" ]] || [[ "$iso_choice" == "None"* ]]; then
             CD_ISO_FILE=""
         else
@@ -453,6 +456,7 @@ interactive_launch() {
             boot_action=$(menu "How should the ISO be used?" \
                 "Boot from Hard Drive (mount ISO on desktop)" \
                 "Boot from CD/ISO (for OS installation, etc.)")
+            [[ "$boot_action" == "QUIT" ]] && exit 0
             [[ "$boot_action" == *"CD/ISO"* ]] && BOOT_TARGET="cd" || BOOT_TARGET="hd"
         fi
     fi
@@ -463,18 +467,28 @@ main() {
     if [[ $# -eq 0 ]]; then
         interactive_launch
     else
-        local SHORT_OPTS="c:i:" LONG_OPTS="config:,iso:,boot-from-cd,create-config:"
-        local PARSED_OPTS
-        PARSED_OPTS=$(getopt -o "$SHORT_OPTS" -l "$LONG_OPTS" -n "$0" -- "$@") || exit 1
-        eval set -- "$PARSED_OPTS"
-
-        while true; do
+        # Manual argument parsing (works on both BSD and GNU systems)
+        while [[ $# -gt 0 ]]; do
             case $1 in
-                --create-config) CREATE_VM_NAME="$2"; shift 2 ;;
-                -c|--config) CONFIG_FILE="$2"; shift 2 ;;
-                -i|--iso) CD_ISO_FILE="$2"; shift 2 ;;
-                --boot-from-cd) BOOT_TARGET="cd"; shift ;;
-                --) shift; break ;;
+                --create-config)
+                    CREATE_VM_NAME="$2"
+                    shift 2
+                    ;;
+                -c|--config)
+                    CONFIG_FILE="$2"
+                    shift 2
+                    ;;
+                -i|--iso)
+                    CD_ISO_FILE="$2"
+                    shift 2
+                    ;;
+                --boot-from-cd)
+                    BOOT_TARGET="cd"
+                    shift
+                    ;;
+                *)
+                    die "Unknown option: $1"
+                    ;;
             esac
         done
     fi
