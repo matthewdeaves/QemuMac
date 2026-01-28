@@ -27,8 +27,11 @@ select_category() {
     
     header "Select a Category"
     
-    local categories
-    mapfile -t categories < <(db_categories "$software_db")
+    local categories=()
+    local line
+    while IFS= read -r line; do
+        categories+=("$line")
+    done < <(db_categories "$software_db")
     
     menu "Choose a category:" "${categories[@]}"
 }
@@ -40,8 +43,11 @@ select_item() {
 
     header "Select an item to download"
 
-    local software_options
-    mapfile -t software_options < <(db_items "$software_db" "$category" | sort)
+    local software_options=()
+    local line
+    while IFS= read -r line; do
+        software_options+=("$line")
+    done < <(db_items "$software_db" "$category" | sort)
 
     # Extract display names for menu
     local display_options=()

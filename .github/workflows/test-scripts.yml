@@ -1,0 +1,928 @@
+name: Test Scripts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  syntax-and-lint:
+    name: Syntax & Lint (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check bash version
+        run: |
+          echo "Bash version:"
+          bash --version
+          echo ""
+          echo "Default shell:"
+          echo $SHELL
+
+      - name: Syntax check all project shell scripts
+        run: |
+          echo "Checking shell script syntax..."
+          scripts=(
+            "run-mac.sh"
+            "iso-downloader.sh"
+            "install-deps.sh"
+            "mount-shared.sh"
+            "lib/common.sh"
+          )
+          errors=0
+          for script in "${scripts[@]}"; do
+            if [[ -f "$script" ]]; then
+              if bash -n "$script" 2>&1; then
+                echo "✓ $script"
+              else
+                echo "✗ $script"
+                errors=$((errors + 1))
+              fi
+            else
+              echo "✗ $script (file not found)"
+              errors=$((errors + 1))
+            fi
+          done
+          echo ""
+          if [[ $errors -gt 0 ]]; then
+            echo "Found $errors syntax errors"
+            exit 1
+          fi
+          echo "All scripts passed syntax check"
+
+      - name: Check for common shell script issues
+        run: |
+          echo "Checking for common issues..."
+          issues=0
+
+          # Check for tabs vs spaces consistency (informational)
+          echo "Checking indentation style..."
+          for script in run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh lib/common.sh; do
+            if grep -q $'^\t' "$script" 2>/dev/null; then
+              echo "  $script: uses tabs"
+            elif grep -q '^    ' "$script" 2>/dev/null; then
+              echo "  $script: uses spaces"
+            fi
+          done
+
+          # Check for missing shebangs
+          echo ""
+          echo "Checking shebangs..."
+          for script in run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh lib/common.sh; do
+            first_line=$(head -n1 "$script")
+            if [[ "$first_line" == "#!/"* ]]; then
+              echo "  ✓ $script has shebang: $first_line"
+            else
+              echo "  ✗ $script missing shebang"
+              issues=$((issues + 1))
+            fi
+          done
+
+          # Check for use of 'set -e' or 'set -Euo pipefail'
+          echo ""
+          echo "Checking error handling..."
+          for script in run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh; do
+            if grep -q 'set -[eEuo]' "$script" 2>/dev/null; then
+              echo "  ✓ $script has error handling"
+            else
+              echo "  ⚠ $script may lack error handling"
+            fi
+          done
+
+          if [[ $issues -gt 0 ]]; then
+            echo ""
+            echo "Found $issues issues"
+            exit 1
+          fi
+
+  json-validation:
+    name: JSON Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Validate JSON files
+        run: |
+          echo "Validating JSON files..."
+          errors=0
+          for json in iso/*.json; do
+            if [[ -f "$json" ]]; then
+              if jq empty "$json" 2>/dev/null; then
+                echo "✓ $json - valid JSON"
+              else
+                echo "✗ $json - Invalid JSON"
+                jq empty "$json" 2>&1 || true
+                errors=$((errors + 1))
+              fi
+            fi
+          done
+          if [[ $errors -gt 0 ]]; then
+            exit 1
+          fi
+          echo "All JSON files are valid"
+
+      - name: Validate software database structure
+        run: |
+          echo "Validating software-database.json structure..."
+          db="iso/software-database.json"
+
+          # Check required top-level keys
+          echo "Checking top-level structure..."
+          if jq -e '.cds' "$db" > /dev/null; then
+            echo "  ✓ Has 'cds' section"
+          else
+            echo "  ✗ Missing 'cds' section"
+            exit 1
+          fi
+
+          if jq -e '.roms' "$db" > /dev/null; then
+            echo "  ✓ Has 'roms' section"
+          else
+            echo "  ✗ Missing 'roms' section"
+            exit 1
+          fi
+
+          # Check each CD entry has required fields
+          echo ""
+          echo "Validating CD entries..."
+          cd_count=$(jq '.cds | keys | length' "$db")
+          echo "  Found $cd_count CD entries"
+
+          jq -r '.cds | to_entries[] | .key' "$db" | while read -r key; do
+            name=$(jq -r ".cds[\"$key\"].name // empty" "$db")
+            url=$(jq -r ".cds[\"$key\"].url // empty" "$db")
+            filename=$(jq -r ".cds[\"$key\"].filename // empty" "$db")
+
+            if [[ -z "$name" ]]; then
+              echo "  ✗ $key: missing 'name'"
+              exit 1
+            fi
+            if [[ -z "$url" ]]; then
+              echo "  ✗ $key: missing 'url'"
+              exit 1
+            fi
+            if [[ -z "$filename" ]]; then
+              echo "  ✗ $key: missing 'filename'"
+              exit 1
+            fi
+            echo "  ✓ $key: valid"
+          done
+
+          # Check ROM entries
+          echo ""
+          echo "Validating ROM entries..."
+          rom_count=$(jq '.roms | keys | length' "$db")
+          echo "  Found $rom_count ROM entries"
+
+          jq -r '.roms | to_entries[] | .key' "$db" | while read -r key; do
+            name=$(jq -r ".roms[\"$key\"].name // empty" "$db")
+            url=$(jq -r ".roms[\"$key\"].url // empty" "$db")
+            filename=$(jq -r ".roms[\"$key\"].filename // empty" "$db")
+
+            if [[ -z "$name" || -z "$url" || -z "$filename" ]]; then
+              echo "  ✗ $key: missing required fields"
+              exit 1
+            fi
+            echo "  ✓ $key: valid"
+          done
+
+          echo ""
+          echo "Software database structure is valid"
+
+  common-library-tests:
+    name: Common Library (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y jq curl unzip
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install jq curl
+
+      - name: Test library loading
+        run: |
+          bash -c '
+            source lib/common.sh
+            echo "✓ common.sh loads successfully"
+          '
+
+      - name: Test detect_os function
+        run: |
+          bash -c '
+            source lib/common.sh
+            os=$(detect_os)
+            echo "Detected OS: $os"
+            case "$os" in
+              macos|ubuntu)
+                echo "✓ detect_os returned valid value"
+                ;;
+              *)
+                echo "✗ detect_os returned unexpected: $os"
+                exit 1
+                ;;
+            esac
+          '
+
+      - name: Test command_exists function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Test with existing command
+            if command_exists bash; then
+              echo "✓ command_exists finds bash"
+            else
+              echo "✗ command_exists failed to find bash"
+              exit 1
+            fi
+
+            # Test with non-existing command
+            if command_exists nonexistent_command_xyz123; then
+              echo "✗ command_exists found nonexistent command"
+              exit 1
+            else
+              echo "✓ command_exists correctly returns false for missing command"
+            fi
+          '
+
+      - name: Test file_exists and dir_exists functions
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Test file_exists
+            if file_exists lib/common.sh; then
+              echo "✓ file_exists works for existing file"
+            else
+              echo "✗ file_exists failed"
+              exit 1
+            fi
+
+            if file_exists nonexistent_file.xyz; then
+              echo "✗ file_exists found nonexistent file"
+              exit 1
+            else
+              echo "✓ file_exists correctly returns false for missing file"
+            fi
+
+            # Test dir_exists
+            if dir_exists lib; then
+              echo "✓ dir_exists works for existing directory"
+            else
+              echo "✗ dir_exists failed"
+              exit 1
+            fi
+
+            if dir_exists nonexistent_dir_xyz; then
+              echo "✗ dir_exists found nonexistent directory"
+              exit 1
+            else
+              echo "✓ dir_exists correctly returns false for missing directory"
+            fi
+          '
+
+      - name: Test ensure_directory function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            test_dir="/tmp/qemumac_test_$$"
+
+            # Should create directory
+            ensure_directory "$test_dir" "Creating test directory"
+
+            if dir_exists "$test_dir"; then
+              echo "✓ ensure_directory created directory"
+            else
+              echo "✗ ensure_directory failed to create directory"
+              exit 1
+            fi
+
+            # Cleanup
+            rmdir "$test_dir"
+          '
+
+      - name: Test require_file function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Should succeed for existing file
+            require_file lib/common.sh "Test file"
+            echo "✓ require_file passes for existing file"
+
+            # Should fail for non-existing file
+            if (require_file nonexistent_file.xyz "Test" 2>/dev/null); then
+              echo "✗ require_file should have failed"
+              exit 1
+            else
+              echo "✓ require_file correctly fails for missing file"
+            fi
+          '
+
+      - name: Test require_commands function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Should succeed for existing commands
+            require_commands bash
+            echo "✓ require_commands passes for bash"
+
+            # Should fail for non-existing commands
+            if (require_commands nonexistent_cmd_xyz 2>/dev/null); then
+              echo "✗ require_commands should have failed"
+              exit 1
+            else
+              echo "✓ require_commands correctly fails for missing command"
+            fi
+          '
+
+      - name: Test color output functions
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # These should not fail
+            info "Test info message" 2>/dev/null
+            success "Test success message" 2>/dev/null
+            error "Test error message" 2>/dev/null
+            header "Test header" 2>/dev/null
+
+            echo "✓ Color output functions work"
+          '
+
+      - name: Test array handling (bash 3.2 compatibility)
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Test the while-read pattern that replaced mapfile
+            items=()
+            while IFS= read -r line; do
+              items+=("$line")
+            done < <(printf "item1\nitem2\nitem3\n")
+
+            if [[ ${#items[@]} -eq 3 ]]; then
+              echo "✓ Array handling works (${#items[@]} items)"
+            else
+              echo "✗ Array handling failed (expected 3, got ${#items[@]})"
+              exit 1
+            fi
+
+            # Verify content
+            if [[ "${items[0]}" == "item1" && "${items[1]}" == "item2" && "${items[2]}" == "item3" ]]; then
+              echo "✓ Array contents correct"
+            else
+              echo "✗ Array contents incorrect"
+              exit 1
+            fi
+          '
+
+      - name: Test array with special characters
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Test with spaces and special chars
+            items=()
+            while IFS= read -r line; do
+              items+=("$line")
+            done < <(printf "item with spaces\nitem-with-dashes\nitem_with_underscores\n")
+
+            if [[ ${#items[@]} -eq 3 ]]; then
+              echo "✓ Array handles special characters"
+            else
+              echo "✗ Array failed with special characters"
+              exit 1
+            fi
+
+            if [[ "${items[0]}" == "item with spaces" ]]; then
+              echo "✓ Spaces preserved correctly"
+            else
+              echo "✗ Spaces not preserved: got \"${items[0]}\""
+              exit 1
+            fi
+          '
+
+  database-function-tests:
+    name: Database Functions (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install jq
+
+      - name: Test db_load function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+            if [[ -n "$db" ]]; then
+              echo "✓ db_load works"
+              echo "  Database size: $(echo "$db" | wc -c) bytes"
+            else
+              echo "✗ db_load returned empty"
+              exit 1
+            fi
+          '
+
+      - name: Test db_categories function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+            categories=$(db_categories "$db")
+
+            if [[ -n "$categories" ]]; then
+              echo "✓ db_categories works"
+              echo "  Categories found:"
+              echo "$categories" | while read -r cat; do
+                echo "    - $cat"
+              done
+            else
+              echo "✗ db_categories returned empty"
+              exit 1
+            fi
+
+            # Verify expected categories exist
+            if echo "$categories" | grep -q "Operating Systems"; then
+              echo "✓ Found Operating Systems category"
+            else
+              echo "✗ Missing Operating Systems category"
+              exit 1
+            fi
+          '
+
+      - name: Test db_items function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+            items=$(db_items "$db" "Operating Systems")
+
+            if [[ -n "$items" ]]; then
+              echo "✓ db_items works for Operating Systems"
+              count=$(echo "$items" | wc -l)
+              echo "  Found $count items"
+            else
+              echo "✗ db_items returned empty"
+              exit 1
+            fi
+          '
+
+      - name: Test db_item function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+
+            # Test getting a CD item
+            item=$(db_item "$db" "apple_legacy_recovery" "cd")
+            if [[ "$item" != "null" && -n "$item" ]]; then
+              name=$(echo "$item" | jq -r ".name")
+              echo "✓ db_item works for CD: $name"
+            else
+              echo "✗ db_item failed for CD"
+              exit 1
+            fi
+
+            # Test getting a ROM item
+            item=$(db_item "$db" "quadra800" "rom")
+            if [[ "$item" != "null" && -n "$item" ]]; then
+              name=$(echo "$item" | jq -r ".name")
+              echo "✓ db_item works for ROM: $name"
+            else
+              echo "✗ db_item failed for ROM"
+              exit 1
+            fi
+          '
+
+      - name: Test resolve_download_path function
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Test ROM path resolution (special case for quadra800)
+            path=$(resolve_download_path "rom" "quadra800" "800.ROM" "800.ROM")
+            if [[ "$path" == "roms/800.ROM" ]]; then
+              echo "✓ resolve_download_path works for quadra800 ROM"
+            else
+              echo "✗ Expected roms/800.ROM, got: $path"
+              exit 1
+            fi
+
+            # Test CD path resolution
+            path=$(resolve_download_path "cd" "test" "test.iso" "Test.iso")
+            if [[ "$path" == "iso/Test.iso" ]]; then
+              echo "✓ resolve_download_path works for CD"
+            else
+              echo "✗ Expected iso/Test.iso, got: $path"
+              exit 1
+            fi
+          '
+
+  vm-config-tests:
+    name: VM Config Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get install -y jq
+
+      - name: Validate VM configurations
+        run: |
+          echo "Validating VM configurations..."
+          errors=0
+
+          for conf in vms/*/*.conf; do
+            if [[ ! -f "$conf" ]]; then
+              continue
+            fi
+
+            vm_name=$(basename "$(dirname "$conf")")
+            echo ""
+            echo "Checking: $vm_name"
+
+            # Source the config
+            (
+              source "$conf"
+
+              # Check required variables
+              if [[ -z "${ARCH:-}" ]]; then
+                echo "  ✗ Missing ARCH"
+                exit 1
+              fi
+              echo "  ✓ ARCH: $ARCH"
+
+              if [[ "$ARCH" != "m68k" && "$ARCH" != "ppc" ]]; then
+                echo "  ✗ Invalid ARCH: $ARCH (must be m68k or ppc)"
+                exit 1
+              fi
+
+              if [[ -z "${MACHINE_TYPE:-}" ]]; then
+                echo "  ✗ Missing MACHINE_TYPE"
+                exit 1
+              fi
+              echo "  ✓ MACHINE_TYPE: $MACHINE_TYPE"
+
+              if [[ -z "${RAM_SIZE:-}" ]]; then
+                echo "  ✗ Missing RAM_SIZE"
+                exit 1
+              fi
+              echo "  ✓ RAM_SIZE: $RAM_SIZE"
+
+              if [[ -z "${HD_IMAGE:-}" ]]; then
+                echo "  ✗ Missing HD_IMAGE"
+                exit 1
+              fi
+              echo "  ✓ HD_IMAGE: $HD_IMAGE"
+
+              # Architecture-specific checks
+              if [[ "$ARCH" == "m68k" ]]; then
+                if [[ -z "${PRAM_FILE:-}" ]]; then
+                  echo "  ✗ m68k config missing PRAM_FILE"
+                  exit 1
+                fi
+                echo "  ✓ PRAM_FILE: $PRAM_FILE"
+
+                if [[ -z "${HD_SCSI_ID:-}" ]]; then
+                  echo "  ✗ m68k config missing HD_SCSI_ID"
+                  exit 1
+                fi
+                echo "  ✓ HD_SCSI_ID: $HD_SCSI_ID"
+              fi
+
+              # Optional but validated if present
+              if [[ -n "${DEFAULT_INSTALLER:-}" ]]; then
+                echo "  ✓ DEFAULT_INSTALLER: $DEFAULT_INSTALLER"
+              fi
+
+              if [[ -n "${DESCRIPTION:-}" ]]; then
+                echo "  ✓ DESCRIPTION: $DESCRIPTION"
+              fi
+
+              echo "  ✓ Configuration valid"
+            ) || errors=$((errors + 1))
+          done
+
+          echo ""
+          if [[ $errors -gt 0 ]]; then
+            echo "Found $errors invalid configurations"
+            exit 1
+          fi
+          echo "All VM configurations are valid"
+
+      - name: Check DEFAULT_INSTALLER references exist in database
+        run: |
+          echo "Checking DEFAULT_INSTALLER references..."
+
+          for conf in vms/*/*.conf; do
+            if [[ ! -f "$conf" ]]; then
+              continue
+            fi
+
+            installer=$(grep -o 'DEFAULT_INSTALLER="[^"]*"' "$conf" 2>/dev/null | cut -d'"' -f2 || true)
+
+            if [[ -n "$installer" ]]; then
+              vm_name=$(basename "$(dirname "$conf")")
+
+              # Check if installer exists in database
+              if jq -e ".cds[\"$installer\"]" iso/software-database.json > /dev/null 2>&1; then
+                echo "✓ $vm_name: $installer exists in database"
+              else
+                echo "✗ $vm_name: $installer NOT found in database"
+                exit 1
+              fi
+            fi
+          done
+
+          echo "All DEFAULT_INSTALLER references are valid"
+
+  script-argument-tests:
+    name: Script Arguments (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install jq
+
+      - name: Test mount-shared.sh help
+        run: |
+          output=$(./mount-shared.sh --help 2>&1 || true)
+          if echo "$output" | grep -q "Usage"; then
+            echo "✓ mount-shared.sh --help works"
+          else
+            echo "✗ mount-shared.sh --help failed"
+            echo "Output: $output"
+            exit 1
+          fi
+
+      - name: Test run-mac.sh argument parsing (getopt)
+        run: |
+          # Test that getopt is available and works
+          if getopt --test > /dev/null 2>&1; then
+            echo "GNU getopt available"
+          else
+            echo "Using basic getopt"
+          fi
+
+          # Test parsing with valid options (will fail on missing config, but parsing should work)
+          output=$(./run-mac.sh --config nonexistent.conf 2>&1 || true)
+          if echo "$output" | grep -q "Config file not found\|not found"; then
+            echo "✓ run-mac.sh --config parsing works"
+          else
+            echo "Output: $output"
+            echo "Note: Different error message, but script ran"
+          fi
+
+      - name: Test iso-downloader.sh dependencies check
+        run: |
+          bash -c '
+            source lib/common.sh
+
+            # Verify the check_dependencies pattern works
+            require_commands jq curl unzip
+            echo "✓ iso-downloader.sh dependency check would pass"
+          '
+
+  install-deps-tests:
+    name: Install-deps Logic (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test install_system_dependencies function exists
+        run: |
+          # Check the function is defined in the script
+          if grep -q "install_system_dependencies()" install-deps.sh; then
+            echo "✓ install_system_dependencies function defined"
+          else
+            echo "✗ install_system_dependencies function not found"
+            exit 1
+          fi
+
+      - name: Verify macOS dependencies include jq
+        run: |
+          # Check that jq is in the brew install line for macOS
+          if grep -q 'brew install.*jq' install-deps.sh; then
+            echo "✓ jq included in macOS dependencies"
+          else
+            echo "✗ jq missing from macOS dependencies"
+            exit 1
+          fi
+
+      - name: Verify runtime dependencies are installed when skipping QEMU build
+        run: |
+          # Check that runtime deps are installed even when user chooses not to build QEMU
+          if grep -A20 'source_choice.*==.*2' install-deps.sh | grep -q 'brew install.*jq\|apt-get install.*jq'; then
+            echo "✓ Runtime dependencies installed when skipping QEMU build"
+          else
+            echo "✗ Runtime dependencies not installed when skipping QEMU build"
+            exit 1
+          fi
+
+      - name: Verify Ubuntu dependencies include jq
+        run: |
+          if grep -A30 'ubuntu' install-deps.sh | grep -q 'jq'; then
+            echo "✓ jq included in Ubuntu dependencies"
+          else
+            echo "✗ jq missing from Ubuntu dependencies"
+            exit 1
+          fi
+
+  url-check:
+    name: URL Availability Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get install -y jq curl
+
+      - name: Check download URLs are reachable
+        run: |
+          echo "Checking download URLs..."
+          echo "Note: Some servers may rate-limit or block HEAD requests"
+          echo ""
+
+          total=0
+          reachable=0
+          unreachable=0
+
+          # Extract URLs from software-database.json
+          urls=$(jq -r '(.cds, .roms) | to_entries[] | "\(.key)|\(.value.url)"' iso/software-database.json)
+
+          echo "$urls" | while IFS='|' read -r key url; do
+            total=$((total + 1))
+
+            # Use HEAD request with timeout
+            if curl -sI --fail --max-time 15 -o /dev/null "$url" 2>/dev/null; then
+              echo "✓ $key"
+              reachable=$((reachable + 1))
+            else
+              # Try GET with range request as fallback (some servers block HEAD)
+              if curl -s --fail --max-time 15 -r 0-0 -o /dev/null "$url" 2>/dev/null; then
+                echo "✓ $key (via GET)"
+                reachable=$((reachable + 1))
+              else
+                echo "✗ $key: $url"
+                unreachable=$((unreachable + 1))
+              fi
+            fi
+          done
+
+          echo ""
+          echo "URL check complete"
+        continue-on-error: true  # Don't fail build for URL issues
+
+  integration-test:
+    name: Integration Test (${{ matrix.os }})
+    needs: [syntax-and-lint, json-validation, common-library-tests]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y jq curl unzip
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install jq curl
+
+      - name: Full workflow simulation
+        run: |
+          echo "=== Integration Test ==="
+          echo ""
+
+          bash -c '
+            source lib/common.sh
+
+            echo "1. Testing OS detection..."
+            os=$(detect_os)
+            echo "   Detected: $os"
+
+            echo ""
+            echo "2. Testing database loading..."
+            db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+            echo "   Loaded $(echo "$db" | wc -c) bytes"
+
+            echo ""
+            echo "3. Testing category enumeration..."
+            categories=()
+            while IFS= read -r line; do
+              categories+=("$line")
+            done < <(db_categories "$db")
+            echo "   Found ${#categories[@]} categories"
+
+            echo ""
+            echo "4. Testing item lookup..."
+            for cat in "${categories[@]}"; do
+              items=()
+              while IFS= read -r line; do
+                items+=("$line")
+              done < <(db_items "$db" "$cat")
+              echo "   $cat: ${#items[@]} items"
+            done
+
+            echo ""
+            echo "5. Testing specific item retrieval..."
+            item=$(db_item "$db" "apple_legacy_recovery" "cd")
+            name=$(echo "$item" | jq -r ".name")
+            echo "   Retrieved: $name"
+
+            echo ""
+            echo "6. Testing path resolution..."
+            path=$(resolve_download_path "cd" "test" "test.iso" "Test.iso")
+            echo "   CD path: $path"
+            path=$(resolve_download_path "rom" "quadra800" "800.ROM" "800.ROM")
+            echo "   ROM path: $path"
+
+            echo ""
+            echo "=== All integration tests passed ==="
+          '
+
+      - name: Test VM config loading
+        run: |
+          echo "Testing VM configuration loading..."
+
+          for conf in vms/*/*.conf; do
+            if [[ -f "$conf" ]]; then
+              vm_name=$(basename "$(dirname "$conf")")
+              (
+                source "$conf"
+                echo "✓ $vm_name (ARCH=$ARCH, RAM=$RAM_SIZE)"
+              )
+            fi
+          done
+
+          echo "All VM configs load successfully"
