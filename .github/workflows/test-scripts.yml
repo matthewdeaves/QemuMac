@@ -246,6 +246,230 @@ jobs:
           echo ""
           echo "✓ PASS: HFS filesystem support included in runtime deps"
 
+  issue-12-install-deps-execution-ubuntu:
+    name: "Issue #12: Execute install-deps.sh skip path (Ubuntu)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Remove jq to test fresh install
+        run: |
+          echo "Removing jq to simulate fresh system..."
+          sudo apt-get remove -y jq || true
+
+          # Verify jq is gone
+          if command -v jq &>/dev/null; then
+            echo "Warning: jq still available (might be a different version)"
+          else
+            echo "✓ jq removed successfully"
+          fi
+
+      - name: Run install-deps.sh with skip option
+        run: |
+          echo "Running install-deps.sh and selecting option 2 (skip QEMU build)..."
+          echo ""
+
+          # Feed "2" to skip QEMU build - this should install runtime deps
+          echo "2" | timeout 120 ./install-deps.sh 2>&1 | tee /tmp/install-output.txt || true
+
+          echo ""
+          echo "=== Install script output captured ==="
+
+      - name: Verify runtime dependencies were installed
+        run: |
+          echo "Verifying that runtime dependencies are now installed..."
+          echo ""
+
+          errors=0
+
+          # Check jq
+          if command -v jq &>/dev/null; then
+            echo "✓ jq is installed: $(jq --version)"
+          else
+            echo "✗ FAIL: jq is NOT installed"
+            errors=$((errors + 1))
+          fi
+
+          # Check curl
+          if command -v curl &>/dev/null; then
+            echo "✓ curl is installed: $(curl --version | head -1)"
+          else
+            echo "✗ FAIL: curl is NOT installed"
+            errors=$((errors + 1))
+          fi
+
+          # Check unzip
+          if command -v unzip &>/dev/null; then
+            echo "✓ unzip is installed"
+          else
+            echo "✗ FAIL: unzip is NOT installed"
+            errors=$((errors + 1))
+          fi
+
+          echo ""
+          if [[ $errors -gt 0 ]]; then
+            echo "✗ FAIL: $errors dependencies missing after running install-deps.sh"
+            echo ""
+            echo "=== Script output was: ==="
+            cat /tmp/install-output.txt
+            exit 1
+          fi
+
+          echo "✓ PASS: All runtime dependencies installed successfully on Ubuntu"
+
+      - name: Verify scripts work after fresh install
+        run: |
+          echo "Testing that scripts work with freshly installed dependencies..."
+
+          # Test common.sh loads
+          bash -c 'source lib/common.sh && echo "✓ common.sh loads"'
+
+          # Test database functions
+          bash -c '
+            source lib/common.sh
+            db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+            if [[ -n "$db" ]]; then
+              echo "✓ Database loads correctly"
+            else
+              echo "✗ Database failed to load"
+              exit 1
+            fi
+          '
+
+          echo ""
+          echo "✓ PASS: Scripts work correctly after install-deps.sh"
+
+  issue-12-install-deps-execution-macos:
+    name: "Issue #12: Execute install-deps.sh skip path (macOS)"
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check initial state
+        run: |
+          echo "Checking initial state of dependencies..."
+          echo ""
+
+          # Note: GitHub macOS runners have brew and many tools pre-installed
+          # We'll still run the script to verify it works
+
+          echo "Homebrew: $(brew --version | head -1)"
+
+          if command -v jq &>/dev/null; then
+            echo "jq: already installed ($(jq --version))"
+            echo "Note: Will verify script doesn't fail when deps exist"
+          else
+            echo "jq: not installed (will be installed by script)"
+          fi
+
+      - name: Run install-deps.sh with skip option
+        run: |
+          echo "Running install-deps.sh and selecting option 2 (skip QEMU build)..."
+          echo ""
+
+          # Feed "2" to skip QEMU build - this should install runtime deps
+          echo "2" | timeout 120 ./install-deps.sh 2>&1 | tee /tmp/install-output.txt || true
+
+          echo ""
+          echo "=== Install script completed ==="
+
+      - name: Verify install script ran the macOS path
+        run: |
+          echo "Verifying the script detected macOS and ran brew commands..."
+          echo ""
+
+          # Check the output for expected messages
+          if grep -q "runtime dependencies\|Runtime Dependencies\|brew install" /tmp/install-output.txt; then
+            echo "✓ Script ran the runtime dependencies installation path"
+          else
+            echo "✗ FAIL: Script did not appear to run the runtime deps path"
+            echo ""
+            echo "=== Script output: ==="
+            cat /tmp/install-output.txt
+            exit 1
+          fi
+
+          if grep -q "macos\|macOS\|Homebrew" /tmp/install-output.txt; then
+            echo "✓ Script detected macOS correctly"
+          else
+            echo "Note: macOS detection message not found (may be OK)"
+          fi
+
+      - name: Verify runtime dependencies are available
+        run: |
+          echo "Verifying that runtime dependencies are available..."
+          echo ""
+
+          errors=0
+
+          # Check jq
+          if command -v jq &>/dev/null; then
+            echo "✓ jq is available: $(jq --version)"
+          else
+            echo "✗ FAIL: jq is NOT available"
+            errors=$((errors + 1))
+          fi
+
+          # Check curl
+          if command -v curl &>/dev/null; then
+            echo "✓ curl is available: $(curl --version | head -1)"
+          else
+            echo "✗ FAIL: curl is NOT available"
+            errors=$((errors + 1))
+          fi
+
+          # Check unzip
+          if command -v unzip &>/dev/null; then
+            echo "✓ unzip is available"
+          else
+            echo "✗ FAIL: unzip is NOT available"
+            errors=$((errors + 1))
+          fi
+
+          echo ""
+          if [[ $errors -gt 0 ]]; then
+            echo "✗ FAIL: $errors dependencies missing"
+            exit 1
+          fi
+
+          echo "✓ PASS: All runtime dependencies available on macOS"
+
+      - name: Verify scripts work on macOS
+        run: |
+          echo "Testing that scripts work on macOS..."
+
+          # Test common.sh loads
+          bash -c 'source lib/common.sh && echo "✓ common.sh loads"'
+
+          # Test database functions
+          bash -c '
+            source lib/common.sh
+            db=$(db_load "iso/software-database.json" "iso/custom-software.json")
+            if [[ -n "$db" ]]; then
+              echo "✓ Database loads correctly"
+            else
+              echo "✗ Database failed to load"
+              exit 1
+            fi
+          '
+
+          # Test OS detection
+          bash -c '
+            source lib/common.sh
+            os=$(detect_os)
+            if [[ "$os" == "macos" ]]; then
+              echo "✓ OS detection works: $os"
+            else
+              echo "✗ OS detection failed: expected macos, got $os"
+              exit 1
+            fi
+          '
+
+          echo ""
+          echo "✓ PASS: All scripts work correctly on macOS"
+
   issue-12-urls-fixed:
     name: "Issue #12: Verify Macintosh Garden URLs fixed"
     runs-on: ubuntu-latest
