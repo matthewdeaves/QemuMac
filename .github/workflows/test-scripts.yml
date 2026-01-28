@@ -370,7 +370,8 @@ jobs:
           echo ""
 
           # Feed "2" to skip QEMU build - this should install runtime deps
-          echo "2" | timeout 120 ./install-deps.sh 2>&1 | tee /tmp/install-output.txt || true
+          # Note: macOS doesn't have 'timeout' by default, so we run without it
+          echo "2" | ./install-deps.sh 2>&1 | tee /tmp/install-output.txt || true
 
           echo ""
           echo "=== Install script completed ==="
