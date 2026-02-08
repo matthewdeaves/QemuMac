@@ -1427,3 +1427,312 @@ jobs:
               )
             fi
           done
+
+  # ============================================================================
+  # ISSUE #14 FIX VERIFICATION
+  # These tests verify macOS shared disk mounting via hfsutils
+  # ============================================================================
+
+  issue-14-mount-shared-macos-detection:
+    name: "Issue #14: Verify mount-shared.sh macOS support"
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify mount-shared.sh uses detect_os
+        run: |
+          echo "Checking that mount-shared.sh uses OS detection..."
+          echo ""
+
+          if grep -q 'detect_os' mount-shared.sh; then
+            echo "✓ PASS: mount-shared.sh uses detect_os"
+          else
+            echo "✗ FAIL: mount-shared.sh does not use detect_os"
+            exit 1
+          fi
+
+      - name: Verify hfsutils code paths exist
+        run: |
+          echo "Checking for hfsutils command references..."
+          echo ""
+
+          for cmd in hmount humount hls; do
+            if grep -q "$cmd" mount-shared.sh; then
+              echo "✓ $cmd referenced in mount-shared.sh"
+            else
+              echo "✗ FAIL: $cmd not found in mount-shared.sh"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "✓ PASS: All hfsutils commands are referenced"
+
+      - name: Verify macOS-specific functions exist
+        run: |
+          echo "Checking for macOS-specific functions..."
+          echo ""
+
+          for func in mount_shared_macos unmount_shared_macos list_shared_macos; do
+            if grep -q "$func" mount-shared.sh; then
+              echo "✓ $func exists"
+            else
+              echo "✗ FAIL: $func not found"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "✓ PASS: macOS-specific functions exist"
+
+      - name: Verify help text mentions macOS
+        run: |
+          output=$(./mount-shared.sh --help 2>&1)
+
+          if echo "$output" | grep -qi "hfsutils\|hmount\|macOS"; then
+            echo "✓ PASS: Help text mentions macOS/hfsutils"
+          else
+            echo "✗ FAIL: Help text does not mention macOS support"
+            echo "Output: $output"
+            exit 1
+          fi
+
+  issue-14-hfsutils-functional-test-macos:
+    name: "Issue #14: hfsutils functional test (macOS)"
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install hfsutils
+        run: |
+          echo "Installing hfsutils via Homebrew..."
+          brew install hfsutils
+          echo ""
+          echo "Verifying installation:"
+          which hmount hcopy hls humount hformat
+
+      - name: Create test HFS disk image
+        run: |
+          echo "Creating test HFS disk image..."
+          mkdir -p shared
+
+          # Create a 10MB disk image
+          dd if=/dev/zero of=shared/shared-disk.img bs=1M count=10 2>/dev/null
+
+          # Format as HFS using hformat
+          hformat shared/shared-disk.img
+          echo ""
+          echo "✓ Test HFS disk created and formatted"
+
+      - name: Test hmount/hcopy/hls/humount workflow
+        run: |
+          echo "Testing full hfsutils workflow..."
+          echo ""
+
+          # Create a test file
+          echo "Hello from GitHub Actions" > /tmp/test-file.txt
+
+          # Mount the disk
+          echo "1. Mounting disk..."
+          hmount shared/shared-disk.img
+          echo "   ✓ Mounted"
+
+          # Copy file to disk
+          echo "2. Copying file to disk..."
+          hcopy /tmp/test-file.txt :test-file.txt
+          echo "   ✓ File copied"
+
+          # List files
+          echo "3. Listing files..."
+          hls -la
+          echo "   ✓ Listed"
+
+          # Verify file exists
+          if hls | grep -q "test-file"; then
+            echo "   ✓ File verified on disk"
+          else
+            echo "   ✗ File not found on disk!"
+            exit 1
+          fi
+
+          # Unmount
+          echo "4. Unmounting disk..."
+          humount
+          echo "   ✓ Unmounted"
+
+          echo ""
+          echo "✓ PASS: Full hfsutils workflow successful"
+
+      - name: Test mount-shared.sh script on macOS
+        run: |
+          echo "Testing mount-shared.sh script..."
+          echo ""
+
+          # Test mount
+          ./mount-shared.sh
+          echo ""
+
+          # Test list
+          ./mount-shared.sh -l
+
+          # Test unmount
+          ./mount-shared.sh -u
+
+          echo ""
+          echo "✓ PASS: mount-shared.sh works on macOS"
+
+      - name: Clean up
+        run: rm -rf shared/shared-disk.img /tmp/test-file.txt
+
+  issue-14-iso-downloader-shared-macos:
+    name: "Issue #14: Verify iso-downloader.sh macOS support"
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify iso-downloader.sh uses OS detection for shared delivery
+        run: |
+          echo "Checking that iso-downloader.sh handles macOS shared delivery..."
+          echo ""
+
+          if grep -q 'detect_os' iso-downloader.sh; then
+            echo "✓ iso-downloader.sh uses detect_os"
+          else
+            echo "✗ FAIL: iso-downloader.sh does not use detect_os"
+            exit 1
+          fi
+
+      - name: Verify macOS-specific delivery function exists
+        run: |
+          echo "Checking for macOS delivery function..."
+          echo ""
+
+          if grep -q '_handle_shared_delivery_macos' iso-downloader.sh; then
+            echo "✓ _handle_shared_delivery_macos exists"
+          else
+            echo "✗ FAIL: _handle_shared_delivery_macos not found"
+            exit 1
+          fi
+
+      - name: Verify hfsutils commands in macOS delivery
+        run: |
+          echo "Checking that macOS delivery uses hfsutils..."
+          echo ""
+
+          # Extract the macOS delivery function
+          macos_func=$(sed -n '/_handle_shared_delivery_macos/,/^}/p' iso-downloader.sh)
+
+          for cmd in hmount hcopy humount; do
+            if echo "$macos_func" | grep -q "$cmd"; then
+              echo "✓ $cmd used in macOS delivery"
+            else
+              echo "✗ FAIL: $cmd not found in macOS delivery function"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "✓ PASS: macOS delivery uses hfsutils commands"
+
+  issue-14-mount-shared-linux-unchanged:
+    name: "Issue #14: Verify Linux functionality unchanged"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Linux mount commands still present
+        run: |
+          echo "Checking that Linux mount functionality is preserved..."
+          echo ""
+
+          if grep -q 'sudo mount -t hfsplus' mount-shared.sh; then
+            echo "✓ HFS+ mount command present"
+          else
+            echo "✗ FAIL: HFS+ mount command missing"
+            exit 1
+          fi
+
+          if grep -q 'sudo mount -t hfs' mount-shared.sh; then
+            echo "✓ HFS mount command present"
+          else
+            echo "✗ FAIL: HFS mount command missing"
+            exit 1
+          fi
+
+          if grep -q 'sudo umount' mount-shared.sh; then
+            echo "✓ umount command present"
+          else
+            echo "✗ FAIL: umount command missing"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ PASS: Linux mount commands preserved"
+
+      - name: Verify mountpoint check still exists
+        run: |
+          echo "Checking that mountpoint -q check exists..."
+          echo ""
+
+          if grep -q 'mountpoint -q' mount-shared.sh; then
+            echo "✓ PASS: mountpoint -q check exists"
+          else
+            echo "✗ FAIL: mountpoint -q check missing"
+            exit 1
+          fi
+
+      - name: Verify Linux-specific functions exist
+        run: |
+          echo "Checking for Linux-specific functions..."
+          echo ""
+
+          for func in mount_shared_linux unmount_shared_linux list_shared_linux; do
+            if grep -q "$func" mount-shared.sh; then
+              echo "✓ $func exists"
+            else
+              echo "✗ FAIL: $func not found"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "✓ PASS: Linux-specific functions exist"
+
+      - name: Test --help works
+        run: |
+          output=$(./mount-shared.sh --help 2>&1)
+          if echo "$output" | grep -q "Usage"; then
+            echo "✓ PASS: --help works on Linux"
+          else
+            echo "✗ FAIL: --help failed"
+            exit 1
+          fi
+
+      - name: Verify iso-downloader Linux delivery preserved
+        run: |
+          echo "Checking that iso-downloader.sh preserves Linux delivery..."
+          echo ""
+
+          if grep -q '_handle_shared_delivery_linux' iso-downloader.sh; then
+            echo "✓ _handle_shared_delivery_linux exists"
+          else
+            echo "✗ FAIL: _handle_shared_delivery_linux not found"
+            exit 1
+          fi
+
+          # Extract the Linux delivery function
+          linux_func=$(sed -n '/_handle_shared_delivery_linux/,/^}/p' iso-downloader.sh)
+
+          if echo "$linux_func" | grep -q 'mount-shared.sh'; then
+            echo "✓ Linux delivery uses mount-shared.sh"
+          else
+            echo "✗ FAIL: Linux delivery doesn't use mount-shared.sh"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ PASS: Linux shared delivery preserved"

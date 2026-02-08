@@ -77,13 +77,14 @@ select_item() {
     esac
 }
 
-# Handle delivery to the shared disk
-_handle_shared_delivery() {
+# Handle delivery to the shared disk (Linux - uses loop mount)
+_handle_shared_delivery_linux() {
     local temp_file="$1"
     local filename="$2"
 
     info "Mounting shared drive..."
     if ! "$(dirname "$0")/mount-shared.sh"; then
+        rm -f "$temp_file"
         die "Failed to mount shared drive"
     fi
 
@@ -96,12 +97,59 @@ _handle_shared_delivery() {
     fi
 
     mv -f "$temp_file" "$dest_path"
-    
+
     info "Unmounting shared drive..."
     "$(dirname "$0")/mount-shared.sh" -u
-    
+
     success "Successfully delivered to shared drive:"
     echo "  ${C_BLUE}${filename}${C_RESET}"
+}
+
+# Handle delivery to the shared disk (macOS - uses hfsutils)
+_handle_shared_delivery_macos() {
+    local temp_file="$1"
+    local filename="$2"
+    local shared_disk="shared/shared-disk.img"
+
+    require_commands hmount hcopy humount
+    require_file "$shared_disk" "Shared disk not found. Run a VM first to create it."
+
+    info "Mounting shared disk with hfsutils..."
+    if ! hmount "$shared_disk" >/dev/null 2>&1; then
+        rm -f "$temp_file"
+        die "Failed to mount shared disk. Install hfsutils: brew install hfsutils"
+    fi
+
+    info "Copying file to shared drive..."
+    # hcopy uses : prefix for destination on HFS volume
+    if ! hcopy "$temp_file" ":${filename}" 2>/dev/null; then
+        humount 2>/dev/null || true
+        rm -f "$temp_file"
+        die "Failed to copy file to shared disk"
+    fi
+
+    info "Releasing shared disk..."
+    humount 2>/dev/null || true
+
+    # Clean up temp file
+    rm -f "$temp_file"
+
+    success "Successfully delivered to shared drive:"
+    echo "  ${C_BLUE}${filename}${C_RESET}"
+}
+
+# Handle delivery to the shared disk (dispatcher)
+_handle_shared_delivery() {
+    local temp_file="$1"
+    local filename="$2"
+    local host_os
+    host_os=$(detect_os)
+
+    case "$host_os" in
+        macos) _handle_shared_delivery_macos "$temp_file" "$filename" ;;
+        ubuntu) _handle_shared_delivery_linux "$temp_file" "$filename" ;;
+        *) rm -f "$temp_file"; die "Unsupported OS for shared delivery: $host_os" ;;
+    esac
 }
 
 download_file() {
