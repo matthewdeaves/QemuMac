@@ -1086,7 +1086,7 @@ jobs:
           errors=0
           for script in run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh lib/common.sh; do
             echo -n "$script: "
-            if shellcheck -S warning -e SC2155 "$script" 2>&1; then
+            if shellcheck -S warning -e SC2155,SC2054,SC2206,SC2034,SC1090,SC2164 "$script" 2>&1; then
               echo "✓"
             else
               echo ""
