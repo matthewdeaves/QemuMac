@@ -1315,8 +1315,8 @@ jobs:
       - name: Verify Linux dependencies list
         run: |
           echo "Checking Linux dependencies..."
-          # jq is in the recommended dependencies section
-          if grep -A50 'linux' install-deps.sh | grep -q 'jq'; then
+          # jq is in the runtime tools section under the linux path
+          if grep -A60 'linux' install-deps.sh | grep -q 'jq'; then
             echo "✓ jq included for Linux"
           else
             echo "✗ jq MISSING for Linux"
