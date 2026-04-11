@@ -155,7 +155,7 @@ list_shared_macos() {
 mount_shared() {
     case "$HOST_OS" in
         macos) mount_shared_macos ;;
-        ubuntu) mount_shared_linux ;;
+        linux) mount_shared_linux ;;
         *) die "Unsupported OS: $HOST_OS" ;;
     esac
 }
@@ -163,7 +163,7 @@ mount_shared() {
 unmount_shared() {
     case "$HOST_OS" in
         macos) unmount_shared_macos ;;
-        ubuntu) unmount_shared_linux ;;
+        linux) unmount_shared_linux ;;
         *) die "Unsupported OS: $HOST_OS" ;;
     esac
 }
@@ -171,7 +171,7 @@ unmount_shared() {
 list_shared() {
     case "$HOST_OS" in
         macos) list_shared_macos ;;
-        ubuntu) list_shared_linux ;;
+        linux) list_shared_linux ;;
         *) die "Unsupported OS: $HOST_OS" ;;
     esac
 }

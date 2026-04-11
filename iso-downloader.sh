@@ -49,10 +49,12 @@ select_item() {
         software_options+=("$line")
     done < <(db_items "$software_db" "$category" | sort)
 
-    # Extract display names for menu
+    # Extract display names for menu (tab-delimited: key\tname\tdescription\ttype)
     local display_options=()
     for item in "${software_options[@]}"; do
-        display_options+=("$(echo "$item" | cut -d: -f2)")
+        local tab_name
+        tab_name=$(printf '%s' "$item" | cut -f2)
+        display_options+=("$tab_name")
     done
 
     local options=("${display_options[@]}" "Back to Categories")
@@ -67,7 +69,7 @@ select_item() {
             # Find matching original item by comparing the name part
             for item in "${software_options[@]}"; do
                 local item_name
-                item_name=$(echo "$item" | cut -d: -f2)
+                item_name=$(printf '%s' "$item" | cut -f2)
                 if [[ "$item_name" == "$choice" ]]; then
                     echo "$item"
                     return
@@ -147,7 +149,7 @@ _handle_shared_delivery() {
 
     case "$host_os" in
         macos) _handle_shared_delivery_macos "$temp_file" "$filename" ;;
-        ubuntu) _handle_shared_delivery_linux "$temp_file" "$filename" ;;
+        linux) _handle_shared_delivery_linux "$temp_file" "$filename" ;;
         *) rm -f "$temp_file"; die "Unsupported OS for shared delivery: $host_os" ;;
     esac
 }
@@ -156,8 +158,8 @@ download_file() {
     local software_db="$1"
     local choice="$2"
 
-    # Parse choice (format: key:name:description:type)
-    IFS=':' read -r selected_key selected_name selected_description item_type <<< "$choice"
+    # Parse choice (tab-delimited: key\tname\tdescription\ttype)
+    IFS=$'\t' read -r selected_key selected_name selected_description item_type <<< "$choice"
 
     info "Preparing to download '${C_BLUE}${selected_name}${C_RESET}'"
 
@@ -211,8 +213,19 @@ download_file() {
 }
 
 main() {
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+        echo "Usage: $0 [-h]"
+        echo ""
+        echo "Interactive downloader for operating systems, games, and utilities"
+        echo "from the QemuMac software database."
+        echo ""
+        echo "Options:"
+        echo "  -h, --help  Show this help message"
+        exit 0
+    fi
+
     check_dependencies
-    
+
     local software_db
     software_db=$(load_database)
     

@@ -166,13 +166,8 @@ require_commands() {
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "macos"
-    elif file_exists "/etc/os-release"; then
-        . /etc/os-release
-        if [[ "$ID" == "ubuntu" ]] || [[ "$ID" == "debian" ]]; then
-            echo "ubuntu"
-        else
-            echo "unsupported"
-        fi
+    elif [[ "$(uname -s)" == "Linux" ]]; then
+        echo "linux"
     else
         echo "unsupported"
     fi
@@ -310,15 +305,15 @@ db_categories() {
     echo "$db" | jq -r '[(.cds, .roms) | .[] | .category // "Miscellaneous"] | unique | sort[]'
 }
 
-# Get items for category (returns "key:name:description:type" format)
+# Get items for category (returns tab-delimited "key\tname\tdescription\ttype" format)
 db_items() {
     local db="$1"
     local category="$2"
 
     echo "$db" | jq -r --arg cat "$category" '
         [
-            (.cds | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == ""))) | "\(.key):\(.value.name):\(.value.description // ""):cd"),
-            (.roms | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == ""))) | "\(.key):\(.value.name):\(.value.description // ""):rom")
+            (.cds | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == ""))) | "\(.key)\t\(.value.name)\t\(.value.description // "")\tcd"),
+            (.roms | to_entries[] | select(.value.category == $cat or ($cat == "Miscellaneous" and (.value.category == null or .value.category == ""))) | "\(.key)\t\(.value.name)\t\(.value.description // "")\trom")
         ] | sort[]'
 }
 

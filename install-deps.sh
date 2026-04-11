@@ -37,7 +37,7 @@ install_system_dependencies() {
         info "Installing HFS filesystem support..."
         brew install hfsutils || true
         
-    elif [[ "$os_type" == "ubuntu" ]]; then
+    elif [[ "$os_type" == "linux" ]]; then
         info "Updating package lists..."
         sudo apt-get update
         

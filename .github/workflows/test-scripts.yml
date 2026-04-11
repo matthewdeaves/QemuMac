@@ -805,8 +805,8 @@ jobs:
 
             # Test OS detection
             os=$(detect_os)
-            if [[ "$os" != "ubuntu" ]]; then
-              echo "FAIL: detect_os returned $os, expected ubuntu"
+            if [[ "$os" != "linux" ]]; then
+              echo "FAIL: detect_os returned $os, expected linux"
               exit 1
             fi
             echo "✓ detect_os works: $os"
@@ -1069,6 +1069,39 @@ jobs:
   # SYNTAX AND VALIDATION
   # ============================================================================
 
+  shellcheck:
+    name: "ShellCheck Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck on all scripts
+        run: |
+          echo "Running shellcheck on all project scripts..."
+          echo ""
+          errors=0
+          for script in run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh lib/common.sh; do
+            echo -n "$script: "
+            if shellcheck -S warning -e SC2155 "$script" 2>&1; then
+              echo "✓"
+            else
+              echo ""
+              errors=$((errors + 1))
+            fi
+          done
+
+          if [[ $errors -gt 0 ]]; then
+            echo ""
+            echo "✗ FAIL: $errors scripts have shellcheck warnings"
+            exit 1
+          fi
+          echo ""
+          echo "✓ PASS: All scripts pass shellcheck"
+
   syntax-check:
     name: "Syntax Check (${{ matrix.os }})"
     strategy:
@@ -1284,7 +1317,7 @@ jobs:
 
           # Check both OS paths exist
           grep -q 'macos' install-deps.sh && echo "✓ Has macOS path"
-          grep -q 'ubuntu' install-deps.sh && echo "✓ Has Ubuntu path"
+          grep -q 'linux' install-deps.sh && echo "✓ Has Linux path"
 
       - name: Verify macOS dependencies list
         run: |
@@ -1300,14 +1333,14 @@ jobs:
             fi
           done
 
-      - name: Verify Ubuntu dependencies list
+      - name: Verify Linux dependencies list
         run: |
-          echo "Checking Ubuntu dependencies..."
+          echo "Checking Linux dependencies..."
           # jq is in the recommended dependencies section
-          if grep -A50 'ubuntu' install-deps.sh | grep -q 'jq'; then
-            echo "✓ jq included for Ubuntu"
+          if grep -A50 'linux' install-deps.sh | grep -q 'jq'; then
+            echo "✓ jq included for Linux"
           else
-            echo "✗ jq MISSING for Ubuntu"
+            echo "✗ jq MISSING for Linux"
             exit 1
           fi
 

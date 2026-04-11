@@ -54,7 +54,7 @@
       ],
       "url": "https://archive.org/download/sc-4_20221212/SC4.iso",
       "filename": "SC4.iso",
-      "md5": ""
+      "md5": null
     },
     "simcity3000": {
       "name": "SimCity 3000",
@@ -65,7 +65,7 @@
       ],
       "url": "https://archive.org/download/sim-city-3000_202508/SimCity3000.toast",
       "filename": "SimCity3000.toast",
-      "md5": ""
+      "md5": null
     },
     "macos_x_tiger": {
       "name": "Mac OS X Tiger 10.4",

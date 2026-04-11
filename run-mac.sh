@@ -470,6 +470,19 @@ main() {
         # Manual argument parsing (works on both BSD and GNU systems)
         while [[ $# -gt 0 ]]; do
             case $1 in
+                -h|--help)
+                    echo "Usage: $0 [options]"
+                    echo ""
+                    echo "With no arguments, launches an interactive VM selector."
+                    echo ""
+                    echo "Options:"
+                    echo "  -c, --config <file>        VM configuration file to use"
+                    echo "  -i, --iso <file>           ISO/disk image to attach"
+                    echo "      --boot-from-cd         Boot from attached ISO instead of hard drive"
+                    echo "      --create-config <name> Create a new VM configuration"
+                    echo "  -h, --help                 Show this help message"
+                    exit 0
+                    ;;
                 --create-config)
                     CREATE_VM_NAME="$2"
                     shift 2
