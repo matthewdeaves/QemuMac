@@ -73,6 +73,9 @@ VM configs are bash files defining variables:
 - `HD_IMAGE`: Path to disk image
 - Architecture-specific settings (PRAM_FILE, SCSI IDs for m68k)
 - `SHARED_SCSI_ID`: SCSI ID for shared disk (m68k only, defaults to 4)
+- `SHARED_DISK`: Override shared disk path (default: `shared/shared-disk.img`)
+- `SHARED_DISK_SIZE`: Size for auto-created shared disk (default: 512M)
+- `MAC_ADDRESS`: Unique MAC address per VM (Apple OUI: `08:00:07:xx:xx:xx`)
 - `DEFAULT_INSTALLER`: Optional installer key for first-run automatic setup
 
 ### Boot Device Handling
@@ -88,8 +91,10 @@ VM configs are bash files defining variables:
 
 ### Shared Disk System
 - **Single shared disk**: 512MB HFS-formatted disk accessible by all VMs
+- **Per-VM override**: Set `SHARED_DISK` in config to use a separate shared disk per VM
 - **Cross-architecture support**: Works with both m68k (SCSI) and PPC (IDE) VMs
 - **Automatic creation**: Created on first VM run, format as HFS from within Mac OS
+- **Lock detection**: If another VM has the shared disk open, launches without it
 - **Host mounting**: Simple loop mount via `mount-shared.sh` script at `/tmp/qemu-shared`
 - **File transfer**: Easy way to move files between host and all Mac VMs
 - **Direct software delivery**: Software with `"delivery": "shared"` downloads directly to shared disk

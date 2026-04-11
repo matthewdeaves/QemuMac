@@ -65,6 +65,11 @@ generate_config() {
         done
     fi
 
+    # Generate a unique MAC address using Apple OUI (08:00:07) + random bytes
+    local mac_addr
+    mac_addr=$(printf '08:00:07:%02x:%02x:%02x' \
+        $((RANDOM % 256)) $((RANDOM % 256)) $((RANDOM % 256)))
+
     if [[ "$arch" == "m68k" ]]; then
         cat > "$conf_file" << EOL
 # VM Configuration for ${vm_name} (m68k)
@@ -77,6 +82,7 @@ HD_IMAGE="${vm_dir}/hdd.qcow2"
 HD_SCSI_ID=0
 CD_SCSI_ID=2
 SHARED_SCSI_ID=4
+MAC_ADDRESS="${mac_addr}"
 $([ -n "$default_installer_line" ] && echo "$default_installer_line")
 EOL
     else # ppc
@@ -87,6 +93,7 @@ MACHINE_TYPE="mac99"
 RAM_SIZE="512M"
 HD_SIZE="10G"
 HD_IMAGE="${vm_dir}/hdd.qcow2"
+MAC_ADDRESS="${mac_addr}"
 $([ -n "$default_installer_line" ] && echo "$default_installer_line")
 EOL
     fi
@@ -225,20 +232,26 @@ preflight_checks() {
 
     [[ -n "$CD_ISO_FILE" ]] && require_file "$CD_ISO_FILE" "ISO file '${CD_ISO_FILE}' is specified but not found."
 
+    # SHARED_DISK can be overridden in VM config to use a per-VM disk
     local shared_dir="shared"
-    local shared_disk="$shared_dir/shared-disk.img"
+    local shared_disk="${SHARED_DISK:-$shared_dir/shared-disk.img}"
+    local shared_disk_dir
+    shared_disk_dir=$(dirname "$shared_disk")
 
     # Check if shared disk is available (not locked by another VM)
     if check_shared_disk_available "$shared_disk"; then
         SHARED_DISK_AVAILABLE=true
+        SHARED_DISK_PATH="$shared_disk"
 
         if ! file_exists "$shared_disk"; then
-            info "Shared disk not found. Creating '${shared_disk}' (512M)."
-            ensure_directory "$shared_dir"
-            "$qemu_img_path" create -f raw "$shared_disk" 512M > /dev/null
+            info "Shared disk not found. Creating '${shared_disk}' (${SHARED_DISK_SIZE:-512M})."
+            ensure_directory "$shared_disk_dir"
+            "$qemu_img_path" create -f raw "$shared_disk" "${SHARED_DISK_SIZE:-512M}" > /dev/null
             success "Shared disk created (unformatted)"
             info "Format as Mac OS Standard from within your Mac VM"
-            info "Then mount with: ./mount-shared.sh"
+            if [[ "$shared_disk" == "$shared_dir/shared-disk.img" ]]; then
+                info "Then mount with: ./mount-shared.sh"
+            fi
         fi
     else
         SHARED_DISK_AVAILABLE=false
@@ -293,14 +306,16 @@ build_m68k_args() {
     set_boot_m68k "$PRAM_FILE" "$BOOT_TARGET"
     local aio_backend="threads"
     info "Performance optimizations: CPU=m68040, Storage=writeback+${aio_backend}"
-    
+
+    local mac="${MAC_ADDRESS:-08:00:07:12:34:56}"
+
     QEMU_ARGS+=(
         -M "$MACHINE_TYPE"
         -cpu m68040
         -m "$RAM_SIZE"
         -bios "roms/800.ROM"
         -g 1152x870x8
-        -nic user,model=dp83932,mac=08:00:07:12:34:56
+        -nic "user,model=dp83932,mac=${mac}"
         -drive "file=${PRAM_FILE},format=raw,if=mtd"
         -device scsi-hd,scsi-id=$HD_SCSI_ID,drive=hd0
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
@@ -308,7 +323,7 @@ build_m68k_args() {
     if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
         QEMU_ARGS+=(
             -device scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0
-            -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
+            -drive "file=${SHARED_DISK_PATH},format=raw,if=none,id=shared0"
         )
     fi
     if [[ -n "$CD_ISO_FILE" ]]; then
@@ -324,9 +339,15 @@ build_ppc_args() {
     local machine_string="${MACHINE_TYPE},via=pmu"
     local aio_backend="threads"
     info "Performance optimizations: CPU=G4-7400, Storage=writeback+${aio_backend}"
-    
+
     local hd_i=1 cd_i=2
     [[ "$BOOT_TARGET" == "cd" ]] && hd_i=2 cd_i=1
+
+    local mac="${MAC_ADDRESS:-}"
+    local mac_prop=""
+    if [[ -n "$mac" ]]; then
+        mac_prop=",mac=${mac}"
+    fi
 
     QEMU_ARGS+=(
         -M "$machine_string"
@@ -335,7 +356,7 @@ build_ppc_args() {
         -vga std
         -g 1024x768x32
         -netdev user,id=net0
-        -device sungem,netdev=net0
+        -device "sungem,netdev=net0${mac_prop}"
         -device pci-ohci,id=ohci
         -device usb-mouse,bus=ohci.0
         -device usb-kbd,bus=ohci.0
@@ -344,7 +365,7 @@ build_ppc_args() {
     )
     if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
         QEMU_ARGS+=(
-            -drive "file=shared/shared-disk.img,format=raw,if=none,id=shared0"
+            -drive "file=${SHARED_DISK_PATH},format=raw,if=none,id=shared0"
             -device ide-hd,bus=ide.1,unit=0,drive=shared0
         )
     fi
@@ -460,6 +481,7 @@ interactive_launch() {
             [[ "$boot_action" == *"CD/ISO"* ]] && BOOT_TARGET="cd" || BOOT_TARGET="hd"
         fi
     fi
+
 }
 
 main() {
@@ -516,6 +538,7 @@ main() {
 
     source "$CONFIG_FILE"
     CD_ISO_FILE="${CD_ISO_FILE:-}"
+
     local LOCAL_QEMU_INSTALL_DIR="qemu-install"
     local QEMU_EXECUTABLE="qemu-system-${ARCH}"
     local qemu_bin_path=""
