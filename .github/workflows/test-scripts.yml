@@ -494,22 +494,18 @@ jobs:
             echo "✓ PASS: No old repo1.macintoshgarden.org URLs found"
           fi
 
-      - name: Verify new URLs use correct domain
+      - name: Verify no broken domain URLs remain
         run: |
-          echo "Checking that Macintosh Garden URLs use download.macintoshgarden.org..."
+          echo "Checking that old broken URLs are not present..."
           echo ""
 
-          # Find all macintoshgarden URLs
-          urls=$(grep -o 'https://download\.macintoshgarden\.org[^"]*' iso/software-database.json || true)
-
-          if [[ -z "$urls" ]]; then
-            echo "Note: No Macintosh Garden URLs found (may have been replaced with other sources)"
-          else
-            echo "Found Macintosh Garden URLs:"
-            echo "$urls"
-            echo ""
-            echo "✓ All Macintosh Garden URLs use correct domain"
-          fi
+          for domain in 'repo1\.macintoshgarden\.org' 'download\.macintoshgarden\.org'; do
+            if grep -q "$domain" iso/software-database.json; then
+              echo "✗ FAIL: Found URLs using $domain (known unreliable)"
+              exit 1
+            fi
+          done
+          echo "✓ PASS: No known-broken domain URLs found"
 
       - name: Verify ALL download URLs are reachable
         run: |
@@ -519,7 +515,10 @@ jobs:
           failed=0
           total=0
 
-          # Test each URL
+          # Test each URL (use temp file to track failures across pipe)
+          tmpfile=$(mktemp)
+          echo "0" > "$tmpfile"
+
           jq -r '(.cds, .roms) | to_entries[] | "\(.key)|\(.value.url)"' iso/software-database.json | while IFS='|' read -r key url; do
             total=$((total + 1))
             echo -n "Testing $key... "
@@ -531,38 +530,18 @@ jobs:
               echo "✓ (GET)"
             else
               echo "✗ UNREACHABLE: $url"
-              failed=$((failed + 1))
-            fi
-          done
-
-          # Note: Can't easily get failed count out of pipe, so we check exit separately
-          echo ""
-          echo "URL verification complete"
-
-      - name: Strict URL test for previously broken URLs
-        run: |
-          echo "Testing the specific URLs that were reported broken in issue #12..."
-          echo ""
-
-          # These are the 3 URLs that were broken
-          test_urls=(
-            "https://download.macintoshgarden.org/apps/Apple_Legacy_Recovery.iso_.zip"
-            "https://download.macintoshgarden.org/apps/stuffit_expander_5.5.img"
-            "https://download.macintoshgarden.org/apps/StuffItExpander55.dsk"
-          )
-
-          for url in "${test_urls[@]}"; do
-            echo -n "Testing $url... "
-            if curl -sfI --max-time 30 "$url" > /dev/null 2>&1; then
-              echo "✓ REACHABLE"
-            else
-              echo "✗ FAIL: URL not reachable!"
-              exit 1
+              echo "1" > "$tmpfile"
             fi
           done
 
           echo ""
-          echo "✓ PASS: All previously broken URLs are now working"
+          if [[ "$(cat "$tmpfile")" == "1" ]]; then
+            echo "✗ FAIL: Some URLs are unreachable"
+            rm -f "$tmpfile"
+            exit 1
+          fi
+          rm -f "$tmpfile"
+          echo "✓ PASS: All download URLs are reachable"
 
   # ============================================================================
   # NEW ISSUE FIXES VERIFICATION

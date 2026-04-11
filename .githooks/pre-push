@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+#
+# Pre-push hook: runs quick local checks before pushing to remote.
+# Install with: git config core.hooksPath .githooks
+#
+
+set -euo pipefail
+
+echo "Running pre-push checks..."
+
+errors=0
+
+# 1. Syntax check all scripts
+echo -n "Bash syntax check... "
+for script in run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh lib/common.sh; do
+    if ! bash -n "$script" 2>/dev/null; then
+        echo "FAIL: $script"
+        errors=$((errors + 1))
+    fi
+done
+if [[ $errors -eq 0 ]]; then
+    echo "OK"
+fi
+
+# 2. JSON validation
+echo -n "JSON validation... "
+for json in iso/*.json; do
+    if [[ -f "$json" ]]; then
+        if ! python3 -c "import json; json.load(open('$json'))" 2>/dev/null && \
+           ! jq empty "$json" 2>/dev/null; then
+            echo "FAIL: $json"
+            errors=$((errors + 1))
+        fi
+    fi
+done
+if [[ $errors -eq 0 ]]; then
+    echo "OK"
+fi
+
+# 3. YAML validation (CI workflow)
+echo -n "CI YAML validation... "
+if python3 -c "import yaml; yaml.safe_load(open('.github/workflows/test-scripts.yml'))" 2>/dev/null; then
+    echo "OK"
+else
+    echo "FAIL"
+    errors=$((errors + 1))
+fi
+
+# 4. ShellCheck (if available)
+if command -v shellcheck &>/dev/null; then
+    echo -n "ShellCheck... "
+    sc_errors=0
+    for script in run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh lib/common.sh; do
+        if ! shellcheck -S warning -e SC2155,SC2054,SC2206,SC2034,SC1090,SC2164 "$script" >/dev/null 2>&1; then
+            echo ""
+            shellcheck -S warning -e SC2155,SC2054,SC2206,SC2034,SC1090,SC2164 "$script" 2>&1 | head -20
+            sc_errors=$((sc_errors + 1))
+        fi
+    done
+    if [[ $sc_errors -eq 0 ]]; then
+        echo "OK"
+    else
+        errors=$((errors + sc_errors))
+    fi
+else
+    echo "ShellCheck... SKIPPED (not installed)"
+fi
+
+# 5. Check for broken domain URLs in software database
+echo -n "URL domain check... "
+if grep -qE 'repo1\.macintoshgarden\.org|download\.macintoshgarden\.org' iso/software-database.json 2>/dev/null; then
+    echo "FAIL: Found known-broken download domain in software-database.json"
+    errors=$((errors + 1))
+else
+    echo "OK"
+fi
+
+if [[ $errors -gt 0 ]]; then
+    echo ""
+    echo "Pre-push checks FAILED ($errors errors). Push aborted."
+    echo "Fix the issues above, then try again."
+    exit 1
+fi
+
+echo "All pre-push checks passed."
