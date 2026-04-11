@@ -27,21 +27,27 @@ install_system_dependencies() {
             echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
             die "Homebrew required"
         fi
-        
-        info "Installing required dependencies via Homebrew..."
+
+        info "Installing required build dependencies via Homebrew..."
         brew install libffi gettext glib pkg-config pixman ninja meson jq curl unzip
-        
-        info "Installing optional but recommended dependencies..."
-        brew install sdl2 gtk+3 libusb vde nettle gnutls || true
-        
+
+        info "Installing display and input dependencies..."
+        brew install sdl2 sdl2_image gtk+3 libusb vde || true
+
+        info "Installing crypto and network dependencies..."
+        brew install nettle gnutls libssh libslirp || true
+
+        info "Installing image compression dependencies..."
+        brew install jpeg libpng || true
+
         info "Installing HFS filesystem support..."
         brew install hfsutils || true
-        
+
     elif [[ "$os_type" == "linux" ]]; then
         info "Updating package lists..."
         sudo apt-get update
-        
-        info "Installing required dependencies..."
+
+        info "Installing required build dependencies..."
         sudo apt-get install -y \
             git \
             build-essential \
@@ -49,32 +55,52 @@ install_system_dependencies() {
             python3-venv \
             python3-dev \
             ninja-build \
+            meson \
             libglib2.0-dev \
             libfdt-dev \
             libpixman-1-dev \
             zlib1g-dev
-        
-        info "Installing recommended dependencies..."
+
+        info "Installing display and input dependencies..."
         sudo apt-get install -y \
             libsdl2-dev \
+            libsdl2-image-dev \
             libgtk-3-dev \
             libvte-2.91-dev \
-            libslirp-dev \
-            libvde-dev \
-            libvdeplug-dev \
+            libncurses-dev \
             libusb-1.0-0-dev \
             libusbredirhost-dev \
-            libusbredirparser-dev \
-            libssh-dev \
-            libncurses-dev \
+            libusbredirparser-dev || true
+
+        info "Installing audio dependencies..."
+        sudo apt-get install -y \
+            libpulse-dev \
+            libasound2-dev \
+            libpipewire-0.3-dev || true
+
+        info "Installing network dependencies..."
+        sudo apt-get install -y \
+            libslirp-dev \
+            libvde-dev \
+            libvdeplug-dev || true
+
+        info "Installing crypto and security dependencies..."
+        sudo apt-get install -y \
             libgnutls28-dev \
             nettle-dev \
+            libssh-dev || true
+
+        info "Installing image compression dependencies..."
+        sudo apt-get install -y \
             libjpeg-dev \
-            libpng-dev \
+            libpng-dev || true
+
+        info "Installing runtime tools..."
+        sudo apt-get install -y \
             curl \
             unzip \
             jq || true
-        
+
         info "Installing HFS filesystem support..."
         sudo apt-get install -y hfsprogs || true
     fi
@@ -82,45 +108,49 @@ install_system_dependencies() {
     success "System dependencies installed"
 }
 
+# --- Find latest stable QEMU release tag ---
+find_latest_stable_tag() {
+    git tag -l 'v[0-9]*.[0-9]*.0' --sort=-v:refname | head -n1
+}
+
 # --- Clone QEMU source from Git ---
 clone_qemu_source() {
     header "Downloading QEMU Source"
-    
+
     if dir_exists "$QEMU_SOURCE_DIR"; then
         info "Removing existing QEMU source directory..."
         rm -rf "$QEMU_SOURCE_DIR"
     fi
-    
-    info "Cloning latest QEMU source from GitLab..."
+
+    info "Cloning QEMU source from GitLab..."
     git clone "$QEMU_GIT_URL" "$QEMU_SOURCE_DIR" || die "Failed to clone QEMU repository"
-    
+
     cd "$QEMU_SOURCE_DIR"
+
+    # Check out the latest stable release instead of HEAD (which may be an RC)
+    local stable_tag
+    stable_tag=$(find_latest_stable_tag)
+    if [[ -n "$stable_tag" ]]; then
+        info "Checking out latest stable release: $stable_tag"
+        git checkout "$stable_tag" || info "Failed to checkout $stable_tag, using HEAD"
+    else
+        info "Could not determine latest stable tag, using HEAD"
+    fi
+
     local qemu_version
     qemu_version=$(git describe --always --tags --dirty)
     info "QEMU version: $qemu_version"
-    
-    # Only update the minimal required submodules for m68k/ppc builds
-    info "Updating minimal required submodules..."
-    
-    # These are the only submodules typically needed for basic QEMU builds
-    # without x86 firmware/BIOS requirements
-    local minimal_submodules=(
-        "ui/keycodemapdb"
-        "tests/fp/berkeley-testfloat-3"
-        "tests/fp/berkeley-softfloat-3"
-        "dtc"
-        "meson"
-    )
-    
-    for submodule in "${minimal_submodules[@]}"; do
-        if dir_exists "$submodule"; then
-            info "  Updating $submodule..."
-            git submodule update --init "$submodule" 2>/dev/null || true
-        fi
-    done
-    
+
+    # Modern QEMU uses Meson wraps (subprojects/*.wrap) for build dependencies
+    # which are fetched automatically during configure. We only need to init
+    # submodules required for our target architectures (PPC needs OpenBIOS).
+    info "Initialising required submodules..."
+    git submodule update --init roms/openbios 2>/dev/null || true
+    git submodule update --init roms/QemuMacDrivers 2>/dev/null || true
+    git submodule update --init roms/SLOF 2>/dev/null || true
+
     cd ..
-    
+
     success "QEMU source downloaded"
 }
 
@@ -145,31 +175,76 @@ build_and_install_qemu() {
     
     info "Installation prefix: $install_prefix"
     
-    # Configure QEMU with m68k and ppc targets
+    # Configure QEMU with m68k and ppc targets and full feature support
     info "Configuring QEMU build..."
-    
-    # Basic configure arguments
+
+    # Core configure arguments
     local configure_args=(
         "--prefix=$install_prefix"
         "--target-list=m68k-softmmu,ppc-softmmu"
-        "--enable-slirp"
-        "--enable-sdl"
-        "--enable-vnc"
-        "--disable-docs"  # Skip documentation to speed up build
-        "--disable-guest-agent"  # Not needed for Mac emulation
+        "--disable-docs"
+        "--disable-guest-agent"
     )
-    
-    # Add optional features if dependencies are available
+
+    # Display backends
+    configure_args+=("--enable-sdl")
+    configure_args+=("--enable-sdl-image")
+    configure_args+=("--enable-vnc")
+    configure_args+=("--enable-vnc-jpeg")
+
+    if [[ "$os_type" == "macos" ]]; then
+        configure_args+=("--enable-cocoa")
+    fi
+
+    # Audio backends (platform-specific)
+    if [[ "$os_type" == "macos" ]]; then
+        configure_args+=("--audio-drv-list=coreaudio,sdl")
+    else
+        # Build list of available Linux audio backends
+        local audio_drivers="sdl"
+        if pkg-config --exists libpulse 2>/dev/null; then
+            audio_drivers+=",pa"
+        fi
+        if pkg-config --exists libpipewire-0.3 2>/dev/null; then
+            audio_drivers+=",pipewire"
+        fi
+        configure_args+=("--audio-drv-list=${audio_drivers}")
+    fi
+
+    # Networking
+    configure_args+=("--enable-slirp")
+
+    # Crypto and TLS
+    if pkg-config --exists gnutls 2>/dev/null; then
+        configure_args+=("--enable-gnutls")
+    fi
+    if pkg-config --exists nettle 2>/dev/null; then
+        configure_args+=("--enable-nettle")
+    fi
+
+    # Image compression (for VNC and PNG screenshots)
+    if pkg-config --exists libpng 2>/dev/null || pkg-config --exists libpng16 2>/dev/null; then
+        configure_args+=("--enable-png")
+    fi
+
+    # Optional features - enable if dependencies are available
     if pkg-config --exists gtk+-3.0 2>/dev/null; then
         configure_args+=("--enable-gtk")
     fi
-    
     if pkg-config --exists libusb-1.0 2>/dev/null; then
         configure_args+=("--enable-libusb")
     fi
-    
+    if pkg-config --exists libusbredirparser-0.5 2>/dev/null; then
+        configure_args+=("--enable-usb-redir")
+    fi
     if pkg-config --exists vdeplug 2>/dev/null; then
         configure_args+=("--enable-vde")
+    fi
+    if pkg-config --exists libssh 2>/dev/null; then
+        configure_args+=("--enable-libssh")
+    fi
+    if pkg-config --exists ncurses 2>/dev/null || pkg-config --exists ncursesw 2>/dev/null; then
+        configure_args+=("--enable-curses")
     fi
     
     ./configure "${configure_args[@]}" || {
@@ -275,7 +350,7 @@ main() {
         if [[ "$os_type" == "macos" ]]; then
             echo "  brew install qemu"
         else
-            echo "  sudo apt-get install qemu-system-m68k qemu-system-ppc"
+            echo "  sudo apt-get install qemu-system-misc qemu-system-ppc qemu-img"
         fi
         exit 0
     fi
