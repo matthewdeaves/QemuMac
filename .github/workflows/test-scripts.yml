@@ -142,7 +142,7 @@ jobs:
           echo ""
 
           # Extract the brew install line for main dependencies
-          brew_line=$(grep -A1 'Installing required dependencies via Homebrew' install-deps.sh | grep 'brew install' | head -1)
+          brew_line=$(grep -A1 'Installing required build dependencies via Homebrew' install-deps.sh | grep 'brew install' | head -1)
           echo "Found: $brew_line"
           echo ""
 
@@ -155,7 +155,7 @@ jobs:
 
       - name: Verify curl and unzip also included
         run: |
-          brew_line=$(grep -A1 'Installing required dependencies via Homebrew' install-deps.sh | grep 'brew install' | head -1)
+          brew_line=$(grep -A1 'Installing required build dependencies via Homebrew' install-deps.sh | grep 'brew install' | head -1)
 
           missing=""
           for dep in jq curl unzip; do
@@ -1301,7 +1301,7 @@ jobs:
       - name: Verify macOS dependencies list
         run: |
           echo "Checking macOS dependencies..."
-          brew_line=$(grep -A1 'Installing required dependencies via Homebrew' install-deps.sh | grep 'brew install' | head -1)
+          brew_line=$(grep -A1 'Installing required build dependencies via Homebrew' install-deps.sh | grep 'brew install' | head -1)
 
           for dep in jq curl unzip; do
             if echo "$brew_line" | grep -qw "$dep"; then
