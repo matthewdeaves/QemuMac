@@ -52,6 +52,16 @@ make_stubs() {
     for arch in m68k ppc; do
         cat > "$STUB_DIR/qemu-system-$arch" <<'STUB'
 #!/bin/sh
+# Emulate `-M <machine>,help`, which lists machine properties and exits.
+# QEMU_STUB_NO_AUDIODEV simulates a build predating Quadra 800 sound.
+for a in "$@"; do
+    case "$a" in
+        *,help)
+            [ -n "${QEMU_STUB_NO_AUDIODEV:-}" ] \
+                || echo "  audiodev=<string>      - Audiodev to use for default machine devices"
+            exit 0 ;;
+    esac
+done
 # Reject display suboptions listed in QEMU_STUB_REJECT so tests can simulate
 # an older QEMU that lacks them.
 for a in "$@"; do
@@ -745,6 +755,56 @@ STUB
     rm -rf "$sandbox"
 }
 
+# QEMU defaults to ALSA on Linux. With no sound card the Quadra's Apple Sound
+# Chip fails to initialise and QEMU segfaults instead of degrading, so a
+# headless Linux host could not start a VM at all. The backend is now always
+# chosen explicitly.
+test_audio_backend() {
+    suite "audio backend selection" || return 0
+
+    local conf out
+    conf=$(make_vm audio \
+        'ARCH="m68k"' 'MACHINE_TYPE="q800"' 'RAM_SIZE="128M"' 'HD_SIZE="2G"' \
+        'PRAM_FILE="vms/_test_audio/pram.img"' 'HD_IMAGE="vms/_test_audio/hdd.qcow2"' \
+        'HD_SCSI_ID=6' 'CD_SCSI_ID=3')
+
+    out=$(run_mac --config "$conf")
+    assert_contains "$out" "q800,audiodev=audio0" "the machine is wired to an explicit audiodev"
+    assert_contains "$out" "id=audio0"            "an -audiodev is always supplied"
+
+    # An explicit backend must win, so a user on an odd setup can force it.
+    echo 'AUDIO_BACKEND="none"' >> "$conf"
+    out=$(run_mac --config "$conf")
+    assert_contains "$out" "none,id=audio0" "AUDIO_BACKEND overrides the auto-detected backend"
+
+    # A Linux host with no sound card must resolve to "none", never ALSA -
+    # that is the combination that crashed QEMU.
+    cat > "$STUB_DIR/uname" <<'STUB'
+#!/bin/sh
+[ "$1" = "-s" ] && echo Linux || /usr/bin/uname "$@"
+STUB
+    chmod +x "$STUB_DIR/uname"
+    conf=$(make_vm audio2 \
+        'ARCH="m68k"' 'MACHINE_TYPE="q800"' 'RAM_SIZE="128M"' 'HD_SIZE="2G"' \
+        'PRAM_FILE="vms/_test_audio2/pram.img"' 'HD_IMAGE="vms/_test_audio2/hdd.qcow2"' \
+        'HD_SCSI_ID=6' 'CD_SCSI_ID=3')
+    # PATH without pactl, and no /proc/asound on a macOS dev box, is exactly
+    # the soundless-Linux case.
+    out=$(OSTYPE=linux-gnu PATH="$STUB_DIR:/usr/bin:/bin" ./run-mac.sh --config "$conf" 2>/dev/null)
+    if [[ -r /proc/asound/cards ]]; then
+        printf '  %s-%s soundless-Linux case skipped (this host has a sound card)\n' "$Y" "$N"
+    else
+        assert_contains "$out" "none,id=audio0" "a Linux host with no sound card selects no audio"
+        assert_not_contains "$out" "alsa,id=audio0" "never falls back to ALSA without a card"
+    fi
+    rm -f "$STUB_DIR/uname"
+
+    # An older QEMU without Quadra audio must simply go without, not fail.
+    out=$(QEMU_STUB_NO_AUDIODEV=1 run_mac --config "$conf")
+    assert_contains "$out" "q800" "an older QEMU still gets a plain machine type"
+    assert_not_contains "$out" "audiodev" "no audiodev is passed to a build that lacks it"
+}
+
 test_script_hygiene() {
     suite "script hygiene" || return 0
 
@@ -1171,6 +1231,7 @@ main() {
     test_m68k_args
     test_ppc_args
     test_display_options
+    test_audio_backend
     test_cross_platform_branches
     test_pram_boot_patch
     test_device_args_are_single_words

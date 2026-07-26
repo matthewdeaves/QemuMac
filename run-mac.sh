@@ -378,6 +378,42 @@ build_display_and_input_args() {
 }
 
 
+# Choose an audio backend explicitly. QEMU defaults to ALSA on Linux, and on
+# a machine with no sound card the Quadra's Apple Sound Chip fails to
+# initialise and QEMU *segfaults* rather than degrading - so a headless or
+# soundless Linux host cannot start a VM at all. AUDIO_BACKEND overrides the
+# choice; "none" disables sound entirely.
+select_audiodev() {
+    if [[ -n "${AUDIO_BACKEND:-}" ]]; then
+        echo "$AUDIO_BACKEND"
+        return
+    fi
+
+    if [[ "$(detect_os)" == "macos" ]]; then
+        echo "coreaudio"
+        return
+    fi
+
+    # Linux: PipeWire/PulseAudio if a server answers, else a real ALSA card,
+    # else no sound. /proc/asound/cards lists cards as " 0 [name ...".
+    if command_exists pactl && pactl info >/dev/null 2>&1; then
+        echo "pa"
+    elif [[ -r /proc/asound/cards ]] && grep -qE '^ *[0-9]+ \[' /proc/asound/cards 2>/dev/null; then
+        echo "alsa"
+    else
+        echo "none"
+    fi
+}
+
+# Does this machine type take an audiodev property? Older QEMU predates
+# Quadra 800 sound. Captured before grepping so a non-zero probe exit cannot
+# be turned into a wrong answer by pipefail.
+machine_supports_audiodev() {
+    local probe
+    probe=$("$qemu_bin_path" -M "${MACHINE_TYPE},help" 2>&1 || true)
+    printf '%s' "$probe" | grep -q "audiodev"
+}
+
 build_m68k_args() {
     info "Building QEMU arguments for m68k (Quadra 800)..."
     set_boot_m68k "$PRAM_FILE" "$BOOT_TARGET"
@@ -392,8 +428,18 @@ build_m68k_args() {
     local display_res="${DISPLAY_RES:-1152x870x8}"
     info "Display resolution: ${display_res}"
 
+    local machine_string="$MACHINE_TYPE"
+    local audiodev=""
+    if machine_supports_audiodev; then
+        audiodev=$(select_audiodev)
+        machine_string="${MACHINE_TYPE},audiodev=audio0"
+        info "Audio backend: ${audiodev}"
+    else
+        info "This QEMU build has no Quadra 800 audio - continuing without sound"
+    fi
+
     QEMU_ARGS+=(
-        -M "$MACHINE_TYPE"
+        -M "$machine_string"
         -cpu m68040
         -m "$RAM_SIZE"
         -bios "roms/800.ROM"
@@ -403,6 +449,7 @@ build_m68k_args() {
         -device "scsi-hd,scsi-id=${HD_SCSI_ID},drive=hd0"
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
     )
+    [[ -n "$audiodev" ]] && QEMU_ARGS+=(-audiodev "${audiodev},id=audio0")
     if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
         QEMU_ARGS+=(
             -device "scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0"
