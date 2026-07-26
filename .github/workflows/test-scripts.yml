@@ -90,7 +90,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install hfsprogs and helpers
-        run: sudo apt-get update && sudo apt-get install -y hfsprogs jq lsof qemu-utils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y hfsprogs jq lsof qemu-utils
+          # The stock Azure runner kernel ships no hfsplus module, so without
+          # this the test can only skip. Best effort: the package name is
+          # kernel-version specific and is not always published.
+          sudo apt-get install -y "linux-modules-extra-$(uname -r)" \
+            || echo "no linux-modules-extra for $(uname -r) - hfsplus may be unavailable"
 
       - name: Run the real shared-disk test
         run: ./tests/ci/linux-shared-disk.sh
