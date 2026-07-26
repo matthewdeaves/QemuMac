@@ -126,6 +126,7 @@ VM configs are plain bash. Everything except `ARCH` and `HD_IMAGE` has a default
 | `DISPLAY_ZOOM` | `true` | Resizable window that scales the guest (macOS only) |
 | `DISPLAY_SMOOTH` | `false` | Interpolated rather than nearest-neighbour scaling (macOS only) |
 | `DISPLAY_FULLSCREEN` | `false` | Start full screen |
+| `AUDIO_BACKEND` | auto | `coreaudio` on macOS; PipeWire/Pulse, ALSA or `none` on Linux |
 
 ## Display
 
@@ -151,6 +152,11 @@ initial mode.
 On Linux the SDL window is resizable and scales on its own, so `DISPLAY_ZOOM` is a no-op
 there. Older QEMU builds without `zoom-to-fit` are detected and fall back to a fixed-size
 window rather than failing to launch.
+
+**No sound, or a crash on a headless machine?** QEMU defaults to ALSA on Linux, and on
+a host with no sound card the Quadra's Apple Sound Chip fails to initialise and QEMU
+segfaults. A backend is therefore always chosen explicitly — set `AUDIO_BACKEND="none"`
+to force silence, or name a driver your build supports.
 
 ## Storage layout
 
@@ -185,8 +191,21 @@ It is the tool for mounting disk images inside classic Mac OS.
 The suite asserts on behaviour, not on the text of the scripts: it puts a stub
 `qemu-system-*` on `PATH` that prints its own argv, runs the real `run-mac.sh`, and
 checks the command line that comes out. It also covers GNU/BSD portability, bash 3.2
-syntax, both display branches, shared-disk locking, and first-run recovery. CI runs it
-on `ubuntu-latest` and `macos-latest`.
+syntax, both display branches, shared-disk locking, and first-run recovery. It needs no
+network. CI runs it on `ubuntu-latest` and `macos-latest`.
+
+Stubs only prove the launcher builds the right command. These use real QEMU, and can be
+run by hand on a matching host:
+
+```bash
+./tests/ci/linux-integration.sh    # apt install, boot 68k and PPC, guest really draws
+./tests/ci/linux-shared-disk.sh    # format, mount and deliver onto a real HFS+ volume
+./tests/ci/macos-integration.sh    # brew install, framebuffer modes, real QEMU features
+./tests/ci/linux-source-build.sh   # build QEMU from source, launch with it
+```
+
+They skip cleanly on the wrong OS. The source build runs weekly and on demand rather
+than on every push, since it takes tens of minutes.
 
 To run the same checks before pushing:
 
