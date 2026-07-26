@@ -67,6 +67,97 @@ jobs:
             run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh \
             lib/common.sh tests/run-tests.sh
 
+  install-linux:
+    name: Real apt install (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The unit suite never executes the package-manager path, so a wrong
+      # package name (there is no 'qemu-img' package - qemu-utils provides it)
+      # would only surface on a user's machine. This runs the real script.
+      - name: Install QEMU through install-deps.sh
+        run: printf '1\n' | ./install-deps.sh
+
+      - name: Both QEMU targets and qemu-img are actually present
+        run: |
+          qemu-system-m68k --version
+          qemu-system-ppc --version
+          qemu-img --version
+          command -v jq curl unzip
+
+      # Build a real command line against the real QEMU binary rather than a
+      # stub, then check it parses. -display none keeps it headless; QEMU
+      # exits on the missing ROM, which is after argument parsing.
+      - name: Real QEMU accepts the generated arguments
+        run: |
+          out=$(qemu-system-m68k -M q800 -m 128M -g 1152x870x8 \
+                  -device scsi-hd,scsi-id=6,drive=hd0 \
+                  -drive file=/dev/null,format=raw,if=none,id=hd0 \
+                  -display none -bios /nonexistent 2>&1 || true)
+          echo "$out"
+          echo "$out" | grep -qiE "invalid|unknown|could not|unexpected parameter" \
+            && { echo "::error::QEMU rejected the argument shape"; exit 1; }
+          echo "argument shape accepted"
+
+  linux-shared-disk:
+    name: Shared disk (real HFS+ loop mount)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install hfsprogs and helpers
+        run: sudo apt-get update && sudo apt-get install -y hfsprogs jq lsof qemu-utils
+
+      - name: Does this kernel support hfsplus?
+        id: probe
+        run: |
+          sudo modprobe hfsplus 2>/dev/null || true
+          if grep -qw hfsplus /proc/filesystems; then
+            echo "supported=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "supported=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::kernel has no hfsplus support - real mount not exercised"
+          fi
+
+      # The genuine article: format a real HFS+ volume, mount it through
+      # mount-shared.sh, deliver a file, and release it.
+      - name: Real mount, deliver, unmount
+        if: steps.probe.outputs.supported == 'true'
+        run: |
+          set -e
+          mkdir -p shared
+          qemu-img create -f raw shared/shared-disk.img 64M
+          mkfs.hfsplus -v QemuMacTest shared/shared-disk.img
+
+          ./mount-shared.sh
+          mountpoint -q /tmp/qemu-shared || { echo "::error::not mounted"; exit 1; }
+
+          echo "built-on-the-host" > /tmp/qemu-shared/MyApp
+          test -f /tmp/qemu-shared/MyApp
+
+          ./mount-shared.sh -u
+          mountpoint -q /tmp/qemu-shared && { echo "::error::still mounted"; exit 1; }
+
+          # The file must survive the round trip through the HFS+ volume.
+          ./mount-shared.sh
+          grep -q built-on-the-host /tmp/qemu-shared/MyApp \
+            || { echo "::error::file did not persist"; exit 1; }
+          ./mount-shared.sh -u
+          echo "real HFS+ round trip OK"
+
+      - name: The in-use guard refuses a real mount
+        if: steps.probe.outputs.supported == 'true'
+        run: |
+          exec 9<>shared/shared-disk.img
+          out=$(./mount-shared.sh 2>&1 || true)
+          exec 9>&-
+          echo "$out"
+          echo "$out" | grep -q "in use" \
+            || { echo "::error::mount-shared.sh did not refuse a disk held open"; exit 1; }
+          mountpoint -q /tmp/qemu-shared && { echo "::error::mounted anyway"; exit 1; }
+          echo "in-use guard OK against a real mount"
+
   database:
     name: Software database URLs
     runs-on: ubuntu-latest

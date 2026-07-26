@@ -683,6 +683,68 @@ download_file \"\$db\" \"\$(printf 'bogus_key\tBogus\tdesc\tcd')\"" 2>&1)
     rm -f "$lib"
 }
 
+# The Linux shared-disk delivery path had no coverage at all. It calls
+# mount-shared.sh by path (not via PATH), so it is exercised in a sandbox repo
+# whose mount-shared.sh is a recording stub. That covers the orchestration and
+# both failure paths on any host; the real loop mount is a separate CI job,
+# since it needs root and kernel hfsplus.
+test_shared_delivery_linux() {
+    suite "Linux shared-disk delivery" || return 0
+
+    local sandbox mountpoint out
+    sandbox=$(mktemp -d)
+    mountpoint="$sandbox/mnt"
+    mkdir -p "$sandbox/lib" "$mountpoint"
+    cp lib/common.sh "$sandbox/lib/common.sh"
+    sed '$d' iso-downloader.sh > "$sandbox/iso-downloader.sh"
+
+    # Recording stub: logs how it was called and succeeds.
+    cat > "$sandbox/mount-shared.sh" <<STUB
+#!/bin/sh
+echo "mount-shared.sh \$*" >> "$sandbox/calls.log"
+exit 0
+STUB
+    chmod +x "$sandbox/mount-shared.sh"
+
+    cat > "$sandbox/runner.sh" <<STUB
+source "$sandbox/iso-downloader.sh"
+SHARED_MOUNT_POINT="$mountpoint"
+_handle_shared_delivery_linux "\$1" "\$2"
+STUB
+
+    # Happy path: file is delivered, disk mounted then released.
+    printf 'payload' > "$sandbox/payload.bin"
+    out=$(bash "$sandbox/runner.sh" "$sandbox/payload.bin" "MyApp" 2>&1)
+
+    TESTS_RUN=$((TESTS_RUN + 1))
+    if [[ -f "$mountpoint/MyApp" ]]; then
+        pass "the downloaded file is delivered onto the shared disk"
+    else
+        fail "the downloaded file is delivered onto the shared disk" "$out"
+    fi
+
+    assert_contains "$(cat "$sandbox/calls.log")" "mount-shared.sh -u" \
+        "the shared disk is released after delivery"
+    assert_file_missing "$sandbox/payload.bin" "the temp file is not left behind"
+
+    # Mount failure: must not leave the temp file, and must not claim success.
+    cat > "$sandbox/mount-shared.sh" <<'STUB'
+#!/bin/sh
+[ "$1" = "-u" ] && exit 0
+exit 1
+STUB
+    chmod +x "$sandbox/mount-shared.sh"
+    printf 'payload' > "$sandbox/payload2.bin"
+    out=$(bash "$sandbox/runner.sh" "$sandbox/payload2.bin" "Other" 2>&1)
+
+    assert_contains "$out" "Failed to mount" "a failed mount is reported"
+    assert_not_contains "$out" "Successfully delivered" "a failed mount does not report success"
+    assert_file_missing "$sandbox/payload2.bin" "the temp file is cleaned up when the mount fails"
+    assert_file_missing "$mountpoint/Other" "nothing is delivered when the mount fails"
+
+    rm -rf "$sandbox"
+}
+
 test_script_hygiene() {
     suite "script hygiene" || return 0
 
@@ -1122,6 +1184,7 @@ main() {
     test_explicit_iso_beats_default_installer
     test_download_extraction_failures
     test_downloader_guards
+    test_shared_delivery_linux
     test_installer_logic
     test_help_and_noninteractive
 
