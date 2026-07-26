@@ -21,6 +21,7 @@ TESTS_RUN=0
 TESTS_FAILED=0
 STUB_DIR=""
 SANDBOX=""
+PLACEHOLDER_ROM=""
 
 if [[ -t 1 ]]; then
     R=$'\033[31m'; G=$'\033[32m'; Y=$'\033[33m'; N=$'\033[0m'
@@ -37,8 +38,22 @@ fi
 cleanup() {
     [[ -n "$STUB_DIR" && -d "$STUB_DIR" ]] && rm -rf "$STUB_DIR"
     [[ -n "$SANDBOX" && -d "$SANDBOX" ]] && rm -rf "$SANDBOX"
+    [[ -n "$PLACEHOLDER_ROM" && -f "$PLACEHOLDER_ROM" ]] && rm -f "$PLACEHOLDER_ROM"
     rm -rf "$REPO_ROOT/vms/_test_"* 2>/dev/null
     return 0
+}
+
+# The suite must not touch the network. Without a ROM present, run-mac.sh
+# downloads one from archive.org on the first m68k test - which makes the
+# whole suite depend on a third-party host being up and not rate-limiting,
+# and a failed download makes run-mac.sh die() with empty output, failing
+# every m68k assertion for a reason that has nothing to do with the code.
+# Nothing here reads the ROM's contents; it only has to exist.
+make_placeholder_rom() {
+    [[ -f "$REPO_ROOT/roms/800.ROM" ]] && return 0
+    mkdir -p "$REPO_ROOT/roms"
+    PLACEHOLDER_ROM="$REPO_ROOT/roms/800.ROM"
+    dd if=/dev/zero of="$PLACEHOLDER_ROM" bs=1024 count=1024 2>/dev/null
 }
 trap cleanup EXIT
 
@@ -1222,6 +1237,7 @@ test_helpers() {
 main() {
     command -v jq >/dev/null 2>&1 || { echo "jq is required to run the tests" >&2; exit 1; }
     make_stubs
+    make_placeholder_rom
 
     test_script_hygiene
     test_shellcheck
