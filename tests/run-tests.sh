@@ -809,7 +809,8 @@ test_script_hygiene() {
     suite "script hygiene" || return 0
 
     local f out
-    for f in run-mac.sh install-deps.sh iso-downloader.sh mount-shared.sh lib/common.sh; do
+    for f in run-mac.sh install-deps.sh iso-downloader.sh mount-shared.sh \
+             lib/common.sh tests/ci/linux-integration.sh tests/ci/linux-shared-disk.sh; do
         TESTS_RUN=$((TESTS_RUN + 1))
         if out=$(/bin/bash -n "$f" 2>&1); then
             pass "$f parses under the system bash ($(/bin/bash --version | head -1 | grep -o '[0-9]\+\.[0-9]\+' | head -1))"
@@ -824,7 +825,7 @@ test_script_hygiene() {
     # runs everything under bash 5 and never exercises 3.2.
     # Now that tests/ is in scope these greps can match their own pattern
     # strings and comments, so drop comment lines and the checker lines here.
-    local scan_files="*.sh lib/*.sh tests/*.sh"
+    local scan_files="*.sh lib/*.sh tests/*.sh tests/ci/*.sh"
     local self='grep -nE|:[[:space:]]*#'
 
     TESTS_RUN=$((TESTS_RUN + 1))

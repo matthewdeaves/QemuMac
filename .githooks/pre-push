@@ -25,7 +25,8 @@ fi
 # ShellCheck runs inside the test suite too; this repeats it only to surface
 # the actual diagnostics rather than a bare pass/fail.
 SC_FILES=(run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh
-          lib/common.sh tests/run-tests.sh)
+          lib/common.sh tests/run-tests.sh tests/ci/linux-integration.sh
+          tests/ci/linux-shared-disk.sh)
 if command -v shellcheck >/dev/null 2>&1; then
     printf 'ShellCheck... '
     if shellcheck -S warning "${SC_FILES[@]}" >/dev/null 2>&1; then
