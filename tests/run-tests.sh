@@ -1180,6 +1180,31 @@ done" 2>/dev/null | tr '\n' ' ')
         pass "no regression to the x.y.0-only tag pattern"
     fi
 
+    # A local source build installs qemu-img under the prefix alongside the
+    # emulators. Checking the bare name made verify_installation fail on every
+    # local build unless a system qemu-img happened to exist.
+    TESTS_RUN=$((TESTS_RUN + 1))
+    local sandbox
+    sandbox=$(mktemp -d)
+    mkdir -p "$sandbox/qemu-install/bin"
+    for b in qemu-system-m68k qemu-system-ppc qemu-img; do
+        printf '#!/bin/sh\necho "QEMU emulator version 11.0.3"\n' > "$sandbox/qemu-install/bin/$b"
+        chmod +x "$sandbox/qemu-install/bin/$b"
+    done
+    cp "$lib" "$sandbox/idlib.sh"
+    cp -R lib "$sandbox/lib"
+    # PATH deliberately lacks a system qemu-img, which is the failing case.
+    out=$(cd "$sandbox" && PATH="/usr/bin:/bin" bash -c '
+source ./idlib.sh
+verify_installation local 2>&1 | grep -c "qemu-img not found"' 2>/dev/null)
+    if [[ "$out" == "0" ]]; then
+        pass "verify_installation finds qemu-img inside a local build"
+    else
+        fail "verify_installation finds qemu-img inside a local build" \
+             "reported qemu-img missing despite ./qemu-install/bin/qemu-img"
+    fi
+    rm -rf "$sandbox"
+
     # apt has no 'qemu-img' package; qemu-utils provides it.
     TESTS_RUN=$((TESTS_RUN + 1))
     if grep -qE 'apt-get install.*[^-]qemu-img' install-deps.sh; then

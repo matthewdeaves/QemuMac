@@ -73,6 +73,13 @@ in from the host, and copy screenshots, saved games or a finished project back o
 It also moves files *between* VMs — mount it in the Quadra, copy something over,
 shut down, boot the G4.
 
+**Resource forks.** Classic Mac files carry a data fork *and* a resource fork, and a
+plain `cp` or `hcopy` copies only the data. Applications, and anything with icons or
+custom resources, arrive broken. Move them as a single-fork archive instead — `.sit`,
+`.hqx`, `.bin` (MacBinary) or a disk image — and unpack inside the guest with StuffIt
+Expander. `hcopy -m` writes MacBinary, `hcopy -b` BinHex. Plain data files (text,
+source, JPEGs) copy fine as-is.
+
 **Only one writer at a time.** HFS has no shared-write support — the guest caches
 volume metadata, so a host write underneath it corrupts the catalog. `mount-shared.sh`
 refuses to mount a disk a VM has open, and `run-mac.sh` launches without the shared

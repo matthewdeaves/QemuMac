@@ -349,8 +349,21 @@ verify_installation() {
         fi
     done
 
+    # qemu-img is built alongside the emulators, so for a local install it
+    # lives under the prefix too. Checking the bare name made every local
+    # source build report "Installation is incomplete" unless the machine
+    # happened to have a system qemu-img - even though run-mac.sh resolves it
+    # correctly from ./qemu-install/bin.
+    if command_exists "${prefix}qemu-img"; then
+        success "✓ qemu-img"
+    else
+        error "✗ qemu-img not found"
+        ok=false
+    fi
+
+    # jq and curl come from the package manager either way.
     local tool
-    for tool in qemu-img jq curl; do
+    for tool in jq curl; do
         if command_exists "$tool"; then
             success "✓ ${tool}"
         else
