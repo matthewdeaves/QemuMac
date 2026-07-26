@@ -30,7 +30,7 @@ step() { printf '\n=== %s ===\n' "$1"; }
 
 cleanup() {
     mountpoint -q "$MOUNT_POINT" 2>/dev/null && sudo umount "$MOUNT_POINT" 2>/dev/null
-    rm -f "$DISK"
+    rm -f "$DISK" .qemumac-ci-lib.sh .qemumac-ci-delivery.sh
     return 0
 }
 trap cleanup EXIT
@@ -79,12 +79,17 @@ step "iso-downloader delivers onto the real volume"
 payload="${TMPDIR:-/tmp}/qemumac-payload.bin"
 printf 'a-host-built-artifact' > "$payload"
 
-lib=$(mktemp)
-sed '$d' iso-downloader.sh > "$lib"
-# shellcheck disable=SC1090  # generated at runtime from iso-downloader.sh
-source "$lib"
-_handle_shared_delivery_linux "$payload" "MyApp"
-rm -f "$lib"
+# iso-downloader.sh locates lib/common.sh and mount-shared.sh through
+# `dirname "$0"`, so the harness has to sit at the repo root - sourcing it
+# from /tmp makes both lookups resolve against the wrong directory.
+sed '$d' iso-downloader.sh > .qemumac-ci-lib.sh
+cat > .qemumac-ci-delivery.sh <<'RUNNER'
+# shellcheck source=/dev/null  # generated at runtime from iso-downloader.sh
+source "$(dirname "$0")/.qemumac-ci-lib.sh"
+_handle_shared_delivery_linux "$1" "$2"
+RUNNER
+bash .qemumac-ci-delivery.sh "$payload" "MyApp"
+rm -f .qemumac-ci-lib.sh .qemumac-ci-delivery.sh
 
 [[ -f "$payload" ]] && fail "the temp file was left behind after delivery"
 
