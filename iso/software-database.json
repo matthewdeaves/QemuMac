@@ -54,7 +54,7 @@
       ],
       "url": "https://archive.org/download/sc-4_20221212/SC4.iso",
       "filename": "SC4.iso",
-      "md5": null
+      "md5": "18c86ae402ee2b075424ff57b7569900"
     },
     "simcity3000": {
       "name": "SimCity 3000",
@@ -65,7 +65,7 @@
       ],
       "url": "https://archive.org/download/sim-city-3000_202508/SimCity3000.toast",
       "filename": "SimCity3000.toast",
-      "md5": null
+      "md5": "4ef97a654d568af82d8a421b1519a7be"
     },
     "macos_x_tiger": {
       "name": "Mac OS X Tiger 10.4",
@@ -185,7 +185,8 @@
       "description": "ROM file for Quadra 800 emulation",
       "category": "ROMs",
       "filename": "800.ROM",
-      "url": "https://archive.org/download/800_20250604/800.ROM"
+      "url": "https://archive.org/download/800_20250604/800.ROM",
+      "md5": "69489153dde910a69d5ae6de5dd65323"
     }
   }
 }
