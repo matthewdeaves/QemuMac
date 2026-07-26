@@ -62,7 +62,10 @@ download_file_to_temp() {
     # Follow redirects, fail on error, show progress bar, and output to temp file
     # Checked explicitly: run-mac.sh does not use `set -e`, so an unchecked
     # failure here would install a truncated/empty file as if it were valid.
-    if ! curl --fail -L --progress-bar -o "$temp_file" "$url"; then
+    # --retry covers transient failures (timeouts and 5xx). archive.org
+    # intermittently answers 500 under load, and without this a single blip
+    # aborts an install that would have worked on a second attempt.
+    if ! curl --fail -L --progress-bar --retry 3 --retry-delay 2 -o "$temp_file" "$url"; then
         rm -f "$temp_file"
         die "Download failed: ${url}"
     fi
