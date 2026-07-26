@@ -21,6 +21,12 @@ Treat the host↔guest handoff as a primary workflow, not a side feature.
   carry an inline `# shellcheck disable=` at the exact line, with a reason. Note a
   directive must precede a whole compound command — putting one before `done` is a
   parse error.
+- **No logic inside CI YAML.** A workflow step is a one-liner that installs
+  packages or calls a script in `tests/ci/`. Anything longer lives in a real
+  script: `run:` blocks are invisible to ShellCheck, unreadable in a diff, and
+  can only be run inside Actions. Add new scripts to `tests/shell-files.txt` —
+  it is the single source of truth for ShellCheck, the bash 3.2 parse check and
+  the hook, and the suite fails if a script on disk is missing from it.
 - **When something is found broken, add a regression test for it.**
 
 ## Commands
