@@ -114,10 +114,14 @@ echo "PRAM size: ${size} bytes"
 [[ "$size" == "256" ]] || fail "expected a 256-byte PRAM image, got ${size}"
 
 step "Negative control"
-# The checks above must be capable of failing. QEMU validates -device only
-# after loading the ROM, so this needs the real ROM to be meaningful.
-out=$(qemu-system-m68k -M q800 -m 128M -display none \
-        -bios roms/800.ROM -device definitely-not-a-real-device 2>&1 || true)
+# The checks above must be capable of failing. Two things matter here:
+# QEMU validates -device only *after* loading the ROM, so the real ROM is
+# needed; and the null audiodev is required for the same reason run-mac.sh
+# passes one - a bare `-M q800` on a soundless host segfaults in the ASC
+# backend before it ever reaches device validation.
+out=$(qemu-system-m68k -M q800,audiodev=audio0 -audiodev none,id=audio0 \
+        -m 128M -display none -bios roms/800.ROM \
+        -device definitely-not-a-real-device 2>&1 || true)
 echo "$out" | tail -1
 echo "$out" | grep -q "is not a valid device model name" \
     || fail "negative control did not trip - these checks may be vacuous"
