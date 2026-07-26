@@ -17,11 +17,11 @@ generate_config() {
     case $arch_choice in
         "m68k (Macintosh Quadra)") arch="m68k";;
         "ppc (PowerMac G4)") arch="ppc";;
+        *) die "Unrecognised architecture selection: ${arch_choice}";;
     esac
 
     info "Creating new VM: ${vm_name} (${arch})"
-    ensure_directory "$vm_dir" "Creating VM directory"
-    
+
     # Load software database for installer selection
     local software_db installer_choice
     software_db=$(db_load "iso/software-database.json" "iso/custom-software.json")
@@ -54,21 +54,32 @@ generate_config() {
     installer_choice=$(menu "Choose a default installer:" "${installer_options[@]}")
     [[ "$installer_choice" == "QUIT" ]] && exit 0
 
+    # menu() collapses any "None..." option to the sentinel "NONE", so match
+    # that, not the option's label - "NONE" != "None"* under a case-sensitive
+    # glob, and the old test therefore always took the wrong branch.
     local default_installer_line=""
-    if [[ "$installer_choice" != "None"* ]]; then
-        # Find the corresponding key for the selected installer
+    if [[ "$installer_choice" != "NONE" ]]; then
+        local i found=false
         for i in "${!installer_options[@]}"; do
             if [[ "${installer_options[$i]}" == "$installer_choice" ]]; then
                 default_installer_line="DEFAULT_INSTALLER=\"${installer_keys[$i]}\""
+                found=true
                 break
             fi
         done
+        [[ "$found" == true ]] || die "Selection '${installer_choice}' did not match any installer"
     fi
+
+    local description
+    description=$(ask_text "Description for the VM menu" "$vm_name")
 
     # Generate a unique MAC address using Apple OUI (08:00:07) + random bytes
     local mac_addr
     mac_addr=$(printf '08:00:07:%02x:%02x:%02x' \
         $((RANDOM % 256)) $((RANDOM % 256)) $((RANDOM % 256)))
+
+    # Created last, so abandoning any prompt above leaves no empty directory
+    ensure_directory "$vm_dir" "Creating VM directory"
 
     if [[ "$arch" == "m68k" ]]; then
         cat > "$conf_file" << EOL
@@ -79,10 +90,21 @@ RAM_SIZE="128M"
 HD_SIZE="2G"
 PRAM_FILE="${vm_dir}/pram.img"
 HD_IMAGE="${vm_dir}/hdd.qcow2"
-HD_SCSI_ID=0
-CD_SCSI_ID=2
-SHARED_SCSI_ID=4
+DESCRIPTION="${description}"
 MAC_ADDRESS="${mac_addr}"
+
+# SCSI IDs. 7 is the host adapter; these three must not collide.
+HD_SCSI_ID=6
+CD_SCSI_ID=3
+SHARED_SCSI_ID=4
+
+# Display. The q800 framebuffer accepts a fixed set of modes:
+#   640x480 / 800x600 at depth 1,2,4,8,24
+#   1152x870          at depth 1,2,4,8
+# Lower resolutions make the Mac OS UI physically larger.
+DISPLAY_RES="1152x870x8"
+# Resizable window that scales the guest display (macOS Cocoa only).
+DISPLAY_ZOOM=true
 $([ -n "$default_installer_line" ] && echo "$default_installer_line")
 EOL
     else # ppc
@@ -93,7 +115,13 @@ MACHINE_TYPE="mac99"
 RAM_SIZE="512M"
 HD_SIZE="10G"
 HD_IMAGE="${vm_dir}/hdd.qcow2"
+DESCRIPTION="${description}"
 MAC_ADDRESS="${mac_addr}"
+
+# Initial display mode - the guest can change it once booted.
+DISPLAY_RES="1024x768x32"
+# Resizable window that scales the guest display (macOS Cocoa only).
+DISPLAY_ZOOM=true
 $([ -n "$default_installer_line" ] && echo "$default_installer_line")
 EOL
     fi
@@ -116,9 +144,11 @@ setup_first_run_installer() {
     local installer_item filename nice_filename url md5
     installer_item=$(db_item "$software_db" "$installer_key" "cd")
     
+    # A missing key is a config error, not a transient failure - retrying
+    # would not help, so the caller carries on and the user attaches media
+    # manually. Download failures die() instead, so the VM retries next run.
     if [[ "$installer_item" == "null" ]]; then
         error "Installer '$installer_key' not found in software database"
-        info "Continuing without installer - you'll need to attach one manually"
         return 1
     fi
     
@@ -176,88 +206,90 @@ setup_rom_if_missing() {
     return 0
 }
 
-check_shared_disk_available() {
-    local shared_disk="$1"
-
-    # Check if shared disk exists first
-    if ! file_exists "$shared_disk"; then
-        # Doesn't exist yet, so it's available
-        return 0
-    fi
-
-    # Check if another process has the file open
-    # Try lsof first (works on both macOS and Linux)
-    if command_exists "lsof"; then
-        if lsof "$shared_disk" &>/dev/null; then
-            # File is in use by another process
-            return 1
-        fi
-    elif command_exists "fuser"; then
-        # Fall back to fuser on Linux systems
-        if fuser "$shared_disk" &>/dev/null; then
-            # File is in use by another process
-            return 1
-        fi
-    else
-        # Neither command available, assume available (safe default for single-VM case)
-        return 0
-    fi
-
-    # File exists but not in use
-    return 0
-}
-
 preflight_checks() {
     local first_run=false
-    
-    if ! file_exists "$HD_IMAGE"; then
-        info "Hard drive not found. Creating '${HD_IMAGE}' (${HD_SIZE})."
-        "$qemu_img_path" create -f qcow2 "$HD_IMAGE" "$HD_SIZE" > /dev/null
-        first_run=true
-    fi
-    
-    # Check for first-run installer setup
-    if [[ "$first_run" == true && -n "${DEFAULT_INSTALLER:-}" ]]; then
-        setup_first_run_installer "$DEFAULT_INSTALLER"
+    file_exists "$HD_IMAGE" || first_run=true
+
+    # Everything that can fail on the network runs BEFORE the disk image is
+    # created. The disk image's absence is what marks a VM as "not yet
+    # installed" - create it first and a failed download strands the VM: the
+    # next run sees an existing disk, skips the installer, and boots a blank
+    # drive forever. Downloads die() on failure, leaving no disk, so the next
+    # run retries cleanly.
+    # An explicit --iso wins over DEFAULT_INSTALLER. Without this test the
+    # first-run path overwrites CD_ISO_FILE unconditionally, so `--iso foo.iso`
+    # silently boots something else entirely. interactive_launch clears
+    # CD_ISO_FILE on the first-run path precisely so this stays true.
+    if [[ "$first_run" == true && -n "${DEFAULT_INSTALLER:-}" && -z "$CD_ISO_FILE" ]]; then
+        setup_first_run_installer "$DEFAULT_INSTALLER" \
+            || error "Continuing without an installer - attach one manually with --iso"
+    elif [[ "$first_run" == true && -n "${DEFAULT_INSTALLER:-}" ]]; then
+        info "Using the ISO given on the command line instead of the default installer"
     fi
 
-    if [[ "$ARCH" == "m68k" ]]; then
-        if ! file_exists "$PRAM_FILE"; then
-            info "PRAM file not found. Creating '${PRAM_FILE}'."
-            dd if=/dev/zero of="$PRAM_FILE" bs=256 count=1 &>/dev/null
-        fi
-        local m68k_rom_file="roms/800.ROM"
-        setup_rom_if_missing "$m68k_rom_file"
-    fi
+    [[ "$ARCH" == "m68k" ]] && setup_rom_if_missing "roms/800.ROM"
 
+    # Validate the install media before the disk exists, for the same reason
+    # the downloads run first: a die() after the disk is created leaves a VM
+    # that looks installed, so the next run skips the installer and boots a
+    # blank drive (a flashing question-mark disk) forever. A mistyped --iso
+    # must not be able to strand a VM permanently.
     [[ -n "$CD_ISO_FILE" ]] && require_file "$CD_ISO_FILE" "ISO file '${CD_ISO_FILE}' is specified but not found."
 
-    # SHARED_DISK can be overridden in VM config to use a per-VM disk
-    local shared_dir="shared"
-    local shared_disk="${SHARED_DISK:-$shared_dir/shared-disk.img}"
-    local shared_disk_dir
-    shared_disk_dir=$(dirname "$shared_disk")
+    if [[ "$first_run" == true ]]; then
+        info "Hard drive not found. Creating '${HD_IMAGE}' (${HD_SIZE})."
+        ensure_directory "$(dirname "$HD_IMAGE")"
+        "$qemu_img_path" create -f qcow2 "$HD_IMAGE" "$HD_SIZE" > /dev/null \
+            || die "Failed to create disk image '${HD_IMAGE}'"
+    fi
 
-    # Check if shared disk is available (not locked by another VM)
-    if check_shared_disk_available "$shared_disk"; then
-        SHARED_DISK_AVAILABLE=true
-        SHARED_DISK_PATH="$shared_disk"
+    if [[ "$ARCH" == "m68k" ]] && ! file_exists "$PRAM_FILE"; then
+        info "PRAM file not found. Creating '${PRAM_FILE}'."
+        ensure_directory "$(dirname "$PRAM_FILE")"
+        dd if=/dev/zero of="$PRAM_FILE" bs=256 count=1 &>/dev/null \
+            || die "Failed to create PRAM file '${PRAM_FILE}'"
+    fi
 
-        if ! file_exists "$shared_disk"; then
-            info "Shared disk not found. Creating '${shared_disk}' (${SHARED_DISK_SIZE:-512M})."
-            ensure_directory "$shared_disk_dir"
-            "$qemu_img_path" create -f raw "$shared_disk" "${SHARED_DISK_SIZE:-512M}" > /dev/null
-            success "Shared disk created (unformatted)"
-            info "Format as Mac OS Standard from within your Mac VM"
-            if [[ "$shared_disk" == "$shared_dir/shared-disk.img" ]]; then
-                info "Then mount with: ./mount-shared.sh"
-            fi
+    setup_shared_disk
+}
+
+# Attach the shared disk unless another process already has it open. Nothing
+# arbitrates access to the image, so two concurrent writers corrupt the HFS
+# volume - hence first-come, first-served.
+setup_shared_disk() {
+    local shared_disk
+    shared_disk=$(shared_disk_path)
+
+    disk_in_use "$shared_disk"
+    case $? in
+        0)
+            SHARED_DISK_AVAILABLE=false
+            info "Shared disk is in use by another VM or mounted on the host"
+            info "This VM will launch without access to ${C_BLUE}${shared_disk}${C_RESET}"
+            info "Close other VMs (or run ./mount-shared.sh -u) to regain access"
+            return 0
+            ;;
+        2)
+            info "Neither lsof nor fuser is installed - cannot detect concurrent use"
+            info "Do not run two VMs, or mount the disk on the host, at the same time"
+            ;;
+    esac
+
+    SHARED_DISK_AVAILABLE=true
+    SHARED_DISK_PATH="$shared_disk"
+
+    if ! file_exists "$shared_disk"; then
+        info "Shared disk not found. Creating '${shared_disk}' (${SHARED_DISK_SIZE:-512M})."
+        ensure_directory "$(dirname "$shared_disk")"
+        "$qemu_img_path" create -f raw "$shared_disk" "${SHARED_DISK_SIZE:-512M}" > /dev/null \
+            || die "Failed to create shared disk '${shared_disk}'"
+        success "Shared disk created (unformatted)"
+        info "Format as Mac OS Standard from within your Mac VM"
+        if [[ "$shared_disk" == "$DEFAULT_SHARED_DISK" ]]; then
+            info "Then mount with: ./mount-shared.sh"
+        else
+            info "Then mount with: SHARED_DISK=${shared_disk} ./mount-shared.sh"
         fi
-    else
-        SHARED_DISK_AVAILABLE=false
-        info "Shared disk is in use by another VM - launching without shared disk"
-        info "This VM will not have access to ${C_BLUE}${shared_disk}${C_RESET}"
-        info "Close other VMs to regain shared disk access"
     fi
 }
 
@@ -280,7 +312,23 @@ set_boot_m68k() {
         $(((refnum_value >> 8) & 0xFF)) \
         $((refnum_value & 0xFF)))
 
-    printf "$byte_format_string" | dd of="$pram_file" bs=1 seek=120 count=4 conv=notrunc &>/dev/null
+    # '%b' interprets the \x escapes without treating the value as a format
+    # string - a literal '%' in the data would otherwise be consumed.
+    printf '%b' "$byte_format_string" | dd of="$pram_file" bs=1 seek=120 count=4 conv=notrunc &>/dev/null
+}
+
+# Probe whether this QEMU understands a Cocoa display suboption. An
+# unloadable -bios makes QEMU exit immediately after parsing -display, so the
+# probe is cheap and touches nothing. Lets older QEMU builds degrade to a
+# fixed-size window instead of refusing to launch.
+# The probe is expected to exit non-zero, so its output must be captured
+# before grepping. Piping it directly would let `set -o pipefail` report the
+# probe's own failure as the pipeline status, which `!` then inverts into a
+# false "supported".
+cocoa_supports() {
+    local opt="$1" probe
+    probe=$("$qemu_bin_path" -M "$MACHINE_TYPE" -display "cocoa,${opt}" -bios /nonexistent 2>&1 || true)
+    ! printf '%s' "$probe" | grep -q "is unexpected"
 }
 
 build_display_and_input_args() {
@@ -289,14 +337,43 @@ build_display_and_input_args() {
 
     info "Configuring display and input devices for host OS..."
     if [[ "$host_os" == "macos" ]]; then
+        # zoom-to-fit makes the window freely resizable and scales the guest
+        # framebuffer to match. Without it the window is locked to the guest
+        # resolution, which looks tiny on a Retina display.
+        local cocoa_opts="cocoa,swap-opt-cmd=on"
+        local zoom_active=false
+        if [[ "${DISPLAY_ZOOM:-true}" == true ]]; then
+            if cocoa_supports "zoom-to-fit=on"; then
+                cocoa_opts+=",zoom-to-fit=on"
+                zoom_active=true
+                # Smooth scaling; off (nearest-neighbour) keeps classic Mac OS
+                # pixel art crisp at integer scale factors.
+                if [[ "${DISPLAY_SMOOTH:-false}" == true ]] && cocoa_supports "zoom-interpolation=on"; then
+                    cocoa_opts+=",zoom-interpolation=on"
+                fi
+            else
+                info "This QEMU build does not support zoom-to-fit - using a fixed-size window."
+            fi
+        fi
+        [[ "${DISPLAY_FULLSCREEN:-false}" == true ]] && cocoa_opts+=",full-screen=on"
+
         info "Using Cocoa display on macOS."
-        QEMU_ARGS+=(-display cocoa,swap-opt-cmd=on)
+        [[ "$zoom_active" == true ]] && \
+            info "→ Drag the window edge to resize; the guest display scales to fit."
+        QEMU_ARGS+=(-display "$cocoa_opts")
     else
+        # SDL windows are already freely resizable and scale the guest display,
+        # so DISPLAY_ZOOM is a no-op here - it exists for the Cocoa backend,
+        # which locks the window to the guest resolution without it.
+        local sdl_opts="sdl,grab-mod=rctrl"
+        [[ "${DISPLAY_FULLSCREEN:-false}" == true ]] && sdl_opts+=",full-screen=on"
+
         info "Using SDL display on Linux."
+        info "→ Drag the window edge to resize; the guest display scales to fit."
         info "→ Press Right-Ctrl + G to release mouse grab."
         info "→ Press Left-Shift + Left-Command + Q/W for Quit/Close in 68k guest."
         info "→ Right-Command + Q/W for Quit/Close in PPC guest."
-        QEMU_ARGS+=(-display sdl,grab-mod=rctrl)
+        QEMU_ARGS+=(-display "$sdl_opts")
     fi
 }
 
@@ -309,26 +386,32 @@ build_m68k_args() {
 
     local mac="${MAC_ADDRESS:-08:00:07:12:34:56}"
 
+    # The q800 framebuffer only accepts a fixed set of modes. QEMU lists them
+    # if DISPLAY_RES is invalid. 24-bit depth is available at 640x480 and
+    # 800x600 only; 1152x870 tops out at 8-bit (256 colours).
+    local display_res="${DISPLAY_RES:-1152x870x8}"
+    info "Display resolution: ${display_res}"
+
     QEMU_ARGS+=(
         -M "$MACHINE_TYPE"
         -cpu m68040
         -m "$RAM_SIZE"
         -bios "roms/800.ROM"
-        -g 1152x870x8
+        -g "$display_res"
         -nic "user,model=dp83932,mac=${mac}"
         -drive "file=${PRAM_FILE},format=raw,if=mtd"
-        -device scsi-hd,scsi-id=$HD_SCSI_ID,drive=hd0
+        -device "scsi-hd,scsi-id=${HD_SCSI_ID},drive=hd0"
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
     )
     if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
         QEMU_ARGS+=(
-            -device scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0
+            -device "scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0"
             -drive "file=${SHARED_DISK_PATH},format=raw,if=none,id=shared0"
         )
     fi
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
-            -device scsi-cd,scsi-id=$CD_SCSI_ID,drive=cd0
+            -device "scsi-cd,scsi-id=${CD_SCSI_ID},drive=cd0"
             -drive "file=${CD_ISO_FILE},format=raw,cache=writeback,aio=${aio_backend},if=none,media=cdrom,id=cd0"
         )
     fi
@@ -349,30 +432,35 @@ build_ppc_args() {
         mac_prop=",mac=${mac}"
     fi
 
+    # Initial mode only - the guest can change resolution from the Displays
+    # control panel / System Preferences once booted.
+    local display_res="${DISPLAY_RES:-1024x768x32}"
+    info "Display resolution: ${display_res} (initial)"
+
     QEMU_ARGS+=(
         -M "$machine_string"
         -cpu 7400_v2.9
         -m "$RAM_SIZE"
         -vga std
-        -g 1024x768x32
-        -netdev user,id=net0
+        -g "$display_res"
+        -netdev "user,id=net0"
         -device "sungem,netdev=net0${mac_prop}"
-        -device pci-ohci,id=ohci
-        -device usb-mouse,bus=ohci.0
-        -device usb-kbd,bus=ohci.0
+        -device "pci-ohci,id=ohci"
+        -device "usb-mouse,bus=ohci.0"
+        -device "usb-kbd,bus=ohci.0"
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
-        -device ide-hd,bus=ide.0,unit=0,drive=hd0,bootindex=$hd_i
+        -device "ide-hd,bus=ide.0,unit=0,drive=hd0,bootindex=${hd_i}"
     )
     if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
         QEMU_ARGS+=(
             -drive "file=${SHARED_DISK_PATH},format=raw,if=none,id=shared0"
-            -device ide-hd,bus=ide.1,unit=0,drive=shared0
+            -device "ide-hd,bus=ide.1,unit=0,drive=shared0"
         )
     fi
     if [[ -n "$CD_ISO_FILE" ]]; then
         QEMU_ARGS+=(
             -drive "file=${CD_ISO_FILE},format=raw,cache=writeback,aio=${aio_backend},if=none,id=cd0,media=cdrom"
-            -device ide-cd,bus=ide.0,unit=1,drive=cd0,bootindex=$cd_i
+            -device "ide-cd,bus=ide.0,unit=1,drive=cd0,bootindex=${cd_i}"
         )
     fi
 }
@@ -393,6 +481,7 @@ interactive_launch() {
 
         # Source config to read DESCRIPTION (in subshell to avoid polluting variables)
         local description
+        # shellcheck source=/dev/null  # VM configs are user files
         description=$(source "$config_file" 2>/dev/null && echo "${DESCRIPTION:-}")
 
         # Build menu entry with description if available
@@ -403,17 +492,21 @@ interactive_launch() {
         fi
     done
 
-    local vm_choice vm_index
+    local vm_choice vm_index=""
     vm_choice=$(menu "Choose a VM:" "${MENU_ENTRIES[@]}")
     [[ "$vm_choice" == "QUIT" ]] && exit 0
 
-    # Match selection back to original index
+    # Match selection back to original index. vm_index must be initialised and
+    # checked: an unmatched selection would otherwise index FOUND_FILES with
+    # an unset variable and trip `set -u`.
     for i in "${!MENU_ENTRIES[@]}"; do
         [[ "${MENU_ENTRIES[$i]}" == "$vm_choice" ]] && vm_index="$i" && break
     done
+    [[ -n "$vm_index" ]] || die "Selection '${vm_choice}' did not match any VM"
     CONFIG_FILE="${FOUND_FILES[$vm_index]}"
     
     # Load config to check for first-run + default installer scenario
+    # shellcheck source=/dev/null  # VM configs are user files
     source "$CONFIG_FILE"
     
     # Check if this is a first-run with default installer
@@ -433,32 +526,17 @@ interactive_launch() {
     
     if [[ "$skip_iso_selection" == false ]]; then
         header "Select an ISO file to attach (optional)"
+        # find -name is case-sensitive on every filesystem, so uppercase
+        # variants need their own pattern even on case-insensitive macOS.
         local -a iso_options=("None (Boot from Hard Drive)")
         local ISO_FILES=()
-        if find_files_with_names "iso" "*.iso" "basename" "-maxdepth 1 -type f"; then
-            iso_options+=("${FOUND_NAMES[@]}")
-            ISO_FILES=("${FOUND_FILES[@]}")
-        fi
-        if find_files_with_names "iso" "*.ISO" "basename" "-maxdepth 1 -type f"; then
-            iso_options+=("${FOUND_NAMES[@]}")
-            ISO_FILES+=("${FOUND_FILES[@]}")
-        fi
-        if find_files_with_names "iso" "*.toast" "basename" "-maxdepth 1 -type f"; then
-            iso_options+=("${FOUND_NAMES[@]}")
-            ISO_FILES+=("${FOUND_FILES[@]}")
-        fi
-        if find_files_with_names "iso" "*.dmg" "basename" "-maxdepth 1 -type f"; then
-            iso_options+=("${FOUND_NAMES[@]}")
-            ISO_FILES+=("${FOUND_FILES[@]}")
-        fi
-        if find_files_with_names "iso" "*.img" "basename" "-maxdepth 1 -type f"; then
-            iso_options+=("${FOUND_NAMES[@]}")
-            ISO_FILES+=("${FOUND_FILES[@]}")
-        fi
-        if find_files_with_names "iso" "*.dsk" "basename" "-maxdepth 1 -type f"; then
-            iso_options+=("${FOUND_NAMES[@]}")
-            ISO_FILES+=("${FOUND_FILES[@]}")
-        fi
+        local pattern
+        for pattern in "*.iso" "*.ISO" "*.toast" "*.dmg" "*.img" "*.dsk"; do
+            if find_files_with_names "iso" "$pattern" "basename" "-maxdepth 1 -type f"; then
+                iso_options+=("${FOUND_NAMES[@]}")
+                ISO_FILES+=("${FOUND_FILES[@]}")
+            fi
+        done
 
         local iso_choice
         iso_choice=$(menu "Choose an ISO:" "${iso_options[@]}")
@@ -478,7 +556,11 @@ interactive_launch() {
                 "Boot from Hard Drive (mount ISO on desktop)" \
                 "Boot from CD/ISO (for OS installation, etc.)")
             [[ "$boot_action" == "QUIT" ]] && exit 0
-            [[ "$boot_action" == *"CD/ISO"* ]] && BOOT_TARGET="cd" || BOOT_TARGET="hd"
+            if [[ "$boot_action" == *"CD/ISO"* ]]; then
+                BOOT_TARGET="cd"
+            else
+                BOOT_TARGET="hd"
+            fi
         fi
     fi
 
@@ -536,8 +618,18 @@ main() {
     [[ -z "$CONFIG_FILE" ]] && die "No configuration specified or selected"
     require_file "$CONFIG_FILE" "Config file not found"
 
+    # shellcheck source=/dev/null  # VM configs are user files
     source "$CONFIG_FILE"
     CD_ISO_FILE="${CD_ISO_FILE:-}"
+
+    # Validate up front: ARCH selects both the QEMU binary and the argument
+    # builder, so an unrecognised value must not silently fall through to the
+    # PPC path.
+    case "${ARCH:-}" in
+        m68k|ppc) ;;
+        "") die "Config '${CONFIG_FILE}' does not set ARCH (expected \"m68k\" or \"ppc\")" ;;
+        *) die "Config '${CONFIG_FILE}' has unsupported ARCH=\"${ARCH}\" (expected \"m68k\" or \"ppc\")" ;;
+    esac
 
     local LOCAL_QEMU_INSTALL_DIR="qemu-install"
     local QEMU_EXECUTABLE="qemu-system-${ARCH}"
@@ -561,7 +653,14 @@ main() {
     declare -a QEMU_ARGS
     QEMU_ARGS=("$qemu_bin_path")
     build_display_and_input_args
-    [[ $ARCH == m68k ]] && build_m68k_args || build_ppc_args
+    # if/else, not `test && a || b`: if build_m68k_args ever returned
+    # non-zero, the || branch would also run and append PPC devices to an
+    # m68k command line.
+    if [[ "$ARCH" == "m68k" ]]; then
+        build_m68k_args
+    else
+        build_ppc_args
+    fi
     info "Starting QEMU..."
     >&2 echo "---"
     exec "${QEMU_ARGS[@]}"
