@@ -25,6 +25,10 @@ jobs:
             sudo apt-get install -y jq lsof
           else
             jq --version   # jq and lsof ship with the macOS runner image
+            # hfsutils is what mount-shared.sh uses on macOS (there is no
+            # kernel HFS write support), so without it the macOS shared-disk
+            # path dies on a missing command before its own checks run.
+            brew install hfsutils
           fi
 
       - name: Run test suite

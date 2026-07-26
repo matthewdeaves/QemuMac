@@ -408,8 +408,16 @@ test_shared_disk_locking() {
         out=$(run_mac --config "$conf")
         assert_not_contains "$out" "$disk" "omits the shared disk while another process holds it"
 
-        out=$(SHARED_DISK="$disk" ./mount-shared.sh 2>&1 || true)
-        assert_contains "$out" "in use" "mount-shared.sh refuses to mount a disk that is in use"
+        # On macOS mount-shared.sh needs hfsutils; without it the script dies
+        # on the missing command before reaching its own in-use check, so the
+        # assertion would be testing the wrong thing. Skip rather than
+        # pretend, and let CI install hfsutils so this really does run there.
+        if [[ "$(uname -s)" != "Darwin" ]] || command -v hmount >/dev/null 2>&1; then
+            out=$(SHARED_DISK="$disk" ./mount-shared.sh 2>&1 || true)
+            assert_contains "$out" "in use" "mount-shared.sh refuses to mount a disk that is in use"
+        else
+            printf '  %s-%s mount-shared.sh in-use check skipped (no hfsutils)\n' "$Y" "$N"
+        fi
         exec 9>&-
     else
         printf '  %s-%s skipped (no lsof or fuser)\n' "$Y" "$N"
