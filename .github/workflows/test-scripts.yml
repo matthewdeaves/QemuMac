@@ -68,7 +68,7 @@ jobs:
             lib/common.sh tests/run-tests.sh
 
   install-linux:
-    name: Real apt install (ubuntu)
+    name: Linux integration (apt install + real boot)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,19 +86,72 @@ jobs:
           qemu-img --version
           command -v jq curl unzip
 
-      # Build a real command line against the real QEMU binary rather than a
-      # stub, then check it parses. -display none keeps it headless; QEMU
-      # exits on the missing ROM, which is after argument parsing.
-      - name: Real QEMU accepts the generated arguments
+      - name: Install xvfb
+        run: sudo apt-get install -y xvfb
+
+      # Boot a real VM through run-mac.sh itself. This is the only place the
+      # Linux path runs end to end: the SDL display branch (hence xvfb - SDL
+      # needs a display), the automatic ROM download, qemu-img disk creation,
+      # PRAM creation and boot patching, shared-disk setup, and the exec into
+      # QEMU. Success is QEMU still running after the sleep; it boots to a
+      # "no bootable disk" screen, which is expected with a blank drive.
+      - name: Boot a VM end to end through run-mac.sh
         run: |
-          out=$(qemu-system-m68k -M q800 -m 128M -g 1152x870x8 \
-                  -device scsi-hd,scsi-id=6,drive=hd0 \
-                  -drive file=/dev/null,format=raw,if=none,id=hd0 \
-                  -display none -bios /nonexistent 2>&1 || true)
-          echo "$out"
-          echo "$out" | grep -qiE "invalid|unknown|could not|unexpected parameter" \
-            && { echo "::error::QEMU rejected the argument shape"; exit 1; }
-          echo "argument shape accepted"
+          mkdir -p vms/ci_m68k
+          cat > vms/ci_m68k/ci_m68k.conf <<'CONF'
+          ARCH="m68k"
+          MACHINE_TYPE="q800"
+          RAM_SIZE="128M"
+          HD_SIZE="512M"
+          PRAM_FILE="vms/ci_m68k/pram.img"
+          HD_IMAGE="vms/ci_m68k/hdd.qcow2"
+          MAC_ADDRESS="08:00:07:c1:c1:01"
+          HD_SCSI_ID=6
+          CD_SCSI_ID=3
+          SHARED_SCSI_ID=4
+          DISPLAY_RES="800x600x8"
+          CONF
+
+          xvfb-run -a ./run-mac.sh --config vms/ci_m68k/ci_m68k.conf > /tmp/run.log 2>&1 &
+          sleep 30
+
+          if ! pgrep -f qemu-system-m68k >/dev/null; then
+            echo "::error::run-mac.sh did not leave QEMU running"
+            cat /tmp/run.log
+            exit 1
+          fi
+          echo "QEMU is running. Command line:"
+          pgrep -af qemu-system-m68k | head -1
+          pkill -f qemu-system-m68k || true
+
+          # The ROM must have been fetched and verified against its md5, and
+          # the disk, PRAM and shared disk created.
+          test -f roms/800.ROM          || { echo "::error::ROM not downloaded"; exit 1; }
+          test -f vms/ci_m68k/hdd.qcow2 || { echo "::error::disk not created"; exit 1; }
+          test -f vms/ci_m68k/pram.img  || { echo "::error::PRAM not created"; exit 1; }
+          test -f shared/shared-disk.img || { echo "::error::shared disk not created"; exit 1; }
+          grep -q "sdl" /tmp/run.log     || { echo "::error::did not take the SDL branch"; exit 1; }
+          echo "end-to-end Linux boot OK"
+
+      # The PRAM boot patch is what selects the boot device on 68k, so assert
+      # the real bytes rather than trusting the earlier unit test alone.
+      - name: PRAM boot patch is byte-correct after a real run
+        run: |
+          got=$(od -An -tx1 -j120 -N4 vms/ci_m68k/pram.img | tr -d ' \n')
+          echo "PRAM bytes at offset 120: $got"
+          [ "$got" = "ffffffd9" ] \
+            || { echo "::error::expected ffffffd9 for SCSI ID 6, got $got"; exit 1; }
+
+      # Prove the checks above can fail, so a broken assertion cannot pass
+      # silently. With a valid ROM loaded, QEMU rejects an unknown device.
+      - name: Negative control - QEMU rejects a bad device
+        run: |
+          out=$(qemu-system-m68k -M q800 -m 128M -display none \
+                  -bios roms/800.ROM -device definitely-not-a-real-device 2>&1 || true)
+          echo "$out" | tail -1
+          echo "$out" | grep -q "is not a valid device model name" \
+            || { echo "::error::negative control did not trip - checks may be vacuous"; exit 1; }
+          echo "negative control tripped as expected"
 
   linux-shared-disk:
     name: Shared disk (real HFS+ loop mount)
