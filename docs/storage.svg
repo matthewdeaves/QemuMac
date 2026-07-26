@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="330" viewBox="0 0 760 330" role="img" aria-label="Storage layout: how disks attach to m68k SCSI and PowerPC IDE virtual machines">
+  <rect x="0" y="0" width="760" height="330" fill="#ffffff"/>
+
+  <g font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+
+    <!-- m68k column -->
+    <rect x="24" y="24" width="330" height="248" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+    <text x="189" y="50" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">m68k — Quadra 800</text>
+    <text x="189" y="69" text-anchor="middle" font-size="11.5" fill="#57606a">SCSI bus (ID 7 = host adapter)</text>
+
+    <rect x="48" y="86" width="282" height="38" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="62" y="103" font-size="12.5" font-weight="600" fill="#1f2328">Hard disk</text>
+    <text x="62" y="118" font-size="11.5" fill="#57606a">vms/&lt;name&gt;/hdd.qcow2</text>
+    <text x="316" y="110" text-anchor="end" font-size="12" fill="#0969da" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">ID 6</text>
+
+    <rect x="48" y="132" width="282" height="38" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="62" y="149" font-size="12.5" font-weight="600" fill="#1f2328">CD-ROM</text>
+    <text x="62" y="164" font-size="11.5" fill="#57606a">attached ISO, if any</text>
+    <text x="316" y="156" text-anchor="end" font-size="12" fill="#0969da" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">ID 3</text>
+
+    <rect x="48" y="178" width="282" height="38" rx="6" fill="#fff8e6" stroke="#d4a72c"/>
+    <text x="62" y="195" font-size="12.5" font-weight="600" fill="#1f2328">Shared disk</text>
+    <text x="62" y="210" font-size="11.5" fill="#57606a">shared/shared-disk.img</text>
+    <text x="316" y="202" text-anchor="end" font-size="12" fill="#0969da" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">ID 4</text>
+
+    <rect x="48" y="224" width="282" height="34" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="62" y="240" font-size="12.5" font-weight="600" fill="#1f2328">PRAM</text>
+    <text x="62" y="253" font-size="11.5" fill="#57606a">pram.img — patched to pick the boot device</text>
+
+    <!-- ppc column -->
+    <rect x="406" y="24" width="330" height="248" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+    <text x="571" y="50" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">PPC — PowerMac G4</text>
+    <text x="571" y="69" text-anchor="middle" font-size="11.5" fill="#57606a">IDE buses</text>
+
+    <rect x="430" y="86" width="282" height="38" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="444" y="103" font-size="12.5" font-weight="600" fill="#1f2328">Hard disk</text>
+    <text x="444" y="118" font-size="11.5" fill="#57606a">vms/&lt;name&gt;/hdd.qcow2</text>
+    <text x="698" y="110" text-anchor="end" font-size="12" fill="#0969da" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">ide.0/0</text>
+
+    <rect x="430" y="132" width="282" height="38" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="444" y="149" font-size="12.5" font-weight="600" fill="#1f2328">CD-ROM</text>
+    <text x="444" y="164" font-size="11.5" fill="#57606a">attached ISO, if any</text>
+    <text x="698" y="156" text-anchor="end" font-size="12" fill="#0969da" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">ide.0/1</text>
+
+    <rect x="430" y="178" width="282" height="38" rx="6" fill="#fff8e6" stroke="#d4a72c"/>
+    <text x="444" y="195" font-size="12.5" font-weight="600" fill="#1f2328">Shared disk</text>
+    <text x="444" y="210" font-size="11.5" fill="#57606a">shared/shared-disk.img</text>
+    <text x="698" y="202" text-anchor="end" font-size="12" fill="#0969da" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">ide.1/0</text>
+
+    <rect x="430" y="224" width="282" height="34" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="444" y="240" font-size="12.5" font-weight="600" fill="#1f2328">No ROM, no PRAM</text>
+    <text x="444" y="253" font-size="11.5" fill="#57606a">OpenBIOS is built in; boot order set by bootindex</text>
+
+    <!-- shared note -->
+    <rect x="24" y="288" width="712" height="30" rx="6" fill="#fff8e6" stroke="#d4a72c"/>
+    <text x="380" y="307" text-anchor="middle" font-size="12" fill="#1f2328">The same shared image is offered to every VM. Whichever VM starts first claims it; the rest launch without it.</text>
+  </g>
+</svg>

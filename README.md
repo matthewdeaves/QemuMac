@@ -1,195 +1,215 @@
-# QemuMac - Classic Macintosh Emulation
+# QemuMac
 
-A collection of scripts for running classic Macintosh VMs using QEMU, supporting both 68k (Quadra 800) and PowerPC (PowerMac G4) architectures.
+Run classic Macintosh VMs under QEMU — 68k (Quadra 800) and PowerPC (PowerMac G4) —
+on macOS or Ubuntu, with a shared disk for moving files between host and guest.
+
+## Why
+
+Partly to run old software. Mostly to close the loop on **classic Mac development**:
+build on the host with modern tools, drop the artifact on the shared disk, and run it
+under real Mac OS 7/8/9/X a few seconds later.
+
+![Development loop: build on the host, copy to the shared disk, run in the VM](docs/dev-loop.svg)
+
+That is why the shared disk is central rather than a convenience feature.
 
 ## Requirements
 
-- QEMU 10.x (tested with 10.0.92/v10.1.0-rc2)
-- Dependencies: `jq`, `curl`, `unzip`
-- ROM file: `roms/800.ROM` (for 68k VMs, auto-downloaded on first run)
+- QEMU 8.2 or later with `m68k` and `ppc` targets (11.x recommended)
+- `jq`, `curl`, `unzip`
+- `hfsutils` (macOS) or `hfsprogs` (Ubuntu) — only for mounting the shared disk on the host
+- `lsof` or `fuser` — used to stop two writers touching the shared disk at once
 
-### Installing Dependencies
+`./install-deps.sh` installs all of it, either from your package manager or by building
+the latest stable QEMU from source. It finishes with a feature check that tells you
+exactly which optional capabilities your build has.
 
-For macOS and Ubuntu/Debian Linux, you can run the dependency installer:
-
-```bash
-./install-deps.sh
-```
-
-This script will:
-- Install required system dependencies (via Homebrew on macOS, apt on Ubuntu)
-- Build the latest QEMU from source with m68k and ppc support
-- Install QEMU either locally (in `qemu-install/`) or globally
-- Verify the installation works correctly
-
-The script supports both local installation (recommended) and global system-wide installation.
-
-## Quick Start
-
-### 1. Launch a VM
-
-For the most user-friendly experience, run the script without any arguments to open an interactive menu:
+## Quick start
 
 ```bash
-./run-mac.sh
+./install-deps.sh     # once
+./run-mac.sh          # interactive menu: pick a VM, optionally attach an ISO
 ```
 
-This will show all available VMs with descriptions (e.g., "68k_quadra_800 - Mac OS 7.6.1") and guide you through selecting a VM, attaching an ISO, and choosing boot options.
+Five VMs ship ready to use. On first boot each one downloads its installer and boots
+from it; after that they boot from their hard disk.
 
-**Note**: Multiple VMs can run simultaneously. The first VM to start gets access to the shared disk; additional VMs run without it.
+| VM | OS | Arch |
+|---|---|---|
+| `68k_quadra_800` | Mac OS 7.6.1 | m68k |
+| `68k_quadra_800_os753` | Mac OS 7.5.3 | m68k |
+| `power_mac_g4_os9` | Mac OS 9.2.2 | ppc |
+| `power_mac_g4_tiger` | Mac OS X 10.4 Tiger | ppc |
+| `power_mac_g4_leopard` | Mac OS X 10.5.6 Leopard | ppc |
 
-### 2. Download Software
+## The dev loop
+
+The shared disk is a raw HFS image every VM can mount. Format it once from inside a
+VM (Erase Disk → Mac OS Standard), then:
+
+```bash
+./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf   # format it, then shut down
+
+./mount-shared.sh                 # mount on the host
+cp build/MyApp /tmp/qemu-shared/  # Linux: a real mount point
+./mount-shared.sh -u              # release before starting a VM
+```
+
+On macOS there is no HFS write support in the kernel, so `mount-shared.sh` uses
+`hfsutils` instead of a mount point:
+
+```bash
+./mount-shared.sh          # hmount the image
+hcopy build/MyApp :        # copy to the disk
+hls                        # list
+./mount-shared.sh -u       # humount
+```
+
+**Only one writer at a time.** HFS has no shared-write support — the guest caches
+volume metadata, so a host write underneath it corrupts the catalog. `mount-shared.sh`
+refuses to mount a disk a VM has open, and `run-mac.sh` launches without the shared
+disk if something else already holds it.
+
+Point a VM at its own disk with `SHARED_DISK` in its config; pass the same value to
+the mounter:
+
+```bash
+SHARED_DISK=vms/my-vm/shared.img ./mount-shared.sh
+```
+
+## Downloading software
+
 ```bash
 ./iso-downloader.sh
 ```
-Downloads Mac OS installers and software from curated database. Software marked with `"delivery": "shared"` downloads directly to the shared disk for immediate access in VMs. You need to have formatted the shared drive in an emulated machine before using this option!
 
-**Custom Software**: Create `iso/custom-software.json` to add your own download sources. The script will automatically merge it with the default database. Use the same structure as `iso/software-database.json`.
+Installers, ROMs and applications from a curated database, checksum-verified. Entries
+marked `"delivery": "shared"` are written straight to the shared disk. Add your own
+sources in `iso/custom-software.json` (same schema as `iso/software-database.json`);
+it is merged over the defaults.
 
-### 3. Shared Disk for File Transfer
-```bash
-./mount-shared.sh        # Mount shared disk on host
-./mount-shared.sh -u     # Unmount shared disk
-```
-A 512MB shared disk (HFS format) accessible by all VMs for easy file transfer between host and guests. Only one VM can access the shared disk at a time (first-come, first-served). Additional VMs can run without the shared disk.
+## Creating a VM
 
-### 4. Create New VM
 ```bash
 ./run-mac.sh --create-config my_mac
 ```
-During VM creation, you can:
-- Choose architecture (m68k Quadra 800 or PPC PowerMac G4)
-- Optionally select a default installer that will be automatically downloaded and configured on first run
-- Add a DESCRIPTION field to your config for easy identification in the VM menu
 
-## Usage Examples
+Prompts for architecture, an optional default installer, and a description for the
+menu. Writes `vms/my_mac/my_mac.conf` with a unique MAC address.
 
-### Installing Mac OS (typical workflow)
+## Configuration reference
 
-**Option 1: With Default Installer (Recommended)**
+VM configs are plain bash. Everything except `ARCH` and `HD_IMAGE` has a default.
 
-The easiest way to set up a new VM - no manual downloads needed! If a VM has a `DEFAULT_INSTALLER` configured, the first boot automatically downloads the installer ISO and boots from it.
+| Variable | Default | Meaning |
+|---|---|---|
+| `ARCH` | — | `m68k` or `ppc` |
+| `MACHINE_TYPE` | — | `q800` or `mac99` |
+| `RAM_SIZE` / `HD_SIZE` | `128M`/`2G` (m68k), `512M`/`10G` (ppc) | Memory, and disk size at creation |
+| `HD_IMAGE` | — | Path to the qcow2 disk |
+| `PRAM_FILE` | — | m68k only; stores the boot device |
+| `HD_SCSI_ID` / `CD_SCSI_ID` / `SHARED_SCSI_ID` | `6` / `3` / `4` | m68k only; 7 is the host adapter |
+| `MAC_ADDRESS` | — | Must be unique per VM (Apple OUI `08:00:07:…`) |
+| `DEFAULT_INSTALLER` | — | Database key downloaded and booted on first run |
+| `DESCRIPTION` | — | Shown in the launcher menu |
+| `SHARED_DISK` | `shared/shared-disk.img` | Per-VM shared disk |
+| `SHARED_DISK_SIZE` | `512M` | Size at creation |
+| `DISPLAY_RES` | `1152x870x8` (m68k), `1024x768x32` (ppc) | Resolution and colour depth |
+| `DISPLAY_ZOOM` | `true` | Resizable window that scales the guest (macOS only) |
+| `DISPLAY_SMOOTH` | `false` | Interpolated rather than nearest-neighbour scaling (macOS only) |
+| `DISPLAY_FULLSCREEN` | `false` | Start full screen |
 
-```bash
-# 1. Create VM and select a default installer during setup (Quadra Requires Apple Legacy Software Recovery CD)
-./run-mac.sh --create-config quadra_fresh
+## Display
 
-# 2. First boot auto-downloads installer ISO and boots from CD
-#    Simply format the drive and install the OS - no manual downloads needed!
-./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
+**Window too small?** Just resize it — with `DISPLAY_ZOOM=true` (the default) the guest
+scales to fill the window. This is the usual fix on a Retina Mac, where QEMU renders one
+guest pixel per *physical* pixel, so 1152×870 lands in a window about half that size.
 
-# 3. After installation, subsequent boots automatically use hard drive
-./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
+**Want a physically larger Mac OS UI?** Lower the resolution. The Quadra framebuffer
+accepts a fixed set of modes:
+
+```
+640x480   depth 1, 2, 4, 8, 24
+800x600   depth 1, 2, 4, 8, 24
+1152x870  depth 1, 2, 4, 8          ← no 24-bit at this resolution
 ```
 
-**Note:** All default VMs (68k_quadra_800, power_mac_g4_os9, power_mac_g4_tiger, power_mac_g4_leopard) have DEFAULT_INSTALLER pre-configured and work this way out of the box.
+`DISPLAY_RES="800x600x24"` gives a chunkier UI *and* millions of colours instead of 256.
+QEMU lists the valid modes if you pick an invalid one.
 
-**Option 2: Manual Installer Setup**
-```bash
-# 1. Create VM (skip default installer)
-./run-mac.sh --create-config quadra_fresh
+PPC guests can change resolution themselves once booted; `DISPLAY_RES` only sets the
+initial mode.
 
-# 2. Boot from Apple Legacy Recovery disc, format hard drive
-./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf --iso "iso/Apple Legacy Recovery.iso" --boot-from-cd
+On Linux the SDL window is resizable and scales on its own, so `DISPLAY_ZOOM` is a no-op
+there. Older QEMU builds without `zoom-to-fit` are detected and fall back to a fixed-size
+window rather than failing to launch.
 
-# 3. After installation, boot normally from hard drive
-./run-mac.sh --config vms/quadra_fresh/quadra_fresh.conf
-```
+## Storage layout
 
-**Mac OS X 10.5 Leopard Installation Workaround**
+![Storage layout for m68k SCSI and PowerPC IDE virtual machines](docs/storage.svg)
 
-The `power_mac_g4_leopard` VM requires special steps during initial setup:
+Boot device selection differs by architecture: m68k patches a SCSI RefNum into the PRAM
+file, PPC passes `bootindex` to QEMU.
 
-```bash
-# 1. First boot auto-downloads and runs Leopard installer
-./run-mac.sh --config vms/power_mac_g4_leopard/power_mac_g4_leopard.conf
-
-# 2. Let installation complete (installer will show "installation failed" - this is expected)
-
-# 3. Choose the hard drive as startup disk
-
-# 4. Machine will reboot from installer CD again
-
-# 5. When language selection screen appears, close the VM window
-
-# 6. Relaunch VM - it will now boot from hard drive automatically
-./run-mac.sh --config vms/power_mac_g4_leopard/power_mac_g4_leopard.conf
-
-# 7. Mac OS 10.5 will boot successfully
-```
-
-**Tip: Installing Disk Copy 6.3.3 (Classic Mac OS)**
-
-For classic Mac OS systems (68k and Mac OS 9), it's recommended to copy Disk Copy 6.3.3 from the Apple Legacy Recovery disc to your hard drive. This utility is essential for mounting and creating disk images.
+## Installing an OS manually
 
 ```bash
-# 1. Boot with Apple Legacy Recovery disc mounted
-./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf --iso "iso/Apple Legacy Recovery.iso"
-
-# 2. In Mac OS, copy Disk Copy 6.3.3 from the CD to your hard drive
-
-# 3. Keep it handy for working with disk images and ISOs
+./run-mac.sh --config vms/my_mac/my_mac.conf --iso "iso/Apple Legacy Recovery.iso" --boot-from-cd
 ```
 
-### File Transfer Between Host and VM
+Format the hard drive from the installer, install, then boot without `--boot-from-cd`.
+
+**Leopard needs an extra pass.** Let the install run to completion — it reports
+"installation failed", which is expected. Choose the hard drive as the startup disk. It
+reboots from the CD again; close the window at the language screen. Relaunch and it boots
+from disk.
+
+**Tip:** copy Disk Copy 6.3.3 off the Apple Legacy Recovery disc onto your hard drive.
+It is the tool for mounting disk images inside classic Mac OS.
+
+## Tests
+
 ```bash
-# 1. Start VM and format shared disk as Mac OS Standard (HFS) if needed
-./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf
-
-# 2. Shutdown the VM after formatting shared disk
-
-# 3. Mount shared disk on host (requires hfsprogs)
-./mount-shared.sh
-
-# 4. Copy files to shared mount point on host (default: /tmp/qemu-shared)
-cp ~/myfiles/* /tmp/qemu-shared/
-
-# 5. Unmount when done
-./mount-shared.sh -u
+./tests/run-tests.sh            # everything
+./tests/run-tests.sh display    # filter by suite name
 ```
 
-### Running with Software
+The suite asserts on behaviour, not on the text of the scripts: it puts a stub
+`qemu-system-*` on `PATH` that prints its own argv, runs the real `run-mac.sh`, and
+checks the command line that comes out. It also covers GNU/BSD portability, bash 3.2
+syntax, both display branches, shared-disk locking, and first-run recovery. CI runs it
+on `ubuntu-latest` and `macos-latest`.
+
+To run the same checks before pushing:
+
 ```bash
-# Boot normally with game disc mounted
-./run-mac.sh --config vms/68k_quadra_800/68k_quadra_800.conf --iso iso/Marathon.iso
+git config core.hooksPath .githooks
 ```
 
-## Default VMs
+## Troubleshooting
 
-The project includes 5 pre-configured VMs ready to use:
+**Mouse is trapped (Linux).** Right-Ctrl + G.
 
-- **68k_quadra_800** - Mac OS 7.6.1 (Quadra 800, 128M RAM, 2G disk)
-- **68k_quadra_800_os753** - Mac OS 7.5.3 (Quadra 800, 128M RAM, 2G disk)
-- **power_mac_g4_os9** - Mac OS 9.2.2 (PowerMac G4, 512M RAM, 10G disk)
-- **power_mac_g4_tiger** - Mac OS X Tiger 10.4 (PowerMac G4, 512M RAM, 10G disk)
-- **power_mac_g4_leopard** - Mac OS X Leopard 10.5.6 (PowerMac G4, 512M RAM, 10G disk)
+**"Shared disk is in use".** Another VM has it, or it is mounted on the host. Shut the VM
+down, or run `./mount-shared.sh -u`.
 
-All default VMs include automatic installer setup on first boot.
+**First boot did not download the installer.** Downloads that fail leave no disk image
+behind, so the next run retries. If the VM boots to a blank drive, delete its
+`hdd.qcow2` and run again.
 
-## Directory Structure
+**Checksum mismatch.** The upstream archive changed. Verify the source, then update the
+`md5` in `iso/software-database.json`.
 
-- `vms/` - VM configurations and disk images
-- `iso/` - ISO files and software database
-- `roms/` - ROM files (800.ROM auto-downloaded for 68k VMs)
-- `shared/` - Shared disk accessible by all VMs (auto-created)
+## Layout
 
-## Features
-
-- **Concurrent VM Support**: Run multiple VMs simultaneously (first-come, first-served for shared disk)
-- **Automatic Installers**: First-run VMs auto-download and boot from installer media
-- **Cross-Platform**: Works on macOS and Linux (Ubuntu/Debian)
-- **File Transfer**: Shared 512MB HFS disk accessible by all VMs
-- **Performance Optimized**: Writeback caching, authentic CPU models (m68040, G4-7400)
-- **User-Friendly**: Interactive menus with VM descriptions for easy selection
-
-## Controls
-
-- **Linux**: Right-Ctrl+G to release mouse
-- **macOS**: Native Cocoa interface
-
-## Technical Details
-
-- **QEMU 10.x** with m68k and ppc support
-- **Storage optimization**: Writeback caching (50-80% faster), AIO threading, zero detection
-- **CPU models**: m68040 (Quadra 800), G4-7400 (PowerMac G4)
-- **ROM**: 800.ROM auto-downloaded for 68k VMs on first run
+```
+run-mac.sh          launcher and VM runner
+iso-downloader.sh   software/ROM downloader
+mount-shared.sh     host access to the shared disk
+install-deps.sh     QEMU and dependency installer
+lib/common.sh       shared shell library
+tests/              behavioural test suite
+vms/                VM configs and disk images
+iso/  roms/         media and ROMs (gitignored)
+shared/             the shared disk (gitignored)
+```

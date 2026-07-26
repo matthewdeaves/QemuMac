@@ -1,136 +1,97 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working in this repository.
 
-## Common Development Commands
+## Purpose
 
-### Running VMs
-- `./launch.sh` - Interactive menu-driven launcher for VMs and ISOs
-- `./run-mac.sh --config <vm_config_file>` - Launch a specific VM configuration
-- `./run-mac.sh --config <vm_config_file> --iso <iso_file>` - Launch VM with attached ISO
-- `./run-mac.sh --config <vm_config_file> --iso <iso_file> --boot-from-cd` - Boot from CD/ISO
-- `./run-mac.sh --create-config <vm_name>` - Create new VM configuration interactively with optional default installer selection
+QEMU-based classic Macintosh emulation for 68k (Quadra 800) and PowerPC (PowerMac G4).
+Beyond running old software, the project exists to support **classic Mac development**:
+build on the host, move the artifact onto the shared HFS disk, run it under real Mac OS.
+Treat the host↔guest handoff as a primary workflow, not a side feature.
 
-### Software Management
-- `./iso-downloader.sh` - Interactive downloader for operating systems and software from the database
-- Supports `"delivery": "shared"` for direct downloads to the shared disk system
-- Custom software can be added to `iso/custom-software.json` to extend the available downloads
+## Non-negotiables
 
-### File Transfer System
-- `./mount-shared.sh` - Mount shared disk on host for file transfer
-- `./mount-shared.sh -u` - Unmount shared disk
-- Shared disk appears as additional drive in all VMs (auto-created on first run)
+- **Everything must work on macOS and Ubuntu/Debian.** Both are in CI.
+- **bash 3.2 compatible.** macOS ships bash 3.2 as `/bin/bash`. No `mapfile`,
+  `readarray`, `local -n`, or `${var,,}`.
+- **GNU vs BSD userland.** No `sed -i` without a suffix, `readlink -f`, `stat -c`,
+  `grep -P`, `date -d`, `find -printf`. Use `compute_md5`, never `md5sum`/`md5` directly.
+- **Prove changes with tests, not greps.** `./tests/run-tests.sh` must pass.
+- **ShellCheck clean at `-S warning` with no blanket excludes.** Intentional patterns
+  carry an inline `# shellcheck disable=` at the exact line, with a reason. Note a
+  directive must precede a whole compound command — putting one before `done` is a
+  parse error.
+- **When something is found broken, add a regression test for it.**
 
-### Dependencies
-Required tools: `qemu-system-m68k`, `qemu-system-ppc`, `qemu-img`, `jq`, `curl`, `unzip`, `hfsprogs` (Ubuntu) or `hfsutils` (macOS)
+## Commands
 
-## Architecture Overview
+```bash
+./run-mac.sh                                   # interactive launcher
+./run-mac.sh --config <conf> [--iso <file>] [--boot-from-cd]
+./run-mac.sh --create-config <name>            # new VM, interactive
+./iso-downloader.sh                            # download OS/software/ROMs
+./mount-shared.sh [-u|-l]                      # host access to the shared disk
+./install-deps.sh                              # QEMU + dependencies
+./tests/run-tests.sh [filter]                  # test suite
+```
 
-### VM Management System
-The project provides a complete QEMU-based classic Macintosh emulation environment supporting two architectures:
+## Architecture
 
-**m68k Architecture (Macintosh Quadra):**
-- Uses `qemu-system-m68k` with q800 machine type
-- ROM file at `roms/800.ROM` (auto-downloaded on first run)
-- Uses PRAM file for boot device selection (SCSI-based)
-- Typical RAM: 128M, disk: 2G
-- SCSI device configuration with customizable IDs
+`run-mac.sh` is the core: it sources a VM config, runs preflight checks, builds an
+architecture-specific QEMU argument vector, and `exec`s QEMU. `lib/common.sh` holds
+shared helpers (output, downloads, menus, database access, shared-disk locking).
 
-**PPC Architecture (PowerMac G4):**
-- Uses `qemu-system-ppc` with mac99 machine type
-- No ROM file required (built into QEMU)
-- Uses bootindex for boot device selection
-- Typical RAM: 512M, disk: 10G
-- IDE device configuration with USB keyboard/mouse support
+**m68k (q800):** `-bios roms/800.ROM` (auto-downloaded), SCSI devices, boot device
+chosen by patching a RefNum into the PRAM file at offset 120. The framebuffer only
+accepts fixed modes — 640x480 and 800x600 at depths 1/2/4/8/24, 1152x870 at 1/2/4/8.
 
-### Key Components
-- `run-mac.sh`: Core VM runner with architecture-specific QEMU argument building and an integrated interactive launcher.
-- `iso-downloader.sh`: Software acquisition from JSON database
-- `vms/`: Directory containing VM configurations and disk images
-- `iso/`: Directory for ISO files and software database
-- `roms/`: Directory for ROM files (auto-downloaded as needed)
-- `shared/`: Cross-VM shared disk directory (auto-created)
+**PPC (mac99):** no ROM needed (OpenBIOS is built in), IDE devices, USB keyboard and
+mouse, boot order via `bootindex`. `DISPLAY_RES` sets only the initial mode; the guest
+can change it at runtime.
 
-### Default VM Configurations
-The project includes 4 pre-configured VMs ready for immediate use:
+Storage uses `cache=writeback,aio=threads,detect-zeroes=on`. CPU models are `m68040`
+and `7400_v2.9`. Multi-threaded TCG is avoided — it is unstable for these targets.
 
-**PowerPC VMs:**
-- `vms/power_mac_g4_os9/` - PowerMac G4 with Mac OS 9.2.2 (DEFAULT_INSTALLER="macos922")
-- `vms/power_mac_g4_tiger/` - PowerMac G4 with Mac OS X Tiger (DEFAULT_INSTALLER="macos_x_tiger")
-- `vms/power_mac_g4_leopard/` - PowerMac G4 with Mac OS X Leopard (DEFAULT_INSTALLER="macos_x_leopard")
+## Invariants worth preserving
 
-**68k VM:**
-- `vms/68k_quadra_800/` - Quadra 800 with classic Mac OS (DEFAULT_INSTALLER="apple_legacy_recovery")
+- **Nothing is created before every check that can fail has run.** The absence of
+  `HD_IMAGE` is what marks a VM as "not yet installed", so *any* `die()` after the disk
+  exists strands it: the next run skips the installer and boots a blank drive (flashing
+  question mark) forever. That covers downloads, the ROM, and `require_file` on the ISO.
+  Helpers must not report success without leaving the file they promised — an unchecked
+  `unzip`/`mv` in `download_and_place_file` is the same bug wearing a different hat.
+- **An explicit `--iso` beats `DEFAULT_INSTALLER`.** The first-run path overwrites
+  `CD_ISO_FILE`, so it must not run when the user named an ISO on the command line.
+- **`disk_in_use()` and the shared disk are gated by `shared_disk_is_writable()`.**
+  Use it rather than re-testing by hand; `if disk_in_use ...` silently reads the
+  "cannot tell" status 2 as free.
+- **`die()` inside a command substitution only exits the subshell.** Check the status of
+  `x=$(some_function)` explicitly.
+- **Probe pipelines must capture before grepping.** `set -o pipefail` turns a probe's
+  intentional non-zero exit into a pipeline failure, which `!` then inverts into a
+  wrong answer.
+- **Shared disk: one writer.** `disk_in_use()` gates both `run-mac.sh` and
+  `mount-shared.sh`. It returns 0 in use, 1 free, 2 unknown — never treat 2 as free.
+- **Every VM needs a unique `MAC_ADDRESS`**, or guests collide on the network.
+- **`menu()` returns the sentinels `QUIT`/`BACK`/`NONE`**, not the option label, and
+  runs its `select` with stdout redirected to stderr (bash emits a stray newline on EOF).
 
-All default VMs include automatic installer setup - first boot downloads and configures the OS, subsequent boots use the hard drive.
+## Display configuration
 
-### VM Configuration Format
-VM configs are bash files defining variables:
-- `ARCH`: "m68k" or "ppc"
-- `MACHINE_TYPE`: QEMU machine type
-- `RAM_SIZE`: Memory allocation
-- `HD_SIZE`: Disk size for new VMs
-- `HD_IMAGE`: Path to disk image
-- Architecture-specific settings (PRAM_FILE, SCSI IDs for m68k)
-- `SHARED_SCSI_ID`: SCSI ID for shared disk (m68k only, defaults to 4)
-- `SHARED_DISK`: Override shared disk path (default: `shared/shared-disk.img`)
-- `SHARED_DISK_SIZE`: Size for auto-created shared disk (default: 512M)
-- `MAC_ADDRESS`: Unique MAC address per VM (Apple OUI: `08:00:07:xx:xx:xx`)
-- `DEFAULT_INSTALLER`: Optional installer key for first-run automatic setup
+Config variables: `DISPLAY_RES`, `DISPLAY_ZOOM`, `DISPLAY_SMOOTH`, `DISPLAY_FULLSCREEN`.
 
-### Boot Device Handling
-- **m68k**: PRAM file is patched with SCSI RefNum calculations for boot device selection
-- **PPC**: Uses QEMU's bootindex parameter for IDE devices
+On macOS, Cocoa renders one guest pixel per physical pixel, so a high guest resolution
+looks small on a Retina display. `DISPLAY_ZOOM` (default on) adds `zoom-to-fit=on` so
+the window is resizable and the guest scales to fill it; support is probed at launch and
+dropped silently on older QEMU. SDL on Linux is already resizable, so the flag is inert
+there — never pass Cocoa-only suboptions to SDL.
 
-### First-Run Installer System
-- **Automatic Setup**: VMs with `DEFAULT_INSTALLER` automatically download and configure installer on first boot
-- **ROM Auto-Download**: m68k VMs automatically download required ROM file if missing
-- **Architecture Filtering**: Only compatible installers are offered during VM creation
-- **Seamless Experience**: First boot automatically boots from installer, subsequent boots use hard drive
-- **Optional Feature**: Can be skipped during VM creation for manual setup
+## Testing
 
-### Shared Disk System
-- **Single shared disk**: 512MB HFS-formatted disk accessible by all VMs
-- **Per-VM override**: Set `SHARED_DISK` in config to use a separate shared disk per VM
-- **Cross-architecture support**: Works with both m68k (SCSI) and PPC (IDE) VMs
-- **Automatic creation**: Created on first VM run, format as HFS from within Mac OS
-- **Lock detection**: If another VM has the shared disk open, launches without it
-- **Host mounting**: Simple loop mount via `mount-shared.sh` script at `/tmp/qemu-shared`
-- **File transfer**: Easy way to move files between host and all Mac VMs
-- **Direct software delivery**: Software with `"delivery": "shared"` downloads directly to shared disk
+`tests/run-tests.sh` stubs `qemu-system-*` on `PATH` so it prints its argv, then runs the
+real scripts and asserts on the resulting command line. Add behavioural tests for new
+work. Do not reintroduce grep-against-source assertions — the previous CI did that and
+broke on every reword while catching no real bugs.
 
-### Display and Input
-- Automatically detects host OS (macOS uses Cocoa, Linux uses SDL)
-- Host-specific keyboard shortcuts and mouse handling
-- Color-coded terminal output for user guidance
-
-## Performance Optimizations
-
-### Built-in Performance Features
-QemuMac automatically applies performance optimizations without requiring configuration:
-
-**Storage I/O Optimization:**
-- `cache=writeback` for 50-80% faster disk operations
-- `aio=threads` backend for universal compatibility  
-- `detect-zeroes=on` for space-efficient storage
-
-**CPU Model Accuracy:**
-- **m68k**: Uses `m68040` CPU model (authentic Quadra 800 processor)
-- **PPC**: Uses `7400_v2.9` CPU model (authentic PowerMac G4 processor)
-- Provides proper instruction timing and enhanced compatibility
-
-**Implementation Details:**
-- `detect_aio_backend()` function automatically selects compatible AIO backend
-- Performance status messages inform users of active optimizations
-- All optimizations tested for stability and compatibility across QEMU versions
-
-### Performance Impact
-- **Boot times**: Significantly reduced
-- **File operations**: 50-80% faster with writeback caching
-- **Overall responsiveness**: Noticeably improved
-- **Compatibility**: Enhanced with authentic CPU models
-
-### Technical Notes
-- Multi-threaded TCG avoided due to m68k/PPC compatibility issues
-- Storage optimization prioritized as highest-impact improvement
-- All changes maintain backward compatibility with existing VM configurations
+The stub honours `QEMU_STUB_REJECT` so tests can simulate an older QEMU that lacks a
+given display suboption.

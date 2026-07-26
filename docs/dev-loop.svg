@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="250" viewBox="0 0 760 250" role="img" aria-label="Development loop: build on the host, copy to the shared HFS disk, run inside a classic Mac VM">
+  <rect x="0" y="0" width="760" height="250" fill="#ffffff"/>
+
+  <g font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+
+    <!-- Host -->
+    <rect x="24" y="48" width="196" height="104" rx="8" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+    <text x="122" y="76" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">Host</text>
+    <text x="122" y="100" text-anchor="middle" font-size="12.5" fill="#57606a">macOS or Ubuntu</text>
+    <text x="122" y="122" text-anchor="middle" font-size="12.5" fill="#57606a">edit &amp; build with</text>
+    <text x="122" y="139" text-anchor="middle" font-size="12.5" fill="#57606a">Claude Code, Retro68, …</text>
+
+    <!-- Shared disk -->
+    <rect x="282" y="48" width="196" height="104" rx="8" fill="#fff8e6" stroke="#d4a72c" stroke-width="1.5"/>
+    <text x="380" y="76" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">Shared disk</text>
+    <text x="380" y="100" text-anchor="middle" font-size="12.5" fill="#57606a">shared/shared-disk.img</text>
+    <text x="380" y="122" text-anchor="middle" font-size="12.5" fill="#57606a">raw HFS image</text>
+    <text x="380" y="139" text-anchor="middle" font-size="12.5" fill="#57606a">one writer at a time</text>
+
+    <!-- VM -->
+    <rect x="540" y="48" width="196" height="104" rx="8" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+    <text x="638" y="76" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">Classic Mac VM</text>
+    <text x="638" y="100" text-anchor="middle" font-size="12.5" fill="#57606a">Quadra 800 (68k) or</text>
+    <text x="638" y="117" text-anchor="middle" font-size="12.5" fill="#57606a">PowerMac G4 (PPC)</text>
+    <text x="638" y="139" text-anchor="middle" font-size="12.5" fill="#57606a">disk on the desktop</text>
+
+    <!-- Arrow: host -> shared -->
+    <line x1="220" y1="86" x2="274" y2="86" stroke="#0969da" stroke-width="2"/>
+    <path d="M274 86 l-8 -4.5 v9 z" fill="#0969da"/>
+    <text x="247" y="76" text-anchor="middle" font-size="11.5" fill="#0969da">copy build</text>
+
+    <!-- Arrow: shared -> vm -->
+    <line x1="478" y1="86" x2="532" y2="86" stroke="#0969da" stroke-width="2"/>
+    <path d="M532 86 l-8 -4.5 v9 z" fill="#0969da"/>
+    <text x="505" y="76" text-anchor="middle" font-size="11.5" fill="#0969da">mount</text>
+
+    <!-- Return path -->
+    <path d="M638 152 v42 H122 v-42" fill="none" stroke="#8250df" stroke-width="2" stroke-dasharray="5 4"/>
+    <path d="M122 152 l-4.5 8 h9 z" fill="#8250df"/>
+    <text x="380" y="211" text-anchor="middle" font-size="12" fill="#8250df">screenshots, crash logs, saved files come back the same way</text>
+
+    <!-- Commands -->
+    <text x="122" y="180" text-anchor="middle" font-size="11.5" fill="#57606a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">./mount-shared.sh</text>
+    <text x="638" y="180" text-anchor="middle" font-size="11.5" fill="#57606a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">./run-mac.sh</text>
+
+    <text x="380" y="238" text-anchor="middle" font-size="11.5" fill="#57606a">Shut the VM down before mounting on the host — HFS has no shared-write support.</text>
+  </g>
+</svg>
