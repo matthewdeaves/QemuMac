@@ -689,11 +689,33 @@ test_script_hygiene() {
     done
 
     # bash 3.2 is what macOS ships, so bash 4+ only syntax must not appear.
+    # The test suite is scanned too: `source <(...)` slipped in here and failed
+    # only on macOS CI, because a dev box with Homebrew bash 5 first on PATH
+    # runs everything under bash 5 and never exercises 3.2.
+    # Now that tests/ is in scope these greps can match their own pattern
+    # strings and comments, so drop comment lines and the checker lines here.
+    local scan_files="*.sh lib/*.sh tests/*.sh"
+    local self='grep -nE|:[[:space:]]*#'
+
     TESTS_RUN=$((TESTS_RUN + 1))
-    if out=$(grep -nE 'local -n|declare -n|mapfile|readarray' -- *.sh lib/*.sh 2>/dev/null); then
+    # shellcheck disable=SC2086
+    if out=$(grep -nE 'local -n|declare -n|mapfile|readarray' -- $scan_files 2>/dev/null \
+             | grep -vE "$self"); then
         fail "no bash 4+ only constructs" "$out"
     else
         pass "no bash 4+ only constructs"
+    fi
+
+    # `source <(cmd)` / `. <(cmd)` silently defines nothing under bash 3.2:
+    # the process substitution is gone before source reads it. Redirect to a
+    # temp file and source that instead.
+    TESTS_RUN=$((TESTS_RUN + 1))
+    # shellcheck disable=SC2086
+    if out=$(grep -nE '(^|[^a-zA-Z_])(source|\.)[[:space:]]+<\(' -- $scan_files 2>/dev/null \
+             | grep -vE "$self"); then
+        fail "no process-substitution sourcing - unsupported in bash 3.2" "$out"
+    else
+        pass "no process-substitution sourcing - unsupported in bash 3.2"
     fi
 
     # Every VM ships a distinct MAC, or guests collide on the same network.
@@ -949,9 +971,16 @@ disk_in_use '$sandbox/disk.img'; echo \$?")
 test_installer_logic() {
     suite "install-deps.sh logic" || return 0
 
-    # Load the functions without executing main()
-    local loader="source <(sed '\$ d' install-deps.sh)"
-    local out
+    # Load the functions without executing main(). Via a temp file, not
+    # `source <(...)`: process substitution with source silently fails under
+    # bash 3.2, which is what macOS ships and what CI's macOS runner uses.
+    # Every version_at_least call then became "command not found" - i.e. false
+    # - and the assertion failed only on macOS CI, never on a dev box with
+    # Homebrew bash 5 first on PATH.
+    local lib out
+    lib=$(mktemp)
+    sed '$d' install-deps.sh > "$lib"
+    local loader="source '$lib'"
 
     out=$(bash -c "$loader
 for pair in '11.0.3 8.2' '10.1.0 8.2' '8.2 8.2' '8.0 8.2' '7.2 8.2'; do
@@ -998,6 +1027,8 @@ done" 2>/dev/null | tr '\n' ' ')
         fail "install-deps.sh branches for both macOS and Linux" \
             "macos=${macos_refs} linux=${linux_refs}"
     fi
+
+    rm -f "$lib"
 }
 
 # Each script must run on both platforms without an interactive terminal, and
