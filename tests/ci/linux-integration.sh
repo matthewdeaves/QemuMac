@@ -103,12 +103,15 @@ step "Everything run-mac.sh should have created exists"
 [[ -f shared/shared-disk.img ]] || fail "shared disk was not created"
 echo "ROM, disk, PRAM and shared disk all present"
 
-step "PRAM boot patch is byte-correct"
-# The boot device on 68k is a SCSI RefNum patched into PRAM at offset 120:
-# ~(id + 32), big-endian. For HD_SCSI_ID=6 that is 0xffffffd9.
-got=$(od -An -tx1 -j120 -N4 "${VM_DIR}/pram.img" | tr -d ' \n')
-echo "PRAM bytes at offset 120: ${got}"
-[[ "$got" == "ffffffd9" ]] || fail "expected ffffffd9 for SCSI ID 6, got ${got}"
+step "PRAM file was created at the right size"
+# Deliberately *not* asserting the patched RefNum bytes here. PRAM is guest
+# state once QEMU starts: the Quadra ROM rewrites offset 120 within about
+# three seconds of boot, so after a real run the bytes reflect what the ROM
+# decided, not what set_boot_m68k wrote. The patch itself is asserted in the
+# unit suite (test_pram_boot_patch), where the stub QEMU never touches it.
+size=$(wc -c < "${VM_DIR}/pram.img" | tr -d ' ')
+echo "PRAM size: ${size} bytes"
+[[ "$size" == "256" ]] || fail "expected a 256-byte PRAM image, got ${size}"
 
 step "Negative control"
 # The checks above must be capable of failing. QEMU validates -device only
