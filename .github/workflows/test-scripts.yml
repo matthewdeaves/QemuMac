@@ -15,13 +15,17 @@ on:
     - cron: '0 4 * * 1'   # Mondays 04:00 UTC - catches upstream QEMU breakage
 
 jobs:
+  # Ubuntu is pinned rather than 'latest' so the QEMU version under test is a
+  # known quantity: 24.04 ships QEMU 8.2 (the floor QemuMac supports) and
+  # 26.04 ships a much newer one. Testing both ends is the point - 'latest'
+  # would silently drop the older end the day the alias moves.
   test:
     name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, ubuntu-26.04, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - run: ./tests/ci/install-test-deps.sh
@@ -42,9 +46,15 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: ./tests/ci/check-shellcheck.sh
 
+  # Runs on both Ubuntu releases, so a real 68k and PPC guest is booted under
+  # the oldest QEMU the project claims to support and under a current one.
   install-linux:
-    name: Linux integration (apt install + real boot)
-    runs-on: ubuntu-latest
+    name: Linux integration (${{ matrix.os }}, apt install + real boot)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     steps:
       - uses: actions/checkout@v4
       - name: Install xvfb (SDL needs a display)

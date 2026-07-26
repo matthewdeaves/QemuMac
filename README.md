@@ -16,14 +16,20 @@ That is why the shared disk is central rather than a convenience feature.
 
 ## Requirements
 
-- QEMU 8.2 or later with `m68k` and `ppc` targets (11.x recommended)
+- QEMU 8.2 or later with `m68k` and `ppc` targets — `run-mac.sh` checks and refuses
+  to launch on anything older. Newer is better; nothing here caps the version.
 - `jq`, `curl`, `unzip`
 - `hfsutils` (macOS) or `hfsprogs` (Ubuntu) — only for mounting the shared disk on the host
 - `lsof` or `fuser` — used to stop two writers touching the shared disk at once
 
-`./install-deps.sh` installs all of it, either from your package manager or by building
-the latest stable QEMU from source. It finishes with a feature check that tells you
-exactly which optional capabilities your build has.
+`./install-deps.sh` installs all of it and finishes with a feature check. It offers two
+routes: your package manager, or a source build of the **latest stable QEMU release**.
+On macOS the fast route is already the newest — Homebrew tracks QEMU closely. On Linux,
+apt gives you whatever your Ubuntu release froze on, so the source build is how you get
+current.
+
+Ubuntu 24.04 (QEMU 8.2), Ubuntu 26.04 and a from-source build of the latest release are
+all tested in CI on every push, booting real 68k and PPC guests.
 
 ## Quick start
 
@@ -157,8 +163,8 @@ PPC guests can change resolution themselves once booted; `DISPLAY_RES` only sets
 initial mode.
 
 On Linux the SDL window is resizable and scales on its own, so `DISPLAY_ZOOM` is a no-op
-there. Older QEMU builds without `zoom-to-fit` are detected and fall back to a fixed-size
-window rather than failing to launch.
+there. `DISPLAY_SMOOTH` needs QEMU 9.0; on an older build it is dropped and scaling stays
+nearest-neighbour.
 
 **No sound, or a crash on a headless machine?** QEMU defaults to ALSA on Linux, and on
 a host with no sound card the Quadra's Apple Sound Chip fails to initialise and QEMU
@@ -199,7 +205,7 @@ The suite asserts on behaviour, not on the text of the scripts: it puts a stub
 `qemu-system-*` on `PATH` that prints its own argv, runs the real `run-mac.sh`, and
 checks the command line that comes out. It also covers GNU/BSD portability, bash 3.2
 syntax, both display branches, shared-disk locking, and first-run recovery. It needs no
-network. CI runs it on `ubuntu-latest` and `macos-latest`.
+network. CI runs it on Ubuntu 24.04, Ubuntu 26.04 and macOS.
 
 Stubs only prove the launcher builds the right command. These use real QEMU, and can be
 run by hand on a matching host:

@@ -79,6 +79,11 @@ and `7400_v2.9`. Multi-threaded TCG is avoided — it is unstable for these targ
 - **Shared disk: one writer.** `disk_in_use()` gates both `run-mac.sh` and
   `mount-shared.sh`. It returns 0 in use, 1 free, 2 unknown — never treat 2 as free.
 - **Every VM needs a unique `MAC_ADDRESS`**, or guests collide on the network.
+- **`QEMU_MIN_VERSION` (lib/common.sh) is what lets arguments be unconditional.**
+  `run-mac.sh` enforces it before building any command line, so anything present at
+  the floor — `zoom-to-fit`, the q800 `audiodev` — is passed without a probe. Probe
+  only for features *newer* than the floor, like `zoom-interpolation` (9.0). Raising
+  the floor is a user-facing decision: it excludes people rather than upgrading them.
 - **`menu()` returns the sentinels `QUIT`/`BACK`/`NONE`**, not the option label, and
   runs its `select` with stdout redirected to stderr (bash emits a stray newline on EOF).
 
@@ -88,9 +93,8 @@ Config variables: `DISPLAY_RES`, `DISPLAY_ZOOM`, `DISPLAY_SMOOTH`, `DISPLAY_FULL
 
 On macOS, Cocoa renders one guest pixel per physical pixel, so a high guest resolution
 looks small on a Retina display. `DISPLAY_ZOOM` (default on) adds `zoom-to-fit=on` so
-the window is resizable and the guest scales to fill it; support is probed at launch and
-dropped silently on older QEMU. SDL on Linux is already resizable, so the flag is inert
-there — never pass Cocoa-only suboptions to SDL.
+the window is resizable and the guest scales to fill it. SDL on Linux is already
+resizable, so the flag is inert there — never pass Cocoa-only suboptions to SDL.
 
 ## Testing
 
@@ -99,5 +103,5 @@ real scripts and asserts on the resulting command line. Add behavioural tests fo
 work. Do not reintroduce grep-against-source assertions — the previous CI did that and
 broke on every reword while catching no real bugs.
 
-The stub honours `QEMU_STUB_REJECT` so tests can simulate an older QEMU that lacks a
-given display suboption.
+The stub honours `QEMU_STUB_REJECT` (simulate a QEMU lacking a display suboption) and
+`QEMU_STUB_VERSION` (pose as a specific QEMU release).

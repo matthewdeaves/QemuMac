@@ -56,6 +56,28 @@ ensure_rom() {
     echo placeholder
 }
 
+# Report the QEMU version and check it clears the floor QemuMac enforces.
+#
+# run-mac.sh now passes zoom-to-fit and the q800 audiodev unconditionally on
+# the strength of that floor, so "the version a supported distro ships is high
+# enough" has become a real assumption. This is what tests it against the
+# actual archives, on each Ubuntu in the matrix.
+#
+# The floor is read out of lib/common.sh rather than repeated here: one source
+# of truth, without sourcing the code under test.
+assert_qemu_at_least_floor() {
+    local qemu="$1" floor version
+    floor=$(sed -nE 's/^QEMU_MIN_VERSION="([0-9.]+)".*/\1/p' lib/common.sh)
+    [[ -n "$floor" ]] || fail "could not read QEMU_MIN_VERSION from lib/common.sh"
+
+    version=$("$qemu" --version | head -n1 | sed -nE 's/.*version ([0-9][0-9.]*).*/\1/p')
+    [[ -n "$version" ]] || fail "could not read a version from ${qemu}"
+
+    echo "  ${qemu} is ${version}; QemuMac needs ${floor} or later"
+    [[ "$(printf '%s\n%s\n' "$floor" "$version" | sort -V | head -n1)" == "$floor" ]] \
+        || fail "${qemu} ${version} is below the ${floor} floor - run-mac.sh will refuse to launch"
+}
+
 # md5 digest, GNU or BSD. lib/common.sh has compute_md5, but these scripts
 # deliberately avoid sourcing the code under test.
 compute_ci_md5() {

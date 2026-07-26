@@ -14,9 +14,8 @@ QEMU_GIT_URL="https://gitlab.com/qemu-project/qemu.git"
 QEMU_SOURCE_DIR="qemu-source"
 LOCAL_INSTALL_DIR="qemu-install"
 
-# Minimum QEMU that supports everything QemuMac uses. Older builds still run
-# VMs; check_qemu_features reports exactly what is missing.
-QEMU_MIN_VERSION="8.2"
+# QEMU_MIN_VERSION comes from lib/common.sh - run-mac.sh enforces the same
+# floor at launch, so the two must not drift apart.
 
 # Assembled by build_and_install_qemu and add_if_available
 CONFIGURE_ARGS=()
@@ -275,11 +274,6 @@ build_and_install_qemu() {
 # Verification
 # ============================================================================
 
-# Compare dotted versions: returns 0 if $1 >= $2
-version_at_least() {
-    [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
-}
-
 # Run a QEMU probe and echo its combined output. Probes are expected to exit
 # non-zero (they deliberately fail after argument parsing), so the status is
 # discarded - callers must inspect the text, not the exit code.
@@ -293,14 +287,14 @@ check_qemu_features() {
     header "Feature Check"
 
     local version
-    version=$("$qemu_m68k" --version | head -n1 | sed -E 's/.*version ([0-9.]+).*/\1/')
+    version=$(qemu_version "$qemu_m68k")
     info "QEMU version: ${version}"
 
     if version_at_least "$version" "$QEMU_MIN_VERSION"; then
         success "✓ Version supports all QemuMac features"
     else
-        error "✗ QEMU ${version} is older than ${QEMU_MIN_VERSION}"
-        error "  VMs will still run, but some display and audio options may be unavailable"
+        error "✗ QEMU ${version} is older than ${QEMU_MIN_VERSION} - run-mac.sh will refuse to launch"
+        error "  Re-run this installer and choose the source build to get the latest release"
     fi
 
     # 24-bit colour on the Quadra framebuffer
@@ -410,10 +404,21 @@ main() {
     fi
     info "Detected OS: $os_type"
 
+    # Say what each option actually gets you. Homebrew tracks QEMU releases
+    # closely, so on macOS the fast path is already the newest; apt is pinned
+    # to whatever the Ubuntu release froze, so on Linux the two can differ by
+    # years. QemuMac needs QEMU_MIN_VERSION or later either way.
+    if [[ "$os_type" == "macos" ]]; then
+        info "Homebrew ships the latest QEMU release, so the package manager is the newest option."
+    else
+        info "apt ships the QEMU your Ubuntu release froze on; the source build fetches the latest release."
+    fi
+    info "QemuMac needs QEMU ${QEMU_MIN_VERSION} or later."
+
     local method
     method=$(menu "How should QEMU be installed?" \
         "Package manager - fast, uses the version your OS ships" \
-        "Build from source - latest stable release, all features enabled")
+        "Build from source - latest stable QEMU release, takes 20-40 minutes")
     [[ "$method" == "QUIT" ]] && exit 0
 
     install_runtime_dependencies "$os_type"

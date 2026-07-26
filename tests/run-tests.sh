@@ -67,13 +67,21 @@ make_stubs() {
     for arch in m68k ppc; do
         cat > "$STUB_DIR/qemu-system-$arch" <<'STUB'
 #!/bin/sh
+# Emulate `--version`. run-mac.sh enforces a version floor before launching,
+# so every stub invocation goes through this first. QEMU_STUB_VERSION lets a
+# test pose as an older build; the default is comfortably above the floor.
+for a in "$@"; do
+    case "$a" in
+        --version)
+            echo "QEMU emulator version ${QEMU_STUB_VERSION-11.0.3}"
+            exit 0 ;;
+    esac
+done
 # Emulate `-M <machine>,help`, which lists machine properties and exits.
-# QEMU_STUB_NO_AUDIODEV simulates a build predating Quadra 800 sound.
 for a in "$@"; do
     case "$a" in
         *,help)
-            [ -n "${QEMU_STUB_NO_AUDIODEV:-}" ] \
-                || echo "  audiodev=<string>      - Audiodev to use for default machine devices"
+            echo "  audiodev=<string>      - Audiodev to use for default machine devices"
             exit 0 ;;
     esac
 done
@@ -251,11 +259,16 @@ test_display_options() {
         out=$(run_mac --config "$conf")
         assert_not_contains "$out" "zoom-to-fit" "DISPLAY_ZOOM=false disables zoom-to-fit"
 
-        # An older QEMU that rejects the option must still launch.
+        # zoom-interpolation is QEMU 9.0, above the floor, so it is still
+        # probed - a build that rejects it must lose only the smoothing.
         sed -i.bak 's/DISPLAY_ZOOM=false/DISPLAY_ZOOM=true/' "$conf" && rm -f "${conf}.bak"
-        out=$(QEMU_STUB_REJECT="zoom-to-fit" run_mac --config "$conf")
-        assert_contains "$out" "cocoa" "still builds a Cocoa display line on older QEMU"
-        assert_not_contains "$out" "zoom-to-fit" "drops zoom-to-fit when QEMU rejects it"
+        echo 'DISPLAY_SMOOTH=true' >> "$conf"
+        out=$(run_mac --config "$conf")
+        assert_contains "$out" "zoom-interpolation=on" "DISPLAY_SMOOTH adds interpolation when supported"
+
+        out=$(QEMU_STUB_REJECT="zoom-interpolation" run_mac --config "$conf")
+        assert_contains "$out" "zoom-to-fit=on" "keeps zoom-to-fit when only interpolation is rejected"
+        assert_not_contains "$out" "zoom-interpolation" "drops interpolation on a QEMU that lacks it"
     else
         assert_contains "$out" "sdl" "uses the SDL display on Linux"
 
@@ -263,6 +276,36 @@ test_display_options() {
         out=$(run_mac --config "$conf")
         assert_contains "$out" "full-screen=on" "DISPLAY_FULLSCREEN works on SDL"
     fi
+}
+
+# zoom-to-fit and the q800 audiodev are both passed unconditionally now, on the
+# strength of the 8.2 floor. That is only honest if the floor is enforced: an
+# older QEMU has to be turned away with a message that names the problem,
+# rather than dying on an unknown machine property halfway through launch.
+test_qemu_version_floor() {
+    suite "QEMU version floor" || return 0
+
+    local conf out status
+    conf=$(make_vm ver \
+        'ARCH="ppc"' 'MACHINE_TYPE="mac99"' 'RAM_SIZE="512M"' 'HD_SIZE="10G"' \
+        'HD_IMAGE="vms/_test_ver/hdd.qcow2"')
+
+    out=$(QEMU_STUB_VERSION="6.2.0" run_mac_stderr --config "$conf") && status=0 || status=$?
+    assert_eq "$status" "1"                         "refuses to launch on a QEMU below the floor"
+    assert_contains "$out" "6.2.0"                  "names the version it found"
+    assert_contains "$out" "install-deps.sh"        "points at the installer as the fix"
+
+    out=$(QEMU_STUB_VERSION="6.2.0" run_mac --config "$conf" || true)
+    assert_not_contains "$out" "-display"           "exits before building a command line"
+
+    # 8.2 exactly is supported, not merely "later than".
+    out=$(QEMU_STUB_VERSION="8.2.0" run_mac --config "$conf")
+    assert_contains "$out" "mac99" "the floor version itself is accepted"
+
+    # A build with an unparseable version string is far more likely to be an
+    # odd distro build than a decade-old QEMU, so it warns and continues.
+    out=$(QEMU_STUB_VERSION="" run_mac --config "$conf" 2>&1)
+    assert_contains "$out" "mac99" "an unreadable version does not block launch"
 }
 
 test_first_run_is_retryable() {
@@ -814,10 +857,6 @@ STUB
     fi
     rm -f "$STUB_DIR/uname"
 
-    # An older QEMU without Quadra audio must simply go without, not fail.
-    out=$(QEMU_STUB_NO_AUDIODEV=1 run_mac --config "$conf")
-    assert_contains "$out" "q800" "an older QEMU still gets a plain machine type"
-    assert_not_contains "$out" "audiodev" "no audiodev is passed to a build that lacks it"
 }
 
 test_script_hygiene() {
@@ -1299,6 +1338,7 @@ main() {
     test_m68k_args
     test_ppc_args
     test_display_options
+    test_qemu_version_floor
     test_audio_backend
     test_cross_platform_branches
     test_pram_boot_patch

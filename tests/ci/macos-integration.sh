@@ -32,6 +32,22 @@ qemu-img --version | head -1
 command -v jq curl unzip >/dev/null || fail "runtime dependencies missing"
 command -v hmount >/dev/null || fail "hfsutils missing - mount-shared.sh needs it on macOS"
 
+step "The QEMU Homebrew ships clears the version floor"
+assert_qemu_at_least_floor qemu-system-m68k
+assert_qemu_at_least_floor qemu-system-ppc
+
+step "Cocoa zoom-to-fit is present, as the floor promises"
+# run-mac.sh no longer probes for this - it passes it unconditionally. If a
+# real build ever lacked it, VMs would fail to launch on macOS with nothing
+# but a QEMU parameter error to go on.
+# `if`, not `grep -q ... && fail`: under set -e a non-matching grep makes the
+# whole && list return non-zero and kills the script on the success path.
+zoom_probe=$(qemu-system-m68k -M q800 -display cocoa,zoom-to-fit=on -bios /nonexistent 2>&1 || true)
+if printf '%s' "$zoom_probe" | grep -q "is unexpected"; then
+    fail "this QEMU rejects zoom-to-fit, which run-mac.sh passes unconditionally"
+fi
+echo "  zoom-to-fit accepted"
+
 step "The Quadra framebuffer accepts the modes the docs promise"
 # README states 640x480 and 800x600 support 24-bit, 1152x870 does not. If that
 # ever stops being true the documented DISPLAY_RES values become wrong.

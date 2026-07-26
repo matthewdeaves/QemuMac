@@ -319,8 +319,9 @@ set_boot_m68k() {
 
 # Probe whether this QEMU understands a Cocoa display suboption. An
 # unloadable -bios makes QEMU exit immediately after parsing -display, so the
-# probe is cheap and touches nothing. Lets older QEMU builds degrade to a
-# fixed-size window instead of refusing to launch.
+# probe is cheap and touches nothing. Only used for options newer than
+# QEMU_MIN_VERSION - anything guaranteed at the floor is passed unconditionally
+# rather than paying for a probe that can never fail.
 # The probe is expected to exit non-zero, so its output must be captured
 # before grepping. Piping it directly would let `set -o pipefail` report the
 # probe's own failure as the pipeline status, which `!` then inverts into a
@@ -329,6 +330,26 @@ cocoa_supports() {
     local opt="$1" probe
     probe=$("$qemu_bin_path" -M "$MACHINE_TYPE" -display "cocoa,${opt}" -bios /nonexistent 2>&1 || true)
     ! printf '%s' "$probe" | grep -q "is unexpected"
+}
+
+# Refuse to launch on a QEMU older than the floor, with a message that says
+# what to do about it. Everything below this line - q800 audiodev, Cocoa
+# zoom-to-fit - is passed unconditionally, and QEMU's own complaint about an
+# unknown machine property gives no hint that the fix is a newer QEMU.
+# A build whose --version cannot be parsed is warned about, not blocked: it is
+# far more likely to be an unusual distro build string than a 2019 QEMU.
+require_qemu_version() {
+    local version
+    version=$(qemu_version "$1")
+
+    if [[ -z "$version" ]]; then
+        info "Could not read the QEMU version from '${1}' - continuing anyway"
+        return 0
+    fi
+    if ! version_at_least "$version" "$QEMU_MIN_VERSION"; then
+        die "QEMU ${version} is too old - QemuMac needs ${QEMU_MIN_VERSION} or later.
+       Run ./install-deps.sh to install a current build."
+    fi
 }
 
 build_display_and_input_args() {
@@ -343,16 +364,15 @@ build_display_and_input_args() {
         local cocoa_opts="cocoa,swap-opt-cmd=on"
         local zoom_active=false
         if [[ "${DISPLAY_ZOOM:-true}" == true ]]; then
-            if cocoa_supports "zoom-to-fit=on"; then
-                cocoa_opts+=",zoom-to-fit=on"
-                zoom_active=true
-                # Smooth scaling; off (nearest-neighbour) keeps classic Mac OS
-                # pixel art crisp at integer scale factors.
-                if [[ "${DISPLAY_SMOOTH:-false}" == true ]] && cocoa_supports "zoom-interpolation=on"; then
-                    cocoa_opts+=",zoom-interpolation=on"
-                fi
-            else
-                info "This QEMU build does not support zoom-to-fit - using a fixed-size window."
+            # zoom-to-fit is QEMU 8.2, which require_qemu_version has already
+            # guaranteed, so it needs no probe.
+            cocoa_opts+=",zoom-to-fit=on"
+            zoom_active=true
+            # Smooth scaling; off (nearest-neighbour) keeps classic Mac OS
+            # pixel art crisp at integer scale factors. This one is 9.0, above
+            # the floor, so it is still probed.
+            if [[ "${DISPLAY_SMOOTH:-false}" == true ]] && cocoa_supports "zoom-interpolation=on"; then
+                cocoa_opts+=",zoom-interpolation=on"
             fi
         fi
         [[ "${DISPLAY_FULLSCREEN:-false}" == true ]] && cocoa_opts+=",full-screen=on"
@@ -405,15 +425,6 @@ select_audiodev() {
     fi
 }
 
-# Does this machine type take an audiodev property? Older QEMU predates
-# Quadra 800 sound. Captured before grepping so a non-zero probe exit cannot
-# be turned into a wrong answer by pipefail.
-machine_supports_audiodev() {
-    local probe
-    probe=$("$qemu_bin_path" -M "${MACHINE_TYPE},help" 2>&1 || true)
-    printf '%s' "$probe" | grep -q "audiodev"
-}
-
 build_m68k_args() {
     info "Building QEMU arguments for m68k (Quadra 800)..."
     set_boot_m68k "$PRAM_FILE" "$BOOT_TARGET"
@@ -428,18 +439,15 @@ build_m68k_args() {
     local display_res="${DISPLAY_RES:-1152x870x8}"
     info "Display resolution: ${display_res}"
 
-    local machine_string="$MACHINE_TYPE"
-    local audiodev=""
-    if machine_supports_audiodev; then
-        audiodev=$(select_audiodev)
-        machine_string="${MACHINE_TYPE},audiodev=audio0"
-        info "Audio backend: ${audiodev}"
-    else
-        info "This QEMU build has no Quadra 800 audio - continuing without sound"
-    fi
+    # The q800 audiodev property is QEMU 8.2, guaranteed by
+    # require_qemu_version, so it is passed unconditionally.
+    local audiodev
+    audiodev=$(select_audiodev)
+    info "Audio backend: ${audiodev}"
 
     QEMU_ARGS+=(
-        -M "$machine_string"
+        -M "${MACHINE_TYPE},audiodev=audio0"
+        -audiodev "${audiodev},id=audio0"
         -cpu m68040
         -m "$RAM_SIZE"
         -bios "roms/800.ROM"
@@ -449,7 +457,6 @@ build_m68k_args() {
         -device "scsi-hd,scsi-id=${HD_SCSI_ID},drive=hd0"
         -drive "file=${HD_IMAGE},format=qcow2,cache=writeback,aio=${aio_backend},detect-zeroes=on,if=none,id=hd0"
     )
-    [[ -n "$audiodev" ]] && QEMU_ARGS+=(-audiodev "${audiodev},id=audio0")
     if [[ "$SHARED_DISK_AVAILABLE" == true ]]; then
         QEMU_ARGS+=(
             -device "scsi-hd,scsi-id=${SHARED_SCSI_ID:-4},drive=shared0"
@@ -694,7 +701,9 @@ main() {
     else
         die "QEMU executable '${QEMU_EXECUTABLE}' not found. Run ./install-deps.sh"
     fi
-    
+
+    require_qemu_version "$qemu_bin_path"
+
     preflight_checks
 
     declare -a QEMU_ARGS

@@ -227,6 +227,27 @@ require_commands() {
     done
 }
 
+# QEMU version handling
+#
+# The floor below is what every feature QemuMac passes on the command line is
+# guaranteed by: q800 audiodev and Cocoa zoom-to-fit both landed in QEMU 8.2.
+# Ubuntu 24.04 LTS ships 8.2.2, which is the oldest QEMU anyone is likely to
+# have without building one, so nothing is gained by supporting less.
+QEMU_MIN_VERSION="8.2"
+
+# True when version $1 is at least version $2.
+version_at_least() {
+    [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
+}
+
+# Version number of a QEMU binary, e.g. "8.2.2". Empty if it cannot be read.
+# `sed -n ...p` rather than a bare substitution: an unrecognised version banner
+# must yield nothing, not the whole unmatched line, or callers would compare a
+# sentence against a version number.
+qemu_version() {
+    "$1" --version 2>/dev/null | head -n1 | sed -nE 's/.*version ([0-9][0-9.]*).*/\1/p'
+}
+
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "macos"

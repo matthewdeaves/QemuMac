@@ -83,6 +83,10 @@ qemu-img --version | head -1
 command -v jq curl unzip >/dev/null || fail "runtime dependencies missing"
 command -v xvfb-run >/dev/null || fail "xvfb-run not installed"
 
+step "The QEMU this distro ships clears the version floor"
+assert_qemu_at_least_floor qemu-system-m68k
+assert_qemu_at_least_floor qemu-system-ppc
+
 # ---------------------------------------------------------------------------
 
 step "Boot a 68k VM end to end through run-mac.sh"
