@@ -7,7 +7,8 @@ on macOS or Ubuntu, with a shared disk for moving files between host and guest.
 
 Partly to run old software. Mostly to close the loop on **classic Mac development**:
 build on the host with modern tools, drop the artifact on the shared disk, and run it
-under real Mac OS 7/8/9/X a few seconds later.
+under real Mac OS 7/8/9/X a few seconds later. The same disk is the general way to get
+files on and off the VMs, in either direction.
 
 ![Development loop: build on the host, copy to the shared disk, run in the VM](docs/dev-loop.svg)
 
@@ -64,6 +65,13 @@ hcopy build/MyApp :        # copy to the disk
 hls                        # list
 ./mount-shared.sh -u       # humount
 ```
+
+It works just as well in the other direction, and for anything at all — not only
+build artifacts. Every VM mounts the same disk, so it is the general way to move
+files on and off a guest: drop documents, fonts, System extensions or disk images
+in from the host, and copy screenshots, saved games or a finished project back out.
+It also moves files *between* VMs — mount it in the Quadra, copy something over,
+shut down, boot the G4.
 
 **Only one writer at a time.** HFS has no shared-write support — the guest caches
 volume metadata, so a host write underneath it corrupts the catalog. `mount-shared.sh`
