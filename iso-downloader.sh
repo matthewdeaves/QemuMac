@@ -8,11 +8,9 @@ set -euo pipefail
 # Load common library
 source "$(dirname "$0")/lib/common.sh"
 
-# Configuration
+# Configuration. Destination paths are decided by resolve_download_path().
 DEFAULT_JSON_FILE="iso/software-database.json"
 CUSTOM_JSON_FILE="iso/custom-software.json"
-ISO_DOWNLOAD_DIR="iso"
-ROM_DOWNLOAD_DIR="roms"
 
 check_dependencies() {
     require_commands jq curl unzip
@@ -111,10 +109,16 @@ _handle_shared_delivery_linux() {
 _handle_shared_delivery_macos() {
     local temp_file="$1"
     local filename="$2"
-    local shared_disk="shared/shared-disk.img"
+    local shared_disk
+    shared_disk=$(shared_disk_path)
 
     require_commands hmount hcopy humount
     require_file "$shared_disk" "Shared disk not found. Run a VM first to create it."
+
+    if ! shared_disk_is_writable "$shared_disk"; then
+        rm -f "$temp_file"
+        die "The shared disk is in use by a running VM. Shut it down and retry."
+    fi
 
     info "Mounting shared disk with hfsutils..."
     if ! hmount "$shared_disk" >/dev/null 2>&1; then
@@ -158,6 +162,11 @@ download_file() {
     local software_db="$1"
     local choice="$2"
 
+    # A selection that matched nothing arrives here empty. Without this guard
+    # every lookup below yields the literal string "null" and the failure
+    # surfaces as a baffling `curl: Could not resolve host: null`.
+    [[ -n "$choice" ]] || die "No item selected"
+
     # Parse choice (tab-delimited: key\tname\tdescription\ttype)
     IFS=$'\t' read -r selected_key selected_name selected_description item_type <<< "$choice"
 
@@ -166,9 +175,11 @@ download_file() {
     # Get all item details
     local item
     item=$(db_item "$software_db" "$selected_key" "$item_type")
+    [[ "$item" != "null" ]] || die "'${selected_key}' is not in the software database"
 
     local url filename nice_filename md5 delivery serial
     url=$(echo "$item" | jq -r '.url')
+    [[ -n "$url" && "$url" != "null" ]] || die "Database entry '${selected_key}' has no download URL"
     filename=$(echo "$item" | jq -r '.filename')
     nice_filename=$(echo "$item" | jq -r '.nice_filename // .filename')
     md5=$(echo "$item" | jq -r '.md5')

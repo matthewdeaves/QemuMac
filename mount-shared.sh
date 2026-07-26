@@ -8,9 +8,9 @@ set -euo pipefail
 # Load common library
 source "$(dirname "$0")/lib/common.sh"
 
-# Configuration
-SHARED_DIR="shared"
-SHARED_DISK="$SHARED_DIR/shared-disk.img"
+# SHARED_DISK can be overridden to match a VM config that sets its own
+# per-VM shared disk, e.g. SHARED_DISK=vms/foo/shared.img ./mount-shared.sh
+SHARED_DISK=$(shared_disk_path)
 
 # The directory on the host system where the shared disk will be mounted.
 # This can be changed to any path you prefer (e.g., "~/qemu-shared").
@@ -30,6 +30,12 @@ HOST_OS=$(detect_os)
     echo "  -l, --list     List files on the shared disk"
     echo "  -h, --help     Show this help message"
     echo ""
+    echo "Set SHARED_DISK to target a per-VM shared disk instead of the default:"
+    echo "  SHARED_DISK=vms/my-vm/shared.img $0"
+    echo ""
+    echo "Mounting is refused while a VM has the disk open - concurrent writes"
+    echo "from the host and the guest would corrupt the HFS volume."
+    echo ""
     if [[ "$HOST_OS" == "macos" ]]; then
         echo "On macOS, uses hfsutils (hmount/humount) to access the HFS disk."
         echo "Files are accessed via hfsutils commands, not a mount point."
@@ -46,11 +52,27 @@ HOST_OS=$(detect_os)
 }
 
 # ============================================================================
+# Concurrency guard
+# ============================================================================
+
+# Refuse to mount a disk a VM already has open. HFS has no shared-write
+# support: the guest caches volume metadata and the host writing underneath
+# it corrupts the catalog. run-mac.sh applies the same check in reverse.
+assert_disk_free() {
+    shared_disk_is_writable "$SHARED_DISK" && return 0
+
+    error "The shared disk is currently in use: ${C_BLUE}${SHARED_DISK}${C_RESET}"
+    error "Mounting it now would corrupt the HFS volume."
+    die "Shut down any running VM before mounting the shared disk."
+}
+
+# ============================================================================
 # Linux mount/unmount functions (uses loop mount)
 # ============================================================================
 
 mount_shared_linux() {
     require_file "$SHARED_DISK" "Shared disk not found. Run a VM first to create it."
+    assert_disk_free
 
     if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
         error "Shared disk already mounted at: $MOUNT_POINT"
@@ -60,11 +82,12 @@ mount_shared_linux() {
     ensure_directory "$MOUNT_POINT"
 
     info "Mounting shared disk: $SHARED_DISK"
-    local uid=$(id -u)
-    local gid=$(id -g)
-    if sudo mount -t hfsplus -o loop,rw,uid=$uid,gid=$gid "$SHARED_DISK" "$MOUNT_POINT" 2>/dev/null; then
+    local uid gid
+    uid=$(id -u)
+    gid=$(id -g)
+    if sudo mount -t hfsplus -o "loop,rw,uid=${uid},gid=${gid}" "$SHARED_DISK" "$MOUNT_POINT" 2>/dev/null; then
         info "Mounted as HFS+ (read-write)"
-    elif sudo mount -t hfs -o loop,rw,uid=$uid,gid=$gid "$SHARED_DISK" "$MOUNT_POINT" 2>/dev/null; then
+    elif sudo mount -t hfs -o "loop,rw,uid=${uid},gid=${gid}" "$SHARED_DISK" "$MOUNT_POINT" 2>/dev/null; then
         info "Mounted as HFS (read-write)"
     else
         die "Failed to mount shared disk. Install HFS support: sudo apt install hfsprogs"
@@ -102,6 +125,7 @@ list_shared_linux() {
 mount_shared_macos() {
     require_file "$SHARED_DISK" "Shared disk not found. Run a VM first to create it."
     require_commands hmount
+    assert_disk_free
 
     # Check if already mounted by trying hls
     if hls 2>/dev/null | grep -q .; then

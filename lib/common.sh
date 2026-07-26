@@ -3,8 +3,12 @@
 # QemuMac Common Library - Shared utilities for all QemuMac scripts
 #
 
-# Configuration constants
+# Configuration constants. Consumed by the scripts that source this library,
+# which shellcheck analyses separately - hence the directive.
+# shellcheck disable=SC2034
 SHARED_MOUNT_POINT="/tmp/qemu-shared"
+# shellcheck disable=SC2034
+DEFAULT_SHARED_DISK="shared/shared-disk.img"
 
 # Color constants for consistent output (gracefully handle missing terminal)
 if [[ -t 1 ]] && [[ -n "${TERM:-}" ]]; then
@@ -33,6 +37,18 @@ die() {
     exit "${2:-1}"
 }
 
+# Compute an MD5 digest. Linux/coreutils has md5sum, BSD/macOS has md5.
+# Recent macOS ships both; older macOS ships only md5.
+compute_md5() {
+    if command_exists md5sum; then
+        md5sum "$1" | awk '{print $1}'
+    elif command_exists md5; then
+        md5 -q "$1"
+    else
+        return 1
+    fi
+}
+
 # Downloads a file to a temporary location, verifies checksum, and returns the temp path
 download_file_to_temp() {
     local url="$1"
@@ -44,17 +60,34 @@ download_file_to_temp() {
     
     [[ "$quiet" != "true" ]] && info "Downloading from: ${url}"
     # Follow redirects, fail on error, show progress bar, and output to temp file
-    curl --fail -L --progress-bar -o "$temp_file" "$url"
-    
+    # Checked explicitly: run-mac.sh does not use `set -e`, so an unchecked
+    # failure here would install a truncated/empty file as if it were valid.
+    if ! curl --fail -L --progress-bar -o "$temp_file" "$url"; then
+        rm -f "$temp_file"
+        die "Download failed: ${url}"
+    fi
+
     if [[ -n "$md5" && "$md5" != "null" ]]; then
         info "Verifying checksum..."
         local downloaded_md5
-        downloaded_md5=$(md5sum "$temp_file" | awk '{print $1}')
-        if [[ "$downloaded_md5" != "$md5" ]]; then
-            rm -f "$temp_file"
-            die "Checksum mismatch! Expected ${md5}, got ${downloaded_md5}"
+        if downloaded_md5=$(compute_md5 "$temp_file"); then
+            if [[ "$downloaded_md5" != "$md5" ]]; then
+                rm -f "$temp_file"
+                die "Checksum mismatch! Expected ${md5}, got ${downloaded_md5}"
+            fi
+            success "Checksum verified."
+        else
+            error "No md5sum or md5 command found - SKIPPING checksum verification"
         fi
-        success "Checksum verified."
+    else
+        # Say so rather than skipping quietly: the database entry has no
+        # checksum, so a truncated or tampered download cannot be detected.
+        # Printing the digest lets the user contribute one back.
+        error "No checksum in the database for this item - integrity NOT verified"
+        local actual
+        if actual=$(compute_md5 "$temp_file"); then
+            info "Computed md5: ${actual}"
+        fi
     fi
     
     echo "$temp_file"
@@ -74,22 +107,50 @@ download_and_place_file() {
     fi
     
     info "Downloading: $(basename "$dest_path")"
-    
-    # Download to temp location
+
+    # download_file_to_temp runs in a command substitution, so its die() only
+    # exits that subshell - the status has to be checked here or a failed
+    # download would fall through and "install" an empty file.
     local temp_file
-    temp_file=$(download_file_to_temp "$url" "$md5" "true")
-    
-    # Handle ZIP extraction or direct move
+    temp_file=$(download_file_to_temp "$url" "$md5" "true") \
+        || die "Download failed: $(basename "$dest_path")"
+    [[ -s "$temp_file" ]] || die "Download failed: $(basename "$dest_path") is empty"
+
+    # Handle ZIP extraction or direct move. Every step is checked: callers rely
+    # on a non-zero exit (or a die) to mean "nothing was installed". Returning
+    # success with no file at dest_path would let run-mac.sh create the disk
+    # image anyway, and the VM would be stranded on a blank drive.
     if [[ "$url" == *.zip ]]; then
         info "Extracting from zip archive..."
         local temp_dir
         temp_dir=$(mktemp -d)
-        unzip -q "$temp_file" -d "$temp_dir"
-        mv "${temp_dir}/${filename}" "$dest_path"
+
+        if ! unzip -q "$temp_file" -d "$temp_dir"; then
+            rm -rf "$temp_dir"; rm -f "$temp_file"
+            die "Failed to extract archive for $(basename "$dest_path")"
+        fi
+
+        # The database's `filename` is the path *inside* the archive. If it
+        # does not match, say so and list what is actually there - silently
+        # succeeding here is what strands a VM.
+        if [[ ! -f "${temp_dir}/${filename}" ]]; then
+            error "Archive does not contain '${filename}'. It holds:"
+            (cd "$temp_dir" && find . -type f | sed 's|^\./|  |') >&2
+            rm -rf "$temp_dir"; rm -f "$temp_file"
+            die "Cannot install $(basename "$dest_path") - fix 'filename' in the software database"
+        fi
+
+        mv "${temp_dir}/${filename}" "$dest_path" || {
+            rm -rf "$temp_dir"; rm -f "$temp_file"
+            die "Failed to install $(basename "$dest_path")"
+        }
         rm -rf "$temp_dir"
         rm -f "$temp_file"
     else
-        mv "$temp_file" "$dest_path"
+        mv "$temp_file" "$dest_path" || {
+            rm -f "$temp_file"
+            die "Failed to install $(basename "$dest_path")"
+        }
     fi
     
     success "File ready: $dest_path"
@@ -121,8 +182,8 @@ resolve_download_path() {
 # File validation functions
 require_file() {
     local file="$1"
-    local msg="${2:-File not found: $file}"
-    [[ -f "$file" ]] || die "$msg"
+    local msg="${2:-File not found}"
+    [[ -f "$file" ]] || die "${msg} (${file})"
 }
 
 require_executable() {
@@ -183,6 +244,60 @@ ensure_directory() {
     fi
 }
 
+# Shared disk helpers
+#
+# The shared disk is a single raw HFS image that every VM mounts. Nothing
+# arbitrates access, so two writers - two VMs, or a VM and the host - will
+# corrupt the volume. Every entry point checks disk_in_use() first.
+
+# Path to the shared disk, honouring a per-VM SHARED_DISK override.
+shared_disk_path() {
+    echo "${SHARED_DISK:-$DEFAULT_SHARED_DISK}"
+}
+
+# Is a disk image currently held open by another process (usually a VM)?
+#   0 - in use
+#   1 - free
+#   2 - cannot tell (neither lsof nor fuser is installed)
+# lsof ships with macOS; on Debian/Ubuntu either tool may be absent, hence
+# the explicit "unknown" status rather than a silent assumption.
+disk_in_use() {
+    local disk="$1"
+
+    file_exists "$disk" || return 1
+
+    if command_exists lsof; then
+        lsof -- "$disk" >/dev/null 2>&1
+        return $(( $? == 0 ? 0 : 1 ))
+    elif command_exists fuser; then
+        fuser -- "$disk" >/dev/null 2>&1
+        return $(( $? == 0 ? 0 : 1 ))
+    fi
+    return 2
+}
+
+# Is it safe for the *host* to write to the shared disk right now?
+#   0 - yes, proceed
+#   1 - no, a VM (or another process) holds it open
+# A disk_in_use status of 2 ("cannot tell") warns and proceeds rather than
+# blocking, but is never silently folded into "free" - a plain
+# `if disk_in_use ...` test would do exactly that, because `if` reads 2 as
+# false. Callers that want to degrade instead of refusing (run-mac.sh drops
+# the disk from the command line) inspect disk_in_use directly.
+shared_disk_is_writable() {
+    local disk="$1"
+
+    disk_in_use "$disk"
+    case $? in
+        0) return 1 ;;
+        2)
+            info "Neither lsof nor fuser is installed - cannot verify the disk is free"
+            info "Make sure no VM is running before continuing"
+            ;;
+    esac
+    return 0
+}
+
 # Menu utility functions for consistent user interaction
 
 # Simple universal menu - handles all cases
@@ -199,15 +314,29 @@ menu() {
     # Set COLUMNS to 1 to force one option per line in select menu
     local COLUMNS=1
     PS3="${C_YELLOW}${prompt} ${C_RESET}"
-    select choice in "${options[@]}"; do
-        case "$choice" in
-            "Quit") info "Exiting"; echo "QUIT"; return 0 ;;
-            "Back"*) echo "BACK"; return 0 ;;
-            "None"*) echo "NONE"; return 0 ;;
-            "") error "Invalid selection" ;;
-            *) echo "$choice"; return 0 ;;
-        esac
-    done
+    local choice result=""
+
+    # `select` writes a stray newline to stdout when it reaches EOF, which
+    # would end up in whatever the caller captured with $(menu ...). Running
+    # the loop with stdout on stderr keeps the captured value to just the
+    # selection, echoed below.
+    {
+        select choice in "${options[@]}"; do
+            case "$choice" in
+                "Quit")  result="QUIT"; break ;;
+                "Back"*) result="BACK"; break ;;
+                "None"*) result="NONE"; break ;;
+                "")      error "Invalid selection" ;;
+                *)       result="$choice"; break ;;
+            esac
+        done
+    } >&2
+
+    # Empty means EOF (Ctrl-D) - treat it as quitting rather than returning
+    # nothing and letting the caller act on an empty selection.
+    [[ -n "$result" ]] || result="QUIT"
+    [[ "$result" == "QUIT" ]] && info "Exiting"
+    echo "$result"
 }
 
 # Helper for file-based selections (returns index)
@@ -241,6 +370,9 @@ find_files_with_names() {
     local files=()
     local line
     if [[ -n "$extra_args" ]]; then
+        # extra_args is deliberately unquoted: it carries several find flags
+        # that must word-split into separate arguments.
+        # shellcheck disable=SC2086
         while IFS= read -r line; do
             files+=("$line")
         done < <(find "$find_path" $extra_args -name "$pattern" | sort)
@@ -260,10 +392,23 @@ find_files_with_names() {
             for f in "${files[@]}"; do names+=("$(basename "$f")"); done ;;
     esac
     
-    # Return both arrays via global variables (bash limitation)
+    # Return both arrays via global variables (bash 3.2 has no namerefs).
+    # Read by the sourcing script, so shellcheck cannot see the use.
+    # shellcheck disable=SC2034
     FOUND_FILES=("${files[@]}")
+    # shellcheck disable=SC2034
     FOUND_NAMES=("${names[@]}")
     return 0
+}
+
+# Free-text prompt with a default. Echoes the answer.
+ask_text() {
+    local prompt="$1" default="${2:-}"
+    local answer
+
+    echo >&2
+    read -rp "$(echo -e "${C_YELLOW}${prompt}${C_RESET} [${default}]: ")" answer
+    echo "${answer:-$default}"
 }
 
 # Simple binary choice with default
