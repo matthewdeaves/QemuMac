@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1'   # Mondays 04:00 UTC - catches upstream QEMU breakage
 
 jobs:
   test:
@@ -47,7 +50,8 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo bash:3.2 \
             sh -c 'for f in run-mac.sh iso-downloader.sh install-deps.sh \
                             mount-shared.sh lib/common.sh tests/run-tests.sh \
-                            tests/ci/linux-integration.sh tests/ci/linux-shared-disk.sh; do
+                            tests/ci/linux-integration.sh tests/ci/linux-shared-disk.sh \
+                            tests/ci/macos-integration.sh; do
                      bash -n "$f" || exit 1
                    done'
 
@@ -101,6 +105,56 @@ jobs:
 
       - name: Run the real shared-disk test
         run: ./tests/ci/linux-shared-disk.sh
+
+  install-macos:
+    name: macOS integration (brew install + real QEMU)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the macOS integration test
+        run: ./tests/ci/macos-integration.sh
+
+  # A source build takes tens of minutes, so it is not run on every push.
+  # Trigger it by hand before a release, and weekly so a QEMU-side change that
+  # breaks ./configure is noticed without anyone remembering to look.
+  source-build:
+    name: Build QEMU from source (manual / weekly)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the latest stable QEMU locally
+        # '2' selects the source build, then '1' installs into ./qemu-install.
+        run: printf '2\n1\n' | ./install-deps.sh
+
+      - name: run-mac.sh prefers the local build
+        run: |
+          ./qemu-install/bin/qemu-system-m68k --version | head -1
+          ./qemu-install/bin/qemu-system-ppc --version | head -1
+          sudo apt-get install -y xvfb
+          mkdir -p vms/src_m68k
+          cat > vms/src_m68k/src_m68k.conf <<'CONF'
+          ARCH="m68k"
+          MACHINE_TYPE="q800"
+          RAM_SIZE="128M"
+          HD_SIZE="512M"
+          PRAM_FILE="vms/src_m68k/pram.img"
+          HD_IMAGE="vms/src_m68k/hdd.qcow2"
+          MAC_ADDRESS="08:00:07:c1:c1:03"
+          HD_SCSI_ID=6
+          CD_SCSI_ID=3
+          CONF
+          xvfb-run -a ./run-mac.sh --config vms/src_m68k/src_m68k.conf > /tmp/src.log 2>&1 &
+          sleep 25
+          grep -q "local QEMU build" /tmp/src.log \
+            || { cat /tmp/src.log; echo "::error::did not use ./qemu-install"; exit 1; }
+          pgrep -f qemu-system-m68k >/dev/null \
+            || { cat /tmp/src.log; echo "::error::the source-built QEMU did not start"; exit 1; }
+          pkill -f qemu-system-m68k || true
+          echo "source-built QEMU launched a VM"
 
   database:
     name: Software database URLs

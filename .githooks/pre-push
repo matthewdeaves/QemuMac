@@ -26,7 +26,7 @@ fi
 # the actual diagnostics rather than a bare pass/fail.
 SC_FILES=(run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh
           lib/common.sh tests/run-tests.sh tests/ci/linux-integration.sh
-          tests/ci/linux-shared-disk.sh)
+          tests/ci/linux-shared-disk.sh tests/ci/macos-integration.sh)
 if command -v shellcheck >/dev/null 2>&1; then
     printf 'ShellCheck... '
     if shellcheck -S warning "${SC_FILES[@]}" >/dev/null 2>&1; then

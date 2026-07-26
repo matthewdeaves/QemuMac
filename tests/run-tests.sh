@@ -825,7 +825,8 @@ test_script_hygiene() {
 
     local f out
     for f in run-mac.sh install-deps.sh iso-downloader.sh mount-shared.sh \
-             lib/common.sh tests/ci/linux-integration.sh tests/ci/linux-shared-disk.sh; do
+             lib/common.sh tests/ci/linux-integration.sh \
+             tests/ci/linux-shared-disk.sh tests/ci/macos-integration.sh; do
         TESTS_RUN=$((TESTS_RUN + 1))
         if out=$(/bin/bash -n "$f" 2>&1); then
             pass "$f parses under the system bash ($(/bin/bash --version | head -1 | grep -o '[0-9]\+\.[0-9]\+' | head -1))"
