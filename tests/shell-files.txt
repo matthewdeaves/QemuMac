@@ -1,0 +1,20 @@
+# Every shell script in the project. Single source of truth for shellcheck,
+# the bash 3.2 parse check and the suite's own hygiene tests - keeping four
+# separate copies of this list in sync is how tests/ci/ scripts previously
+# got missed. Blank lines and # comments are ignored.
+run-mac.sh
+iso-downloader.sh
+install-deps.sh
+mount-shared.sh
+lib/common.sh
+tests/run-tests.sh
+tests/ci/shell-files.sh
+tests/ci/linux-integration.sh
+tests/ci/linux-shared-disk.sh
+tests/ci/macos-integration.sh
+tests/ci/linux-source-build.sh
+tests/ci/install-test-deps.sh
+tests/ci/check-shellcheck.sh
+tests/ci/check-bash32.sh
+tests/ci/check-database-urls.sh
+tests/ci/common.sh

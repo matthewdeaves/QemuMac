@@ -1,5 +1,10 @@
 name: Test Scripts
 
+# Every job here is orchestration only: install OS packages, then call one
+# script in tests/ci/. Logic embedded in `run:` blocks is invisible to
+# shellcheck, reads badly in a diff, and can only be run inside Actions -
+# these can all be run by hand on a matching host.
+
 on:
   push:
     branches: [main]
@@ -17,107 +22,61 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            sudo apt-get update
-            sudo apt-get install -y jq lsof
-          else
-            jq --version   # jq and lsof ship with the macOS runner image
-            # hfsutils is what mount-shared.sh uses on macOS (there is no
-            # kernel HFS write support), so without it the macOS shared-disk
-            # path dies on a missing command before its own checks run.
-            brew install hfsutils
-          fi
-
-      - name: Run test suite
-        run: ./tests/run-tests.sh
+      - run: ./tests/ci/install-test-deps.sh
+      - run: ./tests/run-tests.sh
 
   bash32:
     name: bash 3.2 compatibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # macOS ships bash 3.2. The macOS job above exercises it implicitly;
-      # this pins the exact version so a bash 4+ construct fails loudly.
-      - name: Parse all scripts under bash 3.2
-        run: |
-          docker run --rm -v "$PWD:/repo" -w /repo bash:3.2 \
-            sh -c 'for f in run-mac.sh iso-downloader.sh install-deps.sh \
-                            mount-shared.sh lib/common.sh tests/run-tests.sh \
-                            tests/ci/linux-integration.sh tests/ci/linux-shared-disk.sh \
-                            tests/ci/macos-integration.sh; do
-                     bash -n "$f" || exit 1
-                   done'
+      - run: ./tests/ci/check-bash32.sh
 
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: ./tests/ci/check-shellcheck.sh
 
-      - name: Run ShellCheck
-        run: |
-          sudo apt-get update && sudo apt-get install -y shellcheck
-          # No blanket excludes. The few intentional patterns (dynamic
-          # `source` of VM configs, deliberate word splitting, globals read by
-          # sourcing scripts) carry inline `# shellcheck disable=` directives
-          # at the exact line, so a real problem elsewhere still fails.
-          shellcheck -S warning \
-            run-mac.sh iso-downloader.sh install-deps.sh mount-shared.sh \
-            lib/common.sh tests/run-tests.sh tests/ci/*.sh
-
-  # The two jobs below deliberately hold no logic: the test lives in
-  # tests/ci/, so it is shellcheck-clean, reviewable in a diff, and can be run
-  # by hand on any Linux box rather than only inside Actions.
   install-linux:
     name: Linux integration (apt install + real boot)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install xvfb (SDL needs a display)
         run: sudo apt-get update && sudo apt-get install -y xvfb
-
-      - name: Run the Linux integration test
-        run: ./tests/ci/linux-integration.sh
+      - run: ./tests/ci/linux-integration.sh
 
   linux-shared-disk:
     name: Shared disk (real HFS+ loop mount)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install hfsprogs and helpers
+      - name: Install hfsprogs and kernel modules
         run: |
           sudo apt-get update
           sudo apt-get install -y hfsprogs jq lsof qemu-utils
           # The stock Azure runner kernel ships no hfsplus module, so without
-          # this the test can only skip. Best effort: the package name is
-          # kernel-version specific and is not always published.
+          # this the test can only skip. The package name is kernel-version
+          # specific and is not always published, hence best effort.
           sudo apt-get install -y "linux-modules-extra-$(uname -r)" \
             || echo "no linux-modules-extra for $(uname -r) - hfsplus may be unavailable"
-
-      - name: Run the real shared-disk test
-        run: ./tests/ci/linux-shared-disk.sh
+      - run: ./tests/ci/linux-shared-disk.sh
 
   install-macos:
     name: macOS integration (brew install + real QEMU)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - run: ./tests/ci/macos-integration.sh
 
-      - name: Run the macOS integration test
-        run: ./tests/ci/macos-integration.sh
-
-  # A source build takes tens of minutes, so it is not run on every push.
-  # Trigger it by hand before a release, and weekly so a QEMU-side change that
-  # breaks ./configure is noticed without anyone remembering to look.
+  # A source build takes tens of minutes, so it does not run on every push.
+  # Trigger it by hand before a release; weekly means upstream QEMU breaking
+  # ./configure is noticed without anyone remembering to look.
   source-build:
     name: Build QEMU from source (manual / weekly)
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
@@ -125,57 +84,14 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build the latest stable QEMU locally
-        # '2' selects the source build, then '1' installs into ./qemu-install.
-        run: printf '2\n1\n' | ./install-deps.sh
-
-      - name: run-mac.sh prefers the local build
-        run: |
-          ./qemu-install/bin/qemu-system-m68k --version | head -1
-          ./qemu-install/bin/qemu-system-ppc --version | head -1
-          sudo apt-get install -y xvfb
-          mkdir -p vms/src_m68k
-          cat > vms/src_m68k/src_m68k.conf <<'CONF'
-          ARCH="m68k"
-          MACHINE_TYPE="q800"
-          RAM_SIZE="128M"
-          HD_SIZE="512M"
-          PRAM_FILE="vms/src_m68k/pram.img"
-          HD_IMAGE="vms/src_m68k/hdd.qcow2"
-          MAC_ADDRESS="08:00:07:c1:c1:03"
-          HD_SCSI_ID=6
-          CD_SCSI_ID=3
-          CONF
-          xvfb-run -a ./run-mac.sh --config vms/src_m68k/src_m68k.conf > /tmp/src.log 2>&1 &
-          sleep 25
-          grep -q "local QEMU build" /tmp/src.log \
-            || { cat /tmp/src.log; echo "::error::did not use ./qemu-install"; exit 1; }
-          pgrep -f qemu-system-m68k >/dev/null \
-            || { cat /tmp/src.log; echo "::error::the source-built QEMU did not start"; exit 1; }
-          pkill -f qemu-system-m68k || true
-          echo "source-built QEMU launched a VM"
+      - name: Install xvfb (SDL needs a display)
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: ./tests/ci/linux-source-build.sh
 
   database:
     name: Software database URLs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check database URLs are reachable
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          # Reachability is informational: these are third-party archives, so
-          # a transient outage should not fail the build. Structural validity
-          # of the database is asserted by the test suite.
-          fails=0
-          while read -r url; do
-            [ -z "$url" ] && continue
-            if curl --head --fail --silent --location --max-time 20 "$url" >/dev/null; then
-              echo "ok    $url"
-            else
-              echo "FAIL  $url"
-              fails=$((fails + 1))
-            fi
-          done < <(jq -r '(.cds, .roms) | .[] | .url // empty' iso/software-database.json)
-          echo "::notice::${fails} database URL(s) unreachable"
+      - run: sudo apt-get update && sudo apt-get install -y jq
+      - run: ./tests/ci/check-database-urls.sh

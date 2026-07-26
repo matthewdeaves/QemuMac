@@ -14,21 +14,11 @@
 
 set -Eeuo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
+# shellcheck source=tests/ci/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+require_os Linux
 
-TMP="${TMPDIR:-/tmp}"
-RUN_LOG="${TMP}/qemumac-ci-run.log"
-
-if [[ "$(uname -s)" != "Linux" ]]; then
-    echo "skip: this test targets Linux (host is $(uname -s))"
-    exit 0
-fi
-
-# GitHub renders ::error:: as an annotation; harmless when run by hand.
-fail() { echo "::error::$1"; exit 1; }
-warn() { echo "::warning::$1"; }
-step() { printf '\n=== %s ===\n' "$1"; }
+RUN_LOG="${TMPDIR:-/tmp}/qemumac-ci-run.log"
 
 cleanup() {
     pkill -f 'qemu-system-' 2>/dev/null || true
@@ -98,15 +88,13 @@ command -v xvfb-run >/dev/null || fail "xvfb-run not installed"
 step "Boot a 68k VM end to end through run-mac.sh"
 conf=$(make_config ci_m68k m68k)
 
+# The first attempt deliberately lets run-mac.sh fetch the ROM itself, so the
+# real download path is exercised.
+rom_kind=real
 if ! boot_vm "$conf" m68k; then
     if [[ ! -f roms/800.ROM ]] && grep -q "Download failed" "$RUN_LOG"; then
-        # archive.org is a third party and answers 500 under load. Do not fail
-        # the build for someone else's outage - but say plainly that the
-        # download path went untested, rather than quietly passing.
-        warn "ROM download failed - the download path was NOT exercised"
         tail -3 "$RUN_LOG"
-        mkdir -p roms
-        dd if=/dev/zero of=roms/800.ROM bs=1024 count=1024 2>/dev/null
+        rom_kind=$(ensure_rom)      # warns and falls back to a placeholder
         boot_vm "$conf" m68k || { cat "$RUN_LOG"; fail "68k VM did not start"; }
     else
         cat "$RUN_LOG"
@@ -154,43 +142,19 @@ echo "ppc: SDL, mac99, bootindex and disk all correct"
 # ---------------------------------------------------------------------------
 
 step "The guest actually executes and draws"
-# Everything above proves the *launcher* works. This proves QEMU emulates:
-# drive the monitor to dump the framebuffer after the ROM has had time to
-# boot, then check the image is not a uniform blank. A Quadra with no
-# bootable disk still draws a flashing floppy icon, which is plenty.
-shot="${TMP}/qemumac-screen.ppm"
-rm -f "$shot"
-( sleep 20; printf 'screendump %s\nquit\n' "$shot" ) | \
-    qemu-system-m68k -M q800,audiodev=audio0 -audiodev none,id=audio0 \
-        -m 128M -g 800x600x8 -bios roms/800.ROM \
-        -display none -monitor stdio >/dev/null 2>&1 || true
-
-if [[ ! -s "$shot" ]]; then
-    # A placeholder ROM (archive.org outage above) cannot boot, so this is
-    # only meaningful with the real one.
-    warn "no framebuffer dump produced - guest execution was NOT verified"
+if [[ "$rom_kind" == "real" ]]; then
+    assert_guest_draws qemu-system-m68k
 else
-    # A blank screen has almost no distinct byte rows; a rendered one has many.
-    distinct=$(od -An -v -tx1 "$shot" | sort -u | wc -l | tr -d ' ')
-    echo "framebuffer: $(wc -c < "$shot" | tr -d ' ') bytes, ${distinct} distinct rows"
-    [[ "$distinct" -gt 20 ]] \
-        || fail "framebuffer looks blank (${distinct} distinct rows) - the guest did not draw"
-    echo "the Quadra ROM booted and rendered under Linux"
+    warn "only a placeholder ROM is available - guest execution was NOT verified"
 fi
-rm -f "$shot"
 
 # ---------------------------------------------------------------------------
 
 step "Negative control"
-# The checks above must be capable of failing. QEMU validates -device only
-# after loading the ROM, so the real ROM is needed; and the null audiodev is
-# required for the same reason run-mac.sh passes one - a bare `-M q800` on a
-# soundless host segfaults in the ASC backend before device validation.
-out=$(qemu-system-m68k -M q800,audiodev=audio0 -audiodev none,id=audio0 \
-        -m 128M -display none -bios roms/800.ROM \
-        -device definitely-not-a-real-device 2>&1 || true)
-echo "$out" | tail -1
-echo "$out" | grep -q "is not a valid device model name" \
-    || fail "negative control did not trip - these checks may be vacuous"
+if [[ "$rom_kind" == "real" ]]; then
+    assert_rejects_bad_device qemu-system-m68k
+else
+    warn "only a placeholder ROM is available - the negative control was NOT run"
+fi
 
 printf '\nLinux integration: OK\n'

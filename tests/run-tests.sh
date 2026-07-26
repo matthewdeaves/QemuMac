@@ -824,16 +824,14 @@ test_script_hygiene() {
     suite "script hygiene" || return 0
 
     local f out
-    for f in run-mac.sh install-deps.sh iso-downloader.sh mount-shared.sh \
-             lib/common.sh tests/ci/linux-integration.sh \
-             tests/ci/linux-shared-disk.sh tests/ci/macos-integration.sh; do
+    while IFS= read -r f; do
         TESTS_RUN=$((TESTS_RUN + 1))
         if out=$(/bin/bash -n "$f" 2>&1); then
             pass "$f parses under the system bash ($(/bin/bash --version | head -1 | grep -o '[0-9]\+\.[0-9]\+' | head -1))"
         else
             fail "$f parses under the system bash" "$out"
         fi
-    done
+    done < <(./tests/ci/shell-files.sh)
 
     # bash 3.2 is what macOS ships, so bash 4+ only syntax must not appear.
     # The test suite is scanned too: `source <(...)` slipped in here and failed
@@ -841,7 +839,8 @@ test_script_hygiene() {
     # runs everything under bash 5 and never exercises 3.2.
     # Now that tests/ is in scope these greps can match their own pattern
     # strings and comments, so drop comment lines and the checker lines here.
-    local scan_files="*.sh lib/*.sh tests/*.sh tests/ci/*.sh"
+    local scan_files
+    scan_files=$(./tests/ci/shell-files.sh | tr '\n' ' ')
     local self='grep -nE|:[[:space:]]*#'
 
     TESTS_RUN=$((TESTS_RUN + 1))
@@ -863,6 +862,32 @@ test_script_hygiene() {
         fail "no process-substitution sourcing - unsupported in bash 3.2" "$out"
     else
         pass "no process-substitution sourcing - unsupported in bash 3.2"
+    fi
+
+    # tests/shell-files.txt drives shellcheck, the bash 3.2 parse check and
+    # the scans below. A script missing from it is silently unchecked, which
+    # is how tests/ci/ scripts went unlinted when they were first added.
+    TESTS_RUN=$((TESTS_RUN + 1))
+    local unlisted
+    unlisted=$(comm -23 \
+        <(ls ./*.sh lib/*.sh tests/*.sh tests/ci/*.sh 2>/dev/null | sed 's|^\./||' | sort) \
+        <(./tests/ci/shell-files.sh | sort))
+    if [[ -z "$unlisted" ]]; then
+        pass "every shell script is listed in tests/shell-files.txt"
+    else
+        fail "every shell script is listed in tests/shell-files.txt" "$unlisted"
+    fi
+
+    # ...and nothing listed is missing from disk.
+    TESTS_RUN=$((TESTS_RUN + 1))
+    local missing_listed=""
+    while IFS= read -r f; do
+        [[ -f "$f" ]] || missing_listed="${missing_listed} ${f}"
+    done < <(./tests/ci/shell-files.sh)
+    if [[ -z "$missing_listed" ]]; then
+        pass "every file in tests/shell-files.txt exists"
+    else
+        fail "every file in tests/shell-files.txt exists" "$missing_listed"
     fi
 
     # Every VM ships a distinct MAC, or guests collide on the same network.

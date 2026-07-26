@@ -15,19 +15,9 @@
 
 set -Eeuo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
-
-TMP="${TMPDIR:-/tmp}"
-
-if [[ "$(uname -s)" != "Darwin" ]]; then
-    echo "skip: this test targets macOS (host is $(uname -s))"
-    exit 0
-fi
-
-fail() { echo "::error::$1"; exit 1; }
-warn() { echo "::warning::$1"; }
-step() { printf '\n=== %s ===\n' "$1"; }
+# shellcheck source=tests/ci/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+require_os Darwin
 
 # ---------------------------------------------------------------------------
 
@@ -66,45 +56,14 @@ qemu-system-m68k -M q800,help 2>&1 | grep -q audiodev \
 echo "  audiodev supported"
 
 step "The guest actually executes and draws"
-# Proves QEMU emulates rather than merely starting. Needs the real ROM.
-if [[ ! -f roms/800.ROM ]]; then
-    url=$(jq -r '.roms.quadra800.url' iso/software-database.json)
-    md5_want=$(jq -r '.roms.quadra800.md5' iso/software-database.json)
-    mkdir -p roms
-    if curl --fail -sL --retry 3 --retry-delay 2 -o roms/800.ROM "$url"; then
-        md5_got=$(md5 -q roms/800.ROM)
-        [[ "$md5_got" == "$md5_want" ]] \
-            || fail "ROM checksum mismatch: expected ${md5_want}, got ${md5_got}"
-        echo "  ROM downloaded and verified"
-    else
-        rm -f roms/800.ROM
-        warn "ROM download failed (third-party archive) - guest execution NOT verified"
-    fi
-fi
-
-if [[ -f roms/800.ROM ]]; then
-    shot="${TMP}/qemumac-screen.ppm"
-    rm -f "$shot"
-    ( sleep 20; printf 'screendump %s\nquit\n' "$shot" ) | \
-        qemu-system-m68k -M q800,audiodev=audio0 -audiodev none,id=audio0 \
-            -m 128M -g 800x600x8 -bios roms/800.ROM \
-            -display none -monitor stdio >/dev/null 2>&1 || true
-
-    [[ -s "$shot" ]] || fail "no framebuffer dump - the guest did not run"
-    distinct=$(od -An -v -tx1 "$shot" | sort -u | wc -l | tr -d ' ')
-    echo "  framebuffer: $(wc -c < "$shot" | tr -d ' ') bytes, ${distinct} distinct rows"
-    [[ "$distinct" -gt 20 ]] \
-        || fail "framebuffer looks blank (${distinct} distinct rows) - the guest did not draw"
-    echo "  the Quadra ROM booted and rendered on macOS"
-    rm -f "$shot"
+rom_kind=$(ensure_rom)
+if [[ "$rom_kind" == "real" ]]; then
+    assert_guest_draws qemu-system-m68k
 
     step "Negative control"
-    out=$(qemu-system-m68k -M q800,audiodev=audio0 -audiodev none,id=audio0 \
-            -m 128M -display none -bios roms/800.ROM \
-            -device definitely-not-a-real-device 2>&1 || true)
-    echo "$out" | tail -1
-    echo "$out" | grep -q "is not a valid device model name" \
-        || fail "negative control did not trip - these checks may be vacuous"
+    assert_rejects_bad_device qemu-system-m68k
+else
+    warn "only a placeholder ROM is available - guest execution was NOT verified"
 fi
 
 printf '\nmacOS integration: OK\n'

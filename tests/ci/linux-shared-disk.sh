@@ -14,19 +14,12 @@
 
 set -Eeuo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
+# shellcheck source=tests/ci/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+require_os Linux
 
 DISK="shared/shared-disk.img"
 MOUNT_POINT="/tmp/qemu-shared"
-
-if [[ "$(uname -s)" != "Linux" ]]; then
-    echo "skip: this test targets Linux (host is $(uname -s))"
-    exit 0
-fi
-
-fail() { echo "::error::$1"; exit 1; }
-step() { printf '\n=== %s ===\n' "$1"; }
 
 cleanup() {
     mountpoint -q "$MOUNT_POINT" 2>/dev/null && sudo umount "$MOUNT_POINT" 2>/dev/null
