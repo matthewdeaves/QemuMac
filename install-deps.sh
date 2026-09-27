@@ -461,7 +461,7 @@ main() {
         "Build from source - latest stable QEMU release, takes 20-40 minutes"
     )
     [[ "$os_type" == "macos" ]] && methods+=(
-        "Build from source with the ATI Radeon 9700 - Mac OS X OpenGL and Quartz Extreme, takes 20-40 minutes")
+        "Build from source with the ATI Radeon 9700 (recommended on macOS) - Mac OS X 3D, PowerMac sound, a right-sized window, takes 20-40 minutes")
 
     local method
     method=$(menu "How should QEMU be installed?" "${methods[@]}")

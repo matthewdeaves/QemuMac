@@ -15,3 +15,13 @@ These are copies of `firmware/radeon/` in
 [ppcosxkvm](https://github.com/matthewdeaves/ppcosxkvm), which also has the
 scripts that regenerate them byte for byte (`qemu_vga.ndrv` is its
 `qemu_vga_hwc.ndrv`).
+
+## Licenses and sources
+
+- `openbios-ppc` and `qemu_vga.ndrv` are GPL-2.0 ([COPYING.GPL-2](COPYING.GPL-2)).
+  Corresponding source: OpenBIOS from [openbios/openbios](https://github.com/openbios/openbios)
+  as built for UTM 4.7.5 ([utmapp/UTM](https://github.com/utmapp/UTM)), changed only by
+  the 4 bytes at offset 0x30678 (`12341111` → `10024e44`); the NDRV from
+  [ozbenh/QemuMacDrivers](https://github.com/ozbenh/QemuMacDrivers), patched by
+  `firmware/src/ndrv/build.py` in ppcosxkvm.
+- `ppc-ndrvloader` is MIT, © 2023 Elliot Nunn ([LICENSE.ppc-ndrvloader](LICENSE.ppc-ndrvloader)).

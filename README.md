@@ -24,8 +24,9 @@ That is why the shared disk is central rather than a convenience feature.
 
 `./install-deps.sh` installs all of it and finishes with a feature check. It offers two
 routes: your package manager, or a source build of the **latest stable QEMU release**.
-On macOS there is a third: a source build with an **ATI Radeon 9700** for 3D-accelerated
-Mac OS X — see [3D acceleration](#3d-acceleration-mac-os-x).
+On macOS there is a third, and it is the recommended one: a source build of the latest
+release plus an **ATI Radeon 9700** for 3D-accelerated Mac OS X, PowerMac sound and a
+right-sized window — see [3D acceleration](#3d-acceleration-mac-os-x).
 On macOS the fast route is already the newest — Homebrew tracks QEMU closely. On Linux,
 apt gives you whatever your Ubuntu release froze on, so the source build is how you get
 current.
@@ -147,9 +148,11 @@ VM configs are plain bash. Everything except `ARCH` and `HD_IMAGE` has a default
 
 ## Display
 
-**Window too small?** Just resize it — with `DISPLAY_ZOOM=true` (the default) the guest
-scales to fill the window. This is the usual fix on a Retina Mac, where QEMU renders one
-guest pixel per *physical* pixel, so 1152×870 lands in a window about half that size.
+**Window too small?** With the Radeon build (recommended on macOS) the window opens at
+one guest pixel per *point* — a 1024×768 guest gets a 1024×768 window, shrunk to fit the
+screen. Stock QEMU opens it at 640×480 points, or at one guest pixel per *physical* pixel
+without `DISPLAY_ZOOM`, which is half size on a Retina Mac. Either way, resize it: with
+`DISPLAY_ZOOM=true` (the default) the guest scales to fill the window.
 
 **Want a physically larger Mac OS UI?** Lower the resolution. The Quadra framebuffer
 accepts a fixed set of modes:
@@ -189,7 +192,8 @@ commits on top of a QEMU release, from
 [ppcosxkvm](https://github.com/matthewdeaves/ppcosxkvm) and
 [PowerEmu](https://github.com/Spartan0285/PowerEmu). The same build adds the PowerMac's
 **Screamer** sound chip, so Mac OS 9 and Mac OS X get sound; `run-mac.sh` wires it up
-whenever the QEMU has it.
+whenever the QEMU has it. It also fixes two Cocoa window problems in stock QEMU: the
+window now opens at the guest's size, and shutting a guest down no longer crashes QEMU.
 
 ```bash
 ./install-deps.sh     # choose "Build from source with the ATI Radeon 9700", then Local
