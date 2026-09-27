@@ -100,13 +100,30 @@ swap the install under someone else's claim.
    (device_owned tracks the zero-copy-vs-legacy split); r300_draw.c's
    malloc/calloc calls now NULL-check and free. Verified with tests +
    a full Quake II demo1 run.
-7. [#7](https://github.com/matthewdeaves/qemu/issues/7) — **NEW, Triage,
-   needs manager approval.** Filed from old-mac-quake2#97 (routed here
-   per the takeover rule): Quake II's in-game `screenshot` TGA capture
-   comes back solid black on qemu-tiger3d while live rendering/timedemo
-   fps are fine on the same build. Likely glReadPixels/buffer-swap-
-   timing under the R300->Metal translation; not yet confirmed
-   VM-specific.
+7. [#7](https://github.com/matthewdeaves/qemu/issues/7) — **Board:
+   Review.** Filed from old-mac-quake2#97, approved top priority.
+   Manager's discriminating test run: Quake III's `screenshotJPEG`
+   (also glReadPixels) is black too (min=max=mean=0); a QEMU monitor
+   screendump (see run-mac.sh's new monitor socket, below) taken on the
+   same still-running frame shows a real, correctly rendered Quake III
+   menu (min=0 max=65535). Conclusion: emulator-side capture/readback
+   bug, not engine-specific, and the display itself is fine — only the
+   guest's own readback path is broken. Corroborated independently by
+   alephone#46 (different engine, blank/white capture while world ticks
+   advanced). Lead for next step, not yet fixed: aperture 1
+   (`r300_ap1_read`) is the only CPU-visible VRAM view that flushes the
+   renderer before a read and is what Apple's driver comment says it
+   uses for *depth* glReadPixels; aperture 0 (`s->vram`) is plain RAM
+   with no read trap at all. Whether color-buffer glReadPixels goes
+   through aperture 0 or 1 is unconfirmed — `$R300_SURFWATCH` (already
+   in ppc_mac_gpu.c) is the tool to instrument it. Possibly related:
+   qemu#8 (quake3 session's screenshotJPEG stall), not reproduced in
+   this session's own run, not confirmed same bug.
+8. **NEW**: `run-mac.sh` now opens a unix-socket HMP monitor for every
+   VM (`<vm dir>/monitor.sock`, always on, c4cd960) — requested ahead
+   of #7 so the fleet can screendump a live VM independent of any
+   guest-side capture path. Mailed to buildhost for build-host#123's
+   `qemu-vm.sh screendump` wrapper.
 8. [QemuMac #15](https://github.com/matthewdeaves/QemuMac/issues/15) —
    **Done, issue closed.** Evidence posted this session: source sha
    `a824d07101`, `shasum -a 256` of `qemu-system-ppc`/`qemu-system-m68k`
