@@ -6,15 +6,56 @@ You (the "qemumac" agent in `~/Documents/retro-agents`) own **QemuMac**, the
 `radeon-9700` except for a release rebase. One VM at a time on the bench
 disk; claim `qemu-tiger3d` through the fleet picker like real hardware.
 
+## Solo VM work, 2026-09-27
+
+User authorized work across these forks, commits/pushes and closing fixed
+issues. No team agents were started; Signal Box was left alone. Testing used
+this workstation and the Tiger VM, not powered-off vintage Macs.
+
+- `0daa4626bb`: normalize DXT upload bytes and sampled channels. Addresses
+  RGB speckle and blue/red-swapped faces in Q3.
+- `dab9f22c05`: one Metal binary archive per pipeline descriptor. The previous
+  shared archive failed when libraries reused entry-point names. Offline cold
+  and separate-process warm archive tests pass.
+- `bee98d449e`: stop ZMASK clears using an earlier draw's larger height.
+  Q3 clears 768 rows after drawing with a 769-row guard extent; the old code
+  overwrote 4096 bytes of the next lightmap allocation. This caused the
+  intermittent turquoise floors/walls on subsequent launches. The fix keeps
+  texture compression enabled. Also unifies source-endian conversion across
+  system-memory 2D upload paths, an independent consistency fix.
+- `57502abdd7`: optional `coreaudio_underrun` trace event for playback diagnosis.
+  This adds observability, not an audio timing fix.
+
+The complete R300 test suite passed, including a neighbouring-lightmap boundary
+regression, channel-order fixtures, Metal rendering and cold/warm archives.
+Repeated compressed Q3 demo launches retained correct wall/floor colours after
+the clear fix. Q1, Q2 and Half-Life have host framebuffer capture helpers with
+bench claims, overlap checks, live SSH GUI sessions and normal engine exits.
+Aleph One's VM deployment/bench profile uses classic OpenGL; the shader path
+still falls back to guest software rendering. Port repos now pin shared-v14,
+which corrects misleading "picture-correct baseline" wording in evidence.
+
+Evidence is local at `~/oldmac/evidence/solo-vm-20260927/`; game screenshots and
+assets are not committed. The previous installed PPC binary is retained there
+as `qemu-system-ppc-before-fixes`. Temporary diagnostics in `/tmp/q3-colour-debug`
+are not part of the shipped emulator.
+
+Still open: guest GL screenshot readback (qemu#7/#8), Tiger Aleph One GLSL
+fallback (qemu#10), and occasional Q3 audio glitches reported under host load.
+Native and VM Q3 captures also differ in brightness; do not claim pixel-exact
+parity or complete gamma emulation. Physical-machine tickets remain untested.
+
 ## radeon-9700 branch state
 
 - Repo: `github.com/matthewdeaves/qemu`, branch `radeon-9700`, on QEMU v11.1.1.
-- Tip: `7633ecb1eb`. `qemu-install/` (the fleet's build for benches, verified
-  on QemuMac#15) is still at `a824d07101`, four commits behind — see
-  "Today's work" below for what those four add; none are urgent for
-  correctness, so the next `install-deps.sh` rebuild whenever convenient
-  picks them up. `README.radeon-9700.md` describes the branch and how to
-  rebase it onto a new release.
+- Tip and installed PPC binary: `57502abdd7` (2026-09-27). The clean
+  `qemu-source` mirror has been fast-forwarded to that revision. The installed
+  binary was built from the matching clean `~/Documents/qemu` checkout and
+  copied atomically into `qemu-install/bin/qemu-system-ppc`; `--version` reports
+  `v11.1.1-41-g57502abdd7`. SHA256:
+  `dda6414d60cfb00923c8cac234235961f3c78c2208030c1fcc0f4e1916fe99d8`.
+  The m68k binary was not rebuilt or relabelled. Normal VM startup now uses the
+  permanent install, with no development-directory override.
 - Adds: ATI Radeon 9700 PRO for `mac99` (3D via Metal), Screamer audio,
   Cocoa fixes, PowerPC TCG speedups (host-FPU fast path, inline FPRF,
   lmw/stmw, lfs/stfs conversion). `git log --oneline v11.1.1..radeon-9700`
