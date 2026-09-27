@@ -54,8 +54,11 @@ parity or complete gamma emulation. Physical-machine tickets remain untested.
   copied atomically into `qemu-install/bin/qemu-system-ppc`; `--version` reports
   `v11.1.1-41-g57502abdd7`. SHA256:
   `dda6414d60cfb00923c8cac234235961f3c78c2208030c1fcc0f4e1916fe99d8`.
-  The m68k binary was not rebuilt or relabelled. Normal VM startup now uses the
-  permanent install, with no development-directory override.
+  The m68k binary was not rebuilt or relabelled. The permanent install is ready for normal
+  startup. At 16:36 BST another session held `qemumac-qemu2-measure` and
+  was running the VM through its Claude scratch `dev-install` symlink to
+  `~/Documents/qemu/build/qemu-system-ppc`. Do not restart or release that
+  session's claim. Both binary paths hashed identically when checked.
 - Adds: ATI Radeon 9700 PRO for `mac99` (3D via Metal), Screamer audio,
   Cocoa fixes, PowerPC TCG speedups (host-FPU fast path, inline FPRF,
   lmw/stmw, lfs/stfs conversion). `git log --oneline v11.1.1..radeon-9700`
@@ -260,3 +263,17 @@ is never release or floor evidence.
   fog) looked like game bugs and weren't.
 - Debug switches must be off, and the host-load caveat applies, for any
   measurement meant to be compared or cited (see above).
+
+### Final validation and concurrent VM ownership
+
+Q3 evidence runs at 1024x768 on the fixed binary measured 84.9, 67.0 and
+87.7 fps. Artefact hashes match the v0.6.20 release DMG and requested
+resolution/fullscreen settings match. The evidence tool returned VALID for all
+three, but a concurrent QemuMac claim was discovered afterward, so treat these
+as informal VM measurements, not an isolated performance comparison. Colour
+regression evidence was captured separately before that ownership change.
+
+The earlier manual claim was replaced by another session's claim; this session
+did not release or terminate that claimant. Further continuous audio tests and
+final cross-game playback must wait for exclusive VM ownership. Follow-ups:
+qemu#13 (occasional audio glitches) and qemu#14 (gamma/brightness parity).
