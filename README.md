@@ -144,6 +144,7 @@ VM configs are plain bash. Everything except `ARCH` and `HD_IMAGE` has a default
 | `DISPLAY_SMOOTH` | `false` | Interpolated rather than nearest-neighbour scaling (macOS only) |
 | `DISPLAY_FULLSCREEN` | `false` | Start full screen |
 | `DISPLAY_GPU` | `std` | ppc only: `std` (QEMU VGA) or `radeon9700` (ATI Radeon 9700 PRO, [3D](#3d-acceleration-mac-os-x)) |
+| `SSH_PORT` | — | ppc only: forward `127.0.0.1:SSH_PORT` to the guest's sshd (Mac OS X Remote Login) |
 | `AUDIO_BACKEND` | auto | `coreaudio` on macOS; PipeWire/Pulse, ALSA or `none` on Linux |
 
 ## Display

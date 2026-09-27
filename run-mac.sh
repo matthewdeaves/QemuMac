@@ -580,8 +580,15 @@ build_ppc_args() {
             -global "screamer.audiodev=audio0"
         )
     fi
+    # SSH_PORT forwards that host port, on 127.0.0.1 only, to the guest's
+    # sshd (Mac OS X: Sharing > Remote Login), for scripting the guest.
+    local netdev="user,id=net0"
+    if [[ -n "${SSH_PORT:-}" ]]; then
+        netdev+=",hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22"
+        info "SSH: ssh -p ${SSH_PORT} <user>@127.0.0.1 (turn on Remote Login in the guest)"
+    fi
     QEMU_ARGS+=(
-        -netdev "user,id=net0"
+        -netdev "$netdev"
         -device "sungem,netdev=net0${mac_prop}"
         -device "pci-ohci,id=ohci"
         -device "usb-mouse,bus=ohci.0"

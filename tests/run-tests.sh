@@ -262,6 +262,14 @@ test_ppc_args() {
     assert_not_contains "$out" "scsi-hd"   "does not emit m68k SCSI devices"
     assert_not_contains "$out" "800.ROM"   "does not require a ROM file"
 
+    assert_not_contains "$out" "hostfwd" "forwards no ports by default"
+    conf=$(make_vm ppc_ssh 'ARCH="ppc"' 'MACHINE_TYPE="mac99"' 'RAM_SIZE="512M"' \
+        'HD_SIZE="10G"' 'HD_IMAGE="vms/_test_ppc_ssh/hdd.qcow2"' 'SSH_PORT="2222"')
+    assert_contains "$(run_mac --config "$conf")" "user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22" \
+        "SSH_PORT forwards that port, on localhost only, to the guest's sshd"
+    conf=$(make_vm ppc 'ARCH="ppc"' 'MACHINE_TYPE="mac99"' 'RAM_SIZE="512M"' 'HD_SIZE="10G"' \
+        'HD_IMAGE="vms/_test_ppc/hdd.qcow2"' 'MAC_ADDRESS="08:00:07:dd:ee:ff"')
+
     out=$(run_mac --config "$conf" --iso "iso/software-database.json" --boot-from-cd)
     assert_contains "$out" "bootindex=1" "boot-from-cd reorders the boot index"
     assert_contains "$out" "ide-cd"      "attaches the ISO as an IDE CD"
