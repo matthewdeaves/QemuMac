@@ -5,3 +5,5 @@ iso/custom-software.json
 qemu-source
 qemu-install
 shared/*.img
+# Codex CLI state
+.codex/
