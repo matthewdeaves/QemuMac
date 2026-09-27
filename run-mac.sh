@@ -376,7 +376,12 @@ build_display_and_input_args() {
         # zoom-to-fit makes the window freely resizable and scales the guest
         # framebuffer to match. Without it the window is locked to the guest
         # resolution, which looks tiny on a Retina display.
-        local cocoa_opts="cocoa,swap-opt-cmd=on"
+        # Command reaches the guest as Command, which is right for an Apple
+        # keyboard. swap-opt-cmd was on for every VM, so Command arrived as
+        # Option; KEYBOARD_SWAP_OPT_CMD=true keeps that for PC keyboards,
+        # whose Alt key sits where Command does.
+        local cocoa_opts="cocoa"
+        [[ "${KEYBOARD_SWAP_OPT_CMD:-false}" == true ]] && cocoa_opts+=",swap-opt-cmd=on"
         local zoom_active=false
         if [[ "${DISPLAY_ZOOM:-true}" == true ]]; then
             # zoom-to-fit is QEMU 8.2, which require_qemu_version has already

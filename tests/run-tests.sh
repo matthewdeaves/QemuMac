@@ -289,6 +289,14 @@ test_display_options() {
     # Zoom is a Cocoa feature; only assert it where Cocoa is in play.
     if [[ "$(uname -s)" == "Darwin" ]]; then
         assert_contains "$out" "zoom-to-fit=on" "zoom-to-fit is on by default on macOS"
+        # Command must reach the guest as Command on an Apple keyboard; it
+        # was swapped with Option on every VM.
+        assert_not_contains "$out" "swap-opt-cmd" "Command is not swapped with Option by default"
+        out=$(run_mac --config "$(make_vm disp_pc 'ARCH="ppc"' 'MACHINE_TYPE="mac99"' \
+            'RAM_SIZE="512M"' 'HD_SIZE="10G"' 'HD_IMAGE="vms/_test_disp_pc/hdd.qcow2"' \
+            'KEYBOARD_SWAP_OPT_CMD=true')")
+        assert_contains "$out" "swap-opt-cmd=on" "KEYBOARD_SWAP_OPT_CMD swaps them for a PC keyboard"
+        out=$(run_mac --config "$conf")
 
         echo 'DISPLAY_ZOOM=false' >> "$conf"
         out=$(run_mac --config "$conf")
