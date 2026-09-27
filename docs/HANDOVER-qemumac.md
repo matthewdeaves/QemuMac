@@ -29,26 +29,56 @@ disk; claim `qemu-tiger3d` through the fleet picker like real hardware.
 - ppcosxkvm's qemu submodule tracks `radeon-9700` and is at `b5d2ac4f4a`;
   bump it to the current tip when convenient.
 
+### Scope (GRANTS 2026-09-27, board 8, sha 44f8234)
+
+The user widened the takeover scope beyond VM tooling: improve the Radeon
+emulation in the user's forks, **correctness first, then speed**. Approved
+order: qemu#5, qemu#6 (correctness), then qemu#2, #3, #4 (speed). qemu#1
+stays Blocked as a watch item until someone reproduces it — don't chase it
+proactively.
+
+**Ownership of `qemu-install/` is decided: you own it.** After a fix lands
+on `radeon-9700`, the loop is: claim `qemu-tiger3d` through the picker,
+rebuild (`install-deps.sh` option 3), release the claim, then mail
+buildhost the source sha and `shasum -a 256` of `qemu-system-ppc` (not
+md5 — the manager asked for sha256 specifically on QemuMac#15). Never
+swap the install under someone else's claim.
+
 ### Open items (issues filed on matthewdeaves/qemu unless noted)
 
 1. [#1](https://github.com/matthewdeaves/qemu/issues/1) — one hang seen
    once (`ppc-mac-gpu: IB lost`), on a throwaway debug build; not
-   reproduced on `b5d2ac4f4a`. Watch for it.
+   reproduced on `b5d2ac4f4a`. Blocked/watch — don't work it until
+   reproduced.
 2. [#2](https://github.com/matthewdeaves/qemu/issues/2) — under Quake II,
    the guest rewrites identical bytes into bound-texture VRAM every frame;
-   find out why.
+   find out why. (speed, after #5/#6)
 3. [#3](https://github.com/matthewdeaves/qemu/issues/3) — vertex path
    (`draw_core`/`r300_pvs_run`) still 5-10% of the guest CPU thread.
+   (speed, after #5/#6)
 4. [#4](https://github.com/matthewdeaves/qemu/issues/4) — per-draw Metal
    encoding, CPU-side clears/resolves, full-frame display refresh.
+   (speed, after #5/#6)
 5. [#5](https://github.com/matthewdeaves/qemu/issues/5) — BQL held during
    scratch/fence poll sleep; reset race from an earlier Codex review.
+   (correctness, do first)
 6. [#6](https://github.com/matthewdeaves/qemu/issues/6) — Metal init
-   error-path leaks; unchecked mallocs in `r300_draw.c`.
+   error-path leaks; unchecked mallocs in `r300_draw.c`. (correctness, do
+   first)
 7. [QemuMac #15](https://github.com/matthewdeaves/QemuMac/issues/15) —
    rebuild `qemu-install` at the radeon-9700 tip for fleet benches.
+   **Board: Done. GitHub issue: still open, not yet closed.** Build itself
+   is finished and verified (see below) and the sha/hash were mailed to
+   buildhost for build-host#122 (buildhost confirmed receipt and logged
+   it). What's left: claim `qemu-tiger3d` (was busy with quakespasm/
+   buildhost bench runs each time this was attempted this session), boot
+   it with `qemu-vm.sh up`, confirm ssh on 2222 reaches the guest, post
+   one evidence comment on the GitHub issue with the source sha, the
+   `shasum -a 256` of `qemu-system-ppc`/`qemu-system-m68k` below, and the
+   ssh proof, then close the issue and release the claim. Don't rebuild
+   again first — the install already matches a824d07101.
 8. [QemuMac #16](https://github.com/matthewdeaves/QemuMac/issues/16) — no
-   LICENSE file; ask Matt which licence.
+   LICENSE file; waits on the user, not yours to act on.
 
 ## Build / test / profile / bench
 
@@ -95,7 +125,22 @@ SSH: key `~/.ssh/qemumac_rsa` (RSA — Tiger has no ed25519). Alias
 `PubkeyAcceptedAlgorithms +ssh-rsa`, and legacy `KexAlgorithms` — see
 `~/.ssh/config`.
 
-VM control: `old-mac-quakespasm/scripts/qemu-vm.sh up|down|status`.
+VM control: `old-mac-build-host/scripts/qemu-vm.sh up|down|status|doctor` —
+this is now the canonical copy (build-host#120, adopted from
+old-mac-quakespasm which owned it first); edit it there, never a port's
+copy. Claim `qemu-tiger3d` first with
+`old-mac-build-host/scripts/pick-bench-host.sh --acquire qemu-tiger3d
+<label>` (status with `--status qemu-tiger3d`), release with
+`--release qemu-tiger3d` when done.
+
+`qemu-install/` current build (this session, radeon-9700 tip
+`a824d07101`, QEMU 11.1.1, built and verified by `install-deps.sh` option
+3 — Radeon 9700 + Screamer both detected):
+
+```
+qemu-system-ppc  sha256=9d2c8624cc2246a8468dbafcbd2b02f334f9886da2f7c0a5cfe21e481631e96b
+qemu-system-m68k sha256=70c836fea234311d6a9f37db4b787891240bdb17cfaa11c1ac71182709ae9707
+```
 
 ## Latest numbers
 
