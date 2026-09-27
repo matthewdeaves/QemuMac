@@ -9,15 +9,17 @@ disk; claim `qemu-tiger3d` through the fleet picker like real hardware.
 ## radeon-9700 branch state
 
 - Repo: `github.com/matthewdeaves/qemu`, branch `radeon-9700`, on QEMU v11.1.1.
-- Tip: `a824d07101` (README update). The prior tip, `b5d2ac4f4a`, is the sha
-  to build into `qemu-install/` for fleet benches — build hosts should
-  rebuild at whichever of these is current; `README.radeon-9700.md`
-  describes the branch and how to rebase it onto a new release.
+- Tip: `7633ecb1eb`. `qemu-install/` (the fleet's build for benches, verified
+  on QemuMac#15) is still at `a824d07101`, four commits behind — see
+  "Today's work" below for what those four add; none are urgent for
+  correctness, so the next `install-deps.sh` rebuild whenever convenient
+  picks them up. `README.radeon-9700.md` describes the branch and how to
+  rebase it onto a new release.
 - Adds: ATI Radeon 9700 PRO for `mac99` (3D via Metal), Screamer audio,
   Cocoa fixes, PowerPC TCG speedups (host-FPU fast path, inline FPRF,
   lmw/stmw, lfs/stfs conversion). `git log --oneline v11.1.1..radeon-9700`
   lists every commit.
-- Today's work (`1b80c30115..b5d2ac4f4a`): quiet-by-default logging
+- Prior session (`1b80c30115..a824d07101`): quiet-by-default logging
   (`PPCGPU_DIAG`, `PPCGPU_RATE`) and dead code removed; a linear-fog fix
   (was greying out Quake II); `R300_DRAWLOG` records fog state;
   static-analysis fixes (Metal leaks in the legacy draw path, logger format
@@ -26,6 +28,16 @@ disk; claim `qemu-tiger3d` through the fleet picker like real hardware.
   vertex program decoded once per draw (1.99x interpreter speed); 2D blits
   from system RAM a page at a time; textures rehashed only on written
   pages; a sampler eviction use-after-free fix.
+- Today's work (`a824d07101..7633ecb1eb`): metal_init() error paths and
+  r300_draw.c's mallocs now release/NULL-check on failure (qemu#6);
+  r200_scratch_read_wait() drops the BQL during its fence-poll sleep,
+  guarded by a new `reset_gen` counter against a concurrent guest reset
+  (qemu#5); a PPCGPU_DIAG `[TEXWATCH]` log characterised qemu#2's
+  unchanged-byte texture rewrites (DXT1, whole mip chain — see issue for
+  the full writeup); draw_core() skips building the vertex program on
+  bypass draws and copies only the constants a program can read instead
+  of always 256 (qemu#3, one of several ideas there — not yet
+  re-profiled).
 - ppcosxkvm's qemu submodule tracks `radeon-9700` and is at `b5d2ac4f4a`;
   bump it to the current tip when convenient.
 
@@ -48,36 +60,59 @@ swap the install under someone else's claim.
 
 1. [#1](https://github.com/matthewdeaves/qemu/issues/1) — one hang seen
    once (`ppc-mac-gpu: IB lost`), on a throwaway debug build; not
-   reproduced on `b5d2ac4f4a`. Blocked/watch — don't work it until
-   reproduced.
-2. [#2](https://github.com/matthewdeaves/qemu/issues/2) — under Quake II,
-   the guest rewrites identical bytes into bound-texture VRAM every frame;
-   find out why. (speed, after #5/#6)
-3. [#3](https://github.com/matthewdeaves/qemu/issues/3) — vertex path
-   (`draw_core`/`r300_pvs_run`) still 5-10% of the guest CPU thread.
-   (speed, after #5/#6)
-4. [#4](https://github.com/matthewdeaves/qemu/issues/4) — per-draw Metal
-   encoding, CPU-side clears/resolves, full-frame display refresh.
-   (speed, after #5/#6)
-5. [#5](https://github.com/matthewdeaves/qemu/issues/5) — BQL held during
-   scratch/fence poll sleep; reset race from an earlier Codex review.
-   (correctness, do first)
-6. [#6](https://github.com/matthewdeaves/qemu/issues/6) — Metal init
-   error-path leaks; unchecked mallocs in `r300_draw.c`. (correctness, do
-   first)
-7. [QemuMac #15](https://github.com/matthewdeaves/QemuMac/issues/15) —
-   rebuild `qemu-install` at the radeon-9700 tip for fleet benches.
-   **Board: Done. GitHub issue: still open, not yet closed.** Build itself
-   is finished and verified (see below) and the sha/hash were mailed to
-   buildhost for build-host#122 (buildhost confirmed receipt and logged
-   it). What's left: claim `qemu-tiger3d` (was busy with quakespasm/
-   buildhost bench runs each time this was attempted this session), boot
-   it with `qemu-vm.sh up`, confirm ssh on 2222 reaches the guest, post
-   one evidence comment on the GitHub issue with the source sha, the
-   `shasum -a 256` of `qemu-system-ppc`/`qemu-system-m68k` below, and the
-   ssh proof, then close the issue and release the claim. Don't rebuild
-   again first — the install already matches a824d07101.
-8. [QemuMac #16](https://github.com/matthewdeaves/QemuMac/issues/16) — no
+   reproduced since. Blocked/watch — don't work it until reproduced.
+2. [#2](https://github.com/matthewdeaves/qemu/issues/2) — **Board: Ready.**
+   Root-caused with real evidence (PPCGPU_DIAG `[TEXWATCH]` log,
+   dd9b359dc6; 500 samples from a Quake II demo1.dm2 run on
+   qemu-tiger3d): every hit is a DXT1 (format 12) texture, the whole mip
+   chain is touched (not a header page), several textures in the same
+   VRAM heap show it together — consistent with the driver re-DMAing its
+   AGP-side master copy into VRAM on every bind rather than tracking
+   residency. Full writeup on the issue. Proposed next step (its own
+   ticket, not started): a per-cache-entry confidence counter to skip
+   re-hashing after N consecutive confirmed-unchanged binds.
+3. [#3](https://github.com/matthewdeaves/qemu/issues/3) — **Board: In
+   progress.** One sub-fix landed (7633ecb1eb): draw_core() skips
+   building the vertex program on bypass draws, and copies only the
+   constants a program can read (r300_pvs.c bounds every read by
+   max_const) instead of always 256. Verified with tests/r300/run.sh;
+   NOT yet re-profiled with qemu-profile.sh — qemu-tiger3d was contended
+   by other sessions' bench runs all afternoon. Do that next, then decide
+   whether the ticket's other ideas (batch vertices, reuse the per-draw
+   order/xv/outs/list/prov/sw allocations) are still worth it.
+4. [#4](https://github.com/matthewdeaves/qemu/issues/4) — untouched this
+   session; needs qemu-profile.sh data before picking which of the three
+   areas (Metal encoding, CPU clears/resolves, full-frame refresh) to
+   act on first.
+5. [#5](https://github.com/matthewdeaves/qemu/issues/5) — **Board:
+   Review.** BQL-hold fixed (b1a126b294): r200_scratch_read_wait() drops
+   the BQL for its sleep, guarded by a new `s->reset_gen` counter bumped
+   in ppc_mac_gpu_reset() so a reset landing in the unlocked window is
+   noticed rather than draining stale regs. The broader race (a Metal
+   completion thread's fence callback racing the reset's memset with no
+   BQL) was investigated and written up — real on paper, judged benign
+   in practice, not fixed (no repro). Verified with tests + a full Quake
+   II demo1 run (no hang/crash); did NOT specifically trigger a guest
+   reset mid-render to exercise reset_gen — do that before moving to
+   Done.
+6. [#6](https://github.com/matthewdeaves/qemu/issues/6) — **Board: Done.**
+   metal_init() error paths now release what was already created
+   (device_owned tracks the zero-copy-vs-legacy split); r300_draw.c's
+   malloc/calloc calls now NULL-check and free. Verified with tests +
+   a full Quake II demo1 run.
+7. [#7](https://github.com/matthewdeaves/qemu/issues/7) — **NEW, Triage,
+   needs manager approval.** Filed from old-mac-quake2#97 (routed here
+   per the takeover rule): Quake II's in-game `screenshot` TGA capture
+   comes back solid black on qemu-tiger3d while live rendering/timedemo
+   fps are fine on the same build. Likely glReadPixels/buffer-swap-
+   timing under the R300->Metal translation; not yet confirmed
+   VM-specific.
+8. [QemuMac #15](https://github.com/matthewdeaves/QemuMac/issues/15) —
+   **Done, issue closed.** Evidence posted this session: source sha
+   `a824d07101`, `shasum -a 256` of `qemu-system-ppc`/`qemu-system-m68k`
+   (below), a live ssh boot under a `pick-bench-host.sh` claim. Mailed
+   buildhost for build-host#122.
+9. [QemuMac #16](https://github.com/matthewdeaves/QemuMac/issues/16) — no
    LICENSE file; waits on the user, not yours to act on.
 
 ## Build / test / profile / bench
@@ -133,9 +168,10 @@ copy. Claim `qemu-tiger3d` first with
 <label>` (status with `--status qemu-tiger3d`), release with
 `--release qemu-tiger3d` when done.
 
-`qemu-install/` current build (this session, radeon-9700 tip
-`a824d07101`, QEMU 11.1.1, built and verified by `install-deps.sh` option
-3 — Radeon 9700 + Screamer both detected):
+`qemu-install/` current build (radeon-9700 tip `a824d07101`, QEMU 11.1.1,
+built and verified by `install-deps.sh` option 3 — Radeon 9700 + Screamer
+both detected; re-confirmed live today for QemuMac#15, four commits
+behind the branch tip above, not yet urgent to rebuild):
 
 ```
 qemu-system-ppc  sha256=9d2c8624cc2246a8468dbafcbd2b02f334f9886da2f7c0a5cfe21e481631e96b
