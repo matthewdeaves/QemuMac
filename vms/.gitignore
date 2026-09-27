@@ -4,6 +4,7 @@
 # But keep the default VM configurations
 !power_mac_g4_os9/
 !power_mac_g4_tiger/
+!power_mac_g4_tiger_3d/
 !power_mac_g4_leopard/
 !68k_quadra_800/
 !68k_quadra_800_os753/

@@ -24,6 +24,8 @@ That is why the shared disk is central rather than a convenience feature.
 
 `./install-deps.sh` installs all of it and finishes with a feature check. It offers two
 routes: your package manager, or a source build of the **latest stable QEMU release**.
+On macOS there is a third: a source build with an **ATI Radeon 9700** for 3D-accelerated
+Mac OS X — see [3D acceleration](#3d-acceleration-mac-os-x).
 On macOS the fast route is already the newest — Homebrew tracks QEMU closely. On Linux,
 apt gives you whatever your Ubuntu release froze on, so the source build is how you get
 current.
@@ -38,7 +40,7 @@ all tested in CI on every push, booting real 68k and PPC guests.
 ./run-mac.sh          # interactive menu: pick a VM, optionally attach an ISO
 ```
 
-Five VMs ship ready to use. On first boot each one downloads its installer and boots
+Six VMs ship ready to use. On first boot each one downloads its installer and boots
 from it; after that they boot from their hard disk.
 
 | VM | OS | Arch |
@@ -48,6 +50,7 @@ from it; after that they boot from their hard disk.
 | `power_mac_g4_os9` | Mac OS 9.2.2 | ppc |
 | `power_mac_g4_tiger` | Mac OS X 10.4 Tiger | ppc |
 | `power_mac_g4_leopard` | Mac OS X 10.5.6 Leopard | ppc |
+| `power_mac_g4_tiger_3d` | Mac OS X 10.4 Tiger, Radeon 9700 3D, sound (needs the Radeon build) | ppc |
 
 ## The dev loop
 
@@ -115,8 +118,8 @@ it is merged over the defaults.
 ./run-mac.sh --create-config my_mac
 ```
 
-Prompts for architecture, an optional default installer, and a description for the
-menu. Writes `vms/my_mac/my_mac.conf` with a unique MAC address.
+Prompts for architecture, an optional default installer, the display card (PPC), and a
+description for the menu. Writes `vms/my_mac/my_mac.conf` with a unique MAC address.
 
 ## Configuration reference
 
@@ -139,6 +142,7 @@ VM configs are plain bash. Everything except `ARCH` and `HD_IMAGE` has a default
 | `DISPLAY_ZOOM` | `true` | Resizable window that scales the guest (macOS only) |
 | `DISPLAY_SMOOTH` | `false` | Interpolated rather than nearest-neighbour scaling (macOS only) |
 | `DISPLAY_FULLSCREEN` | `false` | Start full screen |
+| `DISPLAY_GPU` | `std` | ppc only: `std` (QEMU VGA) or `radeon9700` (ATI Radeon 9700 PRO, [3D](#3d-acceleration-mac-os-x)) |
 | `AUDIO_BACKEND` | auto | `coreaudio` on macOS; PipeWire/Pulse, ALSA or `none` on Linux |
 
 ## Display
@@ -170,6 +174,35 @@ nearest-neighbour.
 a host with no sound card the Quadra's Apple Sound Chip fails to initialise and QEMU
 segfaults. A backend is therefore always chosen explicitly — set `AUDIO_BACKEND="none"`
 to force silence, or name a driver your build supports.
+
+## 3D acceleration (Mac OS X)
+
+`DISPLAY_GPU="radeon9700"` fits the PowerMac G4 with an **ATI Radeon 9700 PRO** instead
+of QEMU's plain VGA. Mac OS X's own ATI drivers run it unmodified, so OpenGL games,
+Quartz Extreme and Core Image all work; the card's 3D engine is translated to Metal on
+the host GPU. System Profiler reports an "ATI Radeon 9700 Pro" with Quartz Extreme and
+Core Image *Supported*. Tested with Tiger 10.4.11.
+
+It is not in upstream QEMU. It lives on the `radeon-9700` branch of
+[matthewdeaves/qemu](https://github.com/matthewdeaves/qemu/tree/radeon-9700), a few
+commits on top of a QEMU release, from
+[ppcosxkvm](https://github.com/matthewdeaves/ppcosxkvm) and
+[PowerEmu](https://github.com/Spartan0285/PowerEmu). The same build adds the PowerMac's
+**Screamer** sound chip, so Mac OS 9 and Mac OS X get sound; `run-mac.sh` wires it up
+whenever the QEMU has it.
+
+```bash
+./install-deps.sh     # choose "Build from source with the ATI Radeon 9700", then Local
+./run-mac.sh          # pick power_mac_g4_tiger_3d
+```
+
+- **macOS on Apple Silicon.** The 3D path is Metal, so the build is only offered on macOS.
+  Elsewhere the card would only show a framebuffer.
+- **Mac OS X only.** Mac OS 9 has no driver for the card; keep `std` for OS 9 VMs.
+- The firmware it needs — a patched OpenBIOS, the NDRV loader and a hardware-cursor NDRV,
+  all free software — ships in `roms/radeon/` (see its `README.md`).
+- `run-mac.sh` refuses to start a Radeon VM on a QEMU without the card, before creating
+  any disk, and says how to get one.
 
 ## Storage layout
 
@@ -215,10 +248,11 @@ run by hand on a matching host:
 ./tests/ci/linux-shared-disk.sh    # format, mount and deliver onto a real HFS+ volume
 ./tests/ci/macos-integration.sh    # brew install, framebuffer modes, real QEMU features
 ./tests/ci/linux-source-build.sh   # build QEMU from source, launch with it
+./tests/ci/macos-radeon-build.sh   # build the Radeon QEMU, its tests, boot a Radeon VM
 ```
 
-They skip cleanly on the wrong OS. The source build runs weekly and on demand rather
-than on every push, since it takes tens of minutes.
+They skip cleanly on the wrong OS. The two source builds run weekly and on demand rather
+than on every push, since they take tens of minutes.
 
 To run the same checks before pushing:
 
@@ -237,6 +271,14 @@ down, or run `./mount-shared.sh -u`.
 behind, so the next run retries. If the VM boots to a blank drive, delete its
 `hdd.qcow2` and run again.
 
+**"needs a QEMU with the ati-radeon-9700 device".** The VM has
+`DISPLAY_GPU="radeon9700"` but the QEMU found is a stock one. Run `./install-deps.sh` and
+choose the Radeon source build (Local), or set `DISPLAY_GPU="std"`.
+
+**Building QEMU fails at the last step on macOS with a `Rez` error.** A Mac OS toolchain
+(Retro68, MPW) put its own `Rez` first on `PATH`. `install-deps.sh` puts Apple's first for
+the build; a hand build needs `PATH=/usr/bin:$PATH make`.
+
 **Checksum mismatch.** The upstream archive changed. Verify the source, then update the
 `md5` in `iso/software-database.json`.
 
@@ -250,6 +292,6 @@ install-deps.sh     QEMU and dependency installer
 lib/common.sh       shared shell library
 tests/              behavioural test suite
 vms/                VM configs and disk images
-iso/  roms/         media and ROMs (gitignored)
+iso/  roms/         media and ROMs (gitignored); roms/radeon/ is the Radeon firmware
 shared/             the shared disk (gitignored)
 ```

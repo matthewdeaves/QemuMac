@@ -87,6 +87,28 @@ and `7400_v2.9`. Multi-threaded TCG is avoided — it is unstable for these targ
 - **`menu()` returns the sentinels `QUIT`/`BACK`/`NONE`**, not the option label, and
   runs its `select` with stdout redirected to stderr (bash emits a stray newline on EOF).
 
+## The Radeon 9700 build (`DISPLAY_GPU="radeon9700"`)
+
+An ATI Radeon 9700 PRO for PPC VMs that Mac OS X's own drivers accelerate (3D on Metal),
+plus the Screamer sound chip. Not upstream: it is the `radeon-9700` branch of
+`matthewdeaves/qemu` (`RADEON_QEMU_*` in `lib/common.sh`), a few commits rebased onto
+each QEMU release, built by `install-deps.sh`'s macOS-only third menu choice.
+
+- **Probe, never assume.** `qemu_has_radeon` / `qemu_has_screamer` decide what is passed;
+  stock QEMU has neither. Sound is keyed on the Screamer, not on `DISPLAY_GPU`.
+- **`require_radeon` runs before `preflight_checks`**, so a stock QEMU is refused before
+  any disk exists (the first-run invariant above).
+- The card is pinned to slot `0x0E` and added before every other PCI device: the
+  boot-command addresses `/pci@f2000000/QEMU,VGA@e`, and `find-device` fails silently
+  anywhere else.
+- `roms/radeon/` is committed firmware with `SHA1SUMS`; `-L roms/radeon` comes first so
+  its `openbios-ppc` and `qemu_vga.ndrv` replace QEMU's.
+- The test suite must never reach a real `./qemu-install`: it points
+  `QEMUMAC_QEMU_INSTALL_DIR` somewhere empty. Once it launched real VMs.
+- `install-deps.sh` runs `brew` with `</dev/null` (it ate queued menu answers), builds
+  with `/usr/bin` first on `PATH` (a Retro68 `Rez` breaks QEMU's signing step), and
+  passes `--disable-nettle` (QEMU 11.1 + Homebrew gnutls fails to compile with it).
+
 ## Display configuration
 
 Config variables: `DISPLAY_RES`, `DISPLAY_ZOOM`, `DISPLAY_SMOOTH`, `DISPLAY_FULLSCREEN`.

@@ -77,6 +77,18 @@ for a in "$@"; do
             exit 0 ;;
     esac
 done
+# Emulate `-device screamer,help`: only the Radeon build has the PowerMac
+# sound chip, so QEMU_STUB_NO_RADEON removes it too.
+prev=""
+for a in "$@"; do
+    if [ "$prev" = "-device" ] && [ "$a" = "screamer,help" ]; then
+        [ -z "${QEMU_STUB_NO_RADEON:-}" ] || { echo "'screamer' is not a valid device model name" >&2; exit 1; }
+        echo "screamer options:"
+        echo "  audiodev=<str>         - ID of an audiodev to use as a backend"
+        exit 0
+    fi
+    prev="$a"
+done
 # Emulate `-M <machine>,help`, which lists machine properties and exits.
 for a in "$@"; do
     case "$a" in
@@ -84,6 +96,17 @@ for a in "$@"; do
             echo "  audiodev=<string>      - Audiodev to use for default machine devices"
             exit 0 ;;
     esac
+done
+# Emulate `-device help`. QEMU_STUB_NO_RADEON poses as a build without the
+# ATI Radeon 9700, which is every QEMU but the Radeon source build.
+prev=""
+for a in "$@"; do
+    if [ "$prev" = "-device" ] && [ "$a" = "help" ]; then
+        echo 'name "VGA", bus PCI'
+        [ -z "${QEMU_STUB_NO_RADEON:-}" ] && echo 'name "ati-radeon-9700", bus PCI'
+        exit 0
+    fi
+    prev="$a"
 done
 # Reject display suboptions listed in QEMU_STUB_REJECT so tests can simulate
 # an older QEMU that lacks them.
@@ -118,8 +141,11 @@ STUB
 }
 
 # Run run-mac.sh with the stubs in front of PATH; echo the QEMU argv.
+# run-mac.sh prefers a local ./qemu-install build over PATH, so that is pointed
+# somewhere empty: with a real build present, the suite once launched real VMs.
 run_mac() {
-    PATH="$STUB_DIR:$PATH" ./run-mac.sh "$@" 2>/dev/null
+    PATH="$STUB_DIR:$PATH" QEMUMAC_QEMU_INSTALL_DIR="$STUB_DIR/no-install" \
+        ./run-mac.sh "$@" 2>/dev/null
 }
 
 # Run run-mac.sh and echo only its diagnostics (stderr).
@@ -128,7 +154,8 @@ run_mac() {
 # capture stdout instead.
 # shellcheck disable=SC2069
 run_mac_stderr() {
-    PATH="$STUB_DIR:$PATH" ./run-mac.sh "$@" 2>&1 >/dev/null
+    PATH="$STUB_DIR:$PATH" QEMUMAC_QEMU_INSTALL_DIR="$STUB_DIR/no-install" \
+        ./run-mac.sh "$@" 2>&1 >/dev/null
 }
 
 pass() { printf '  %s✓%s %s\n' "$G" "$N" "$1"; }
@@ -848,7 +875,8 @@ STUB
         'HD_SCSI_ID=6' 'CD_SCSI_ID=3')
     # PATH without pactl, and no /proc/asound on a macOS dev box, is exactly
     # the soundless-Linux case.
-    out=$(OSTYPE=linux-gnu PATH="$STUB_DIR:/usr/bin:/bin" ./run-mac.sh --config "$conf" 2>/dev/null)
+    out=$(OSTYPE=linux-gnu PATH="$STUB_DIR:/usr/bin:/bin" QEMUMAC_QEMU_INSTALL_DIR="$STUB_DIR/no-install" \
+        ./run-mac.sh --config "$conf" 2>/dev/null)
     if [[ -r /proc/asound/cards ]]; then
         printf '  %s-%s soundless-Linux case skipped (this host has a sound card)\n' "$Y" "$N"
     else
@@ -1264,6 +1292,55 @@ verify_installation local 2>&1 | grep -c "qemu-img not found"' 2>/dev/null)
             "macos=${macos_refs} linux=${linux_refs}"
     fi
 
+    # The Radeon route clones the Radeon branch; the plain one a release.
+    out=$(bash -c "source '$lib'
+git() { echo \"git \$*\"; }
+resolve_latest_stable_tag() { echo v99.0.0; }
+QEMU_SOURCE_DIR=\$(mktemp -d)/src
+clone_qemu_source radeon; clone_qemu_source stable" 2>/dev/null)
+    assert_contains "$out" "--branch radeon-9700 https://github.com/matthewdeaves/qemu.git" \
+        "the Radeon source build clones the radeon-9700 branch"
+    assert_contains "$out" "--branch v99.0.0 https://gitlab.com/qemu-project/qemu.git" \
+        "the plain source build still clones the latest release"
+
+    # Every optional library present must still configure: forcing VDE or
+    # nettle on broke every macOS source build (see build_and_install_qemu).
+    local src
+    src=$(mktemp -d)
+    printf '#!/bin/sh\nprintf "%%s\\n" "$@"\nexit 1\n' > "$src/configure"
+    chmod +x "$src/configure"
+    out=$(bash -c "source '$lib'
+pkg-config() { return 0; }
+QEMU_SOURCE_DIR='$src'
+build_and_install_qemu global macos" 2>/dev/null)
+    rm -rf "$src"
+    assert_contains "$out" "--enable-cocoa" "configure gets the optional features that are present"
+    assert_not_contains "$out" "--enable-vde" "configure never forces VDE on"
+    assert_contains "$out" "--disable-nettle" "configure turns nettle off"
+
+    # On macOS both make and make install sign with Rez, and must find Apple's
+    # first: a Retro68 Rez earlier on PATH failed the install step.
+    src=$(mktemp -d)
+    printf '#!/bin/sh\nexit 0\n' > "$src/configure"
+    chmod +x "$src/configure"
+    out=$(bash -c "source '$lib'
+pkg-config() { return 1; }
+sysctl() { echo 2; }
+make() { echo \"make \$* PATH=\${PATH%%:*}\"; }
+QEMU_SOURCE_DIR='$src'
+LOCAL_INSTALL_DIR='$src/prefix'
+build_and_install_qemu local macos" 2>/dev/null | grep '^make')
+    rm -rf "$src"
+    assert_eq "$out" "make -j2 PATH=/usr/bin
+make install PATH=/usr/bin" "macOS builds and installs with Apple's tools first on PATH"
+
+    # Homebrew reads stdin, and once ate the menu answers queued behind it.
+    out=$(printf 'next-answer\n' | bash -c "source '$lib'
+brew() { cat >/dev/null; }
+install_runtime_dependencies macos >/dev/null 2>&1
+read -r x; echo \"got:\$x\"" 2>/dev/null)
+    assert_eq "$out" "got:next-answer" "brew leaves the installer's stdin alone"
+
     rm -f "$lib"
 }
 
@@ -1322,6 +1399,104 @@ test_helpers() {
     assert_eq "$out" "1" "disk_in_use reports a missing file as free"
 }
 
+# The argv item following the first occurrence of option $2 in argv dump $1.
+arg_after() {
+    printf '%s\n' "$1" | awk -v opt="$2" 'found { print; exit } $0 == opt { found = 1 }'
+}
+
+# DISPLAY_GPU="radeon9700": the ATI Radeon 9700 PRO in place of QEMU's VGA.
+test_radeon_gpu() {
+    suite "ATI Radeon 9700 display card" || return 0
+
+    local base=('ARCH="ppc"' 'MACHINE_TYPE="mac99"' 'RAM_SIZE="512M"' 'HD_SIZE="10G"'
+                'MAC_ADDRESS="08:00:07:ab:cd:ef"')
+    local conf out err
+
+    conf=$(make_vm gpu_std "${base[@]}" 'HD_IMAGE="vms/_test_gpu_std/hdd.qcow2"')
+    out=$(run_mac --config "$conf")
+    assert_eq "$(arg_after "$out" -vga)" "std"   "defaults to QEMU's standard VGA"
+    assert_not_contains "$out" "ati-radeon-9700" "adds no Radeon unless asked"
+    assert_not_contains "$out" "roms/radeon"     "uses QEMU's own firmware by default"
+
+    conf=$(make_vm gpu_radeon "${base[@]}" 'HD_IMAGE="vms/_test_gpu_radeon/hdd.qcow2"' \
+        'DISPLAY_GPU="radeon9700"')
+    out=$(run_mac --config "$conf")
+    assert_contains "$out" "ati-radeon-9700,addr=0e.0,vgamem_mb=128,romfile=" \
+        "pins the Radeon to slot 0x0E with 128 MB and no ROM"
+    assert_contains "$out" "/pci@f2000000/QEMU,VGA@e" "the boot command finds the card at that slot"
+    assert_contains "$out" "ATY,R300"            "gives the card the 9700 PRO identity"
+    assert_contains "$out" "uni-north-pci.agp-capable=on" "enables AGP on the host bridge"
+    assert_contains "$out" "file=roms/radeon/ppc-ndrvloader" "loads the NDRV loader"
+    assert_eq "$(arg_after "$out" -vga)" "none"  "drops the standard VGA"
+    TESTS_RUN=$((TESTS_RUN + 1))
+    local first_l first_radeon
+    first_l=$(printf '%s\n' "$out" | grep -n -x -- "-L" | head -n1 | cut -d: -f1)
+    if [[ -n "$first_l" ]] && [[ "$(printf '%s\n' "$out" | sed -n "$((first_l + 1))p")" == "roms/radeon" ]]; then
+        pass "puts roms/radeon first on the firmware search path"
+    else
+        fail "puts roms/radeon first on the firmware search path"
+    fi
+    TESTS_RUN=$((TESTS_RUN + 1))
+    first_radeon=$(printf '%s\n' "$out" | grep -n "ati-radeon-9700" | head -n1 | cut -d: -f1)
+    local first_pci
+    first_pci=$(printf '%s\n' "$out" | grep -n -e "^sungem" -e "^pci-ohci" | head -n1 | cut -d: -f1)
+    if [[ -n "$first_radeon" && -n "$first_pci" && "$first_radeon" -lt "$first_pci" ]]; then
+        pass "adds the Radeon before any auto-placed PCI device"
+    else
+        fail "adds the Radeon before any auto-placed PCI device" "radeon at ${first_radeon:-?}, first PCI at ${first_pci:-?}"
+    fi
+
+    # Sound follows the Screamer, not the display card.
+    assert_contains "$out" "screamer.audiodev=audio0" "gives the Screamer a sound backend"
+    out=$(QEMU_STUB_NO_RADEON=1 run_mac --config "$(make_vm gpu_nosnd "${base[@]}" \
+        'HD_IMAGE="vms/_test_gpu_nosnd/hdd.qcow2"')")
+    assert_not_contains "$out" "screamer" "passes no Screamer to a QEMU without one"
+    assert_eq "$(arg_after "$out" -vga)" "std" "and still boots it with the standard VGA"
+
+    # A QEMU without the device must be refused before the disk is created,
+    # or the VM would look installed and skip its installer next time.
+    conf=$(make_vm gpu_nobuild "${base[@]}" 'HD_IMAGE="vms/_test_gpu_nobuild/hdd.qcow2"' \
+        'DISPLAY_GPU="radeon9700"')
+    err=$(QEMU_STUB_NO_RADEON=1 run_mac_stderr --config "$conf")
+    assert_contains "$err" "install-deps.sh" "a QEMU without the Radeon says how to get one"
+    assert_file_missing "vms/_test_gpu_nobuild/hdd.qcow2" "and creates no disk"
+
+    conf=$(make_vm gpu_m68k 'ARCH="m68k"' 'MACHINE_TYPE="q800"' 'RAM_SIZE="128M"' \
+        'HD_SIZE="2G"' 'PRAM_FILE="vms/_test_gpu_m68k/pram.img"' \
+        'HD_IMAGE="vms/_test_gpu_m68k/hdd.qcow2"' 'DISPLAY_GPU="radeon9700"')
+    err=$(run_mac_stderr --config "$conf")
+    assert_contains "$err" "PowerMac G4 card" "refuses the Radeon on a 68k VM"
+    assert_file_missing "vms/_test_gpu_m68k/hdd.qcow2" "and creates no disk"
+
+    conf=$(make_vm gpu_bad "${base[@]}" 'HD_IMAGE="vms/_test_gpu_bad/hdd.qcow2"' \
+        'DISPLAY_GPU="voodoo"')
+    err=$(run_mac_stderr --config "$conf")
+    assert_contains "$err" "unsupported DISPLAY_GPU" "rejects an unknown DISPLAY_GPU"
+
+    # The suite must never reach a real ./qemu-install build: it once launched
+    # real VMs that way. The override that prevents it must be honoured.
+    local fake
+    fake=$(mktemp -d)
+    mkdir -p "$fake/bin"
+    printf '#!/bin/sh\ncase "$*" in *--version*) echo "QEMU emulator version 11.1.1";; *help*) echo "name \\"ati-radeon-9700\\"";; *) echo FAKE-LOCAL-BUILD;; esac\n' \
+        > "$fake/bin/qemu-system-ppc"
+    chmod +x "$fake/bin/qemu-system-ppc"
+    ln -s "$STUB_DIR/qemu-img" "$fake/bin/qemu-img"
+    conf=$(make_vm gpu_local "${base[@]}" 'HD_IMAGE="vms/_test_gpu_local/hdd.qcow2"')
+    out=$(PATH="$STUB_DIR:$PATH" QEMUMAC_QEMU_INSTALL_DIR="$fake" ./run-mac.sh --config "$conf" 2>/dev/null)
+    rm -rf "$fake"
+    assert_eq "$out" "FAKE-LOCAL-BUILD" "QEMUMAC_QEMU_INSTALL_DIR selects the local build"
+
+    # The firmware ships in the repo; its checksums catch a bad copy.
+    TESTS_RUN=$((TESTS_RUN + 1))
+    if (cd roms/radeon && shasum -c SHA1SUMS >/dev/null 2>&1); then
+        pass "roms/radeon firmware matches SHA1SUMS"
+    else
+        fail "roms/radeon firmware matches SHA1SUMS"
+    fi
+
+}
+
 # ---------------------------------------------------------------------------
 
 main() {
@@ -1337,6 +1512,7 @@ main() {
     test_database_integrity
     test_m68k_args
     test_ppc_args
+    test_radeon_gpu
     test_display_options
     test_qemu_version_floor
     test_audio_backend

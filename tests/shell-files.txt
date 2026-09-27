@@ -13,6 +13,7 @@ tests/ci/linux-integration.sh
 tests/ci/linux-shared-disk.sh
 tests/ci/macos-integration.sh
 tests/ci/linux-source-build.sh
+tests/ci/macos-radeon-build.sh
 tests/ci/install-test-deps.sh
 tests/ci/check-shellcheck.sh
 tests/ci/check-bash32.sh

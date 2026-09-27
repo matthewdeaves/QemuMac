@@ -70,6 +70,18 @@ generate_config() {
         [[ "$found" == true ]] || die "Selection '${installer_choice}' did not match any installer"
     fi
 
+    # Display card (PPC only). The Radeon is accelerated by Mac OS X's own ATI
+    # drivers but needs the Radeon QEMU build (./install-deps.sh).
+    local display_gpu="std"
+    if [[ "$arch" == "ppc" ]]; then
+        local gpu_choice
+        gpu_choice=$(menu "Choose a display card:" \
+            "Standard VGA - any Mac OS, no acceleration" \
+            "ATI Radeon 9700 PRO - Mac OS X OpenGL and Quartz Extreme (needs the Radeon QEMU build)")
+        [[ "$gpu_choice" == "QUIT" ]] && exit 0
+        [[ "$gpu_choice" == "ATI"* ]] && display_gpu="radeon9700"
+    fi
+
     local description
     description=$(ask_text "Description for the VM menu" "$vm_name")
 
@@ -122,6 +134,9 @@ MAC_ADDRESS="${mac_addr}"
 DISPLAY_RES="1024x768x32"
 # Resizable window that scales the guest display (macOS Cocoa only).
 DISPLAY_ZOOM=true
+# Display card: "std" (QEMU VGA) or "radeon9700" (ATI Radeon 9700 PRO, 3D in
+# Mac OS X; needs the Radeon QEMU build from ./install-deps.sh).
+DISPLAY_GPU="${display_gpu}"
 $([ -n "$default_installer_line" ] && echo "$default_installer_line")
 EOL
     fi
@@ -471,6 +486,60 @@ build_m68k_args() {
     fi
 }
 
+# The display card. By default QEMU's standard VGA, driven by the QEMU NDRV:
+# every Mac OS runs it, unaccelerated. DISPLAY_GPU="radeon9700" fits an ATI
+# Radeon 9700 PRO instead, which Mac OS X's own ATI drivers accelerate.
+add_ppc_display_args() {
+    local display_res="$1"
+
+    if [[ "${DISPLAY_GPU:-std}" != "radeon9700" ]]; then
+        QEMU_ARGS+=(-vga std -g "$display_res")
+        return
+    fi
+
+    info "Display card: ATI Radeon 9700 PRO (${RADEON_VRAM_MB} MB)"
+    # OpenBIOS builds a display node, and loads the NDRV, only for the PCI IDs
+    # in its built-in table; the copy in roms/radeon has that entry patched to
+    # the Radeon (1002:4E44). -L puts roms/radeon first on the firmware search
+    # path, so it and the hardware-cursor NDRV (qemu_vga.ndrv) replace QEMU's.
+    #
+    # The card is pinned to PCI slot 0x0E because the boot command below finds
+    # its node by path, and find-device fails silently anywhere else. It gives
+    # the node what the card's FCode ROM would have: the VRAM size, and the
+    # 9700 PRO identity that System Profiler reports.
+    local vram_hex boot
+    vram_hex=$(printf '%x' $((RADEON_VRAM_MB * 1048576)))
+    boot="\" /pci@f2000000/QEMU,VGA@e\" ['] find-device catch 0= if"
+    boot+=" h# ${vram_hex} encode-int \" VRAM,totalsize\" property"
+    boot+=" \" ATY,R300\" encode-string \" model\" property"
+    boot+=" \" 113-A06500-124\" encode-string \" ATY,Rom#\" property"
+    boot+=" \" 109-A06501-00\" encode-string \" ATY,Card#\" property"
+    boot+=" \" 1.88\" encode-string \" ATY,Fcode\" property"
+    boot+=" device-end then init-program go"
+
+    QEMU_ARGS+=(
+        -L "$RADEON_FIRMWARE_DIR"
+        -vga none
+        -device "loader,addr=0x4000000,file=${RADEON_FIRMWARE_DIR}/ppc-ndrvloader"
+        -prom-env "boot-command=${boot}"
+        -global "uni-north-pci.agp-capable=on"
+        -device "${RADEON_DEVICE},addr=0e.0,vgamem_mb=${RADEON_VRAM_MB},romfile="
+        -g "$display_res"
+    )
+}
+
+# DISPLAY_GPU="radeon9700" needs a QEMU built with the Radeon and the firmware
+# in roms/radeon. Checked before preflight_checks creates the disk, so a
+# missing build cannot leave a VM looking installed.
+require_radeon() {
+    qemu_has_radeon "$1" || die "DISPLAY_GPU=\"radeon9700\" needs a QEMU with the ${RADEON_DEVICE} device, and '${1}' does not have it.
+       Run ./install-deps.sh and choose the Radeon 9700 source build."
+    local f
+    for f in openbios-ppc ppc-ndrvloader qemu_vga.ndrv; do
+        require_file "${RADEON_FIRMWARE_DIR}/${f}" "Radeon firmware is missing"
+    done
+}
+
 build_ppc_args() {
     info "Building QEMU arguments for ppc (PowerMac G4)..."
     local machine_string="${MACHINE_TYPE},via=pmu"
@@ -495,8 +564,23 @@ build_ppc_args() {
         -M "$machine_string"
         -cpu 7400_v2.9
         -m "$RAM_SIZE"
-        -vga std
-        -g "$display_res"
+    )
+    # Before any other PCI device, so nothing is auto-assigned the
+    # Radeon's slot first.
+    add_ppc_display_args "$display_res"
+
+    # Sound, where the QEMU has a PowerMac sound chip: only the Radeon build
+    # does, so it is probed rather than assumed.
+    if qemu_has_screamer "$qemu_bin_path"; then
+        local audiodev
+        audiodev=$(select_audiodev)
+        info "Audio backend: ${audiodev} (Screamer)"
+        QEMU_ARGS+=(
+            -audiodev "${audiodev},id=audio0"
+            -global "screamer.audiodev=audio0"
+        )
+    fi
+    QEMU_ARGS+=(
         -netdev "user,id=net0"
         -device "sungem,netdev=net0${mac_prop}"
         -device "pci-ohci,id=ohci"
@@ -685,7 +769,17 @@ main() {
         *) die "Config '${CONFIG_FILE}' has unsupported ARCH=\"${ARCH}\" (expected \"m68k\" or \"ppc\")" ;;
     esac
 
-    local LOCAL_QEMU_INSTALL_DIR="qemu-install"
+    case "${DISPLAY_GPU:-std}" in
+        std) ;;
+        radeon9700)
+            [[ "$ARCH" == "ppc" ]] || die "Config '${CONFIG_FILE}' sets DISPLAY_GPU=\"radeon9700\", a PowerMac G4 card, on ARCH=\"${ARCH}\""
+            ;;
+        *) die "Config '${CONFIG_FILE}' has unsupported DISPLAY_GPU=\"${DISPLAY_GPU}\" (expected \"std\" or \"radeon9700\")" ;;
+    esac
+
+    # QEMUMAC_QEMU_INSTALL_DIR exists for the test suite, whose stub QEMU on
+    # PATH would otherwise lose to a real ./qemu-install build.
+    local LOCAL_QEMU_INSTALL_DIR="${QEMUMAC_QEMU_INSTALL_DIR:-qemu-install}"
     local QEMU_EXECUTABLE="qemu-system-${ARCH}"
     local qemu_bin_path=""
     local qemu_img_path="qemu-img"
@@ -703,6 +797,7 @@ main() {
     fi
 
     require_qemu_version "$qemu_bin_path"
+    [[ "${DISPLAY_GPU:-std}" == "radeon9700" ]] && require_radeon "$qemu_bin_path"
 
     preflight_checks
 

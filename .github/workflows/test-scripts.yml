@@ -98,6 +98,18 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: ./tests/ci/linux-source-build.sh
 
+  # The ATI Radeon 9700 build (DISPLAY_GPU="radeon9700"): install-deps.sh's
+  # macOS-only third route, the device's own tests, and a real boot of the
+  # command line run-mac.sh builds. A source build, so manual / weekly too.
+  radeon-build:
+    name: Build the Radeon QEMU on macOS (manual / weekly)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./tests/ci/macos-radeon-build.sh
+
   database:
     name: Software database URLs
     runs-on: ubuntu-latest

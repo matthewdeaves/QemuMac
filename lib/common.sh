@@ -235,6 +235,18 @@ require_commands() {
 # have without building one, so nothing is gained by supporting less.
 QEMU_MIN_VERSION="8.2"
 
+# ATI Radeon 9700 PRO (DISPLAY_GPU="radeon9700")
+#
+# Not in upstream QEMU: it lives on one branch of a QEMU fork, kept rebased
+# onto QEMU releases, which install-deps.sh can build. Mac OS X's own ATI
+# drivers run it, giving Quartz Extreme, Core Image and OpenGL. Its 3D engine
+# is translated to Metal, so 3D needs a macOS host; elsewhere it only scans out.
+RADEON_QEMU_GIT_URL="https://github.com/matthewdeaves/qemu.git"
+RADEON_QEMU_BRANCH="radeon-9700"
+RADEON_DEVICE="ati-radeon-9700"
+RADEON_FIRMWARE_DIR="roms/radeon"
+RADEON_VRAM_MB=128
+
 # True when version $1 is at least version $2.
 version_at_least() {
     [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
@@ -246,6 +258,24 @@ version_at_least() {
 # sentence against a version number.
 qemu_version() {
     "$1" --version 2>/dev/null | head -n1 | sed -nE 's/.*version ([0-9][0-9.]*).*/\1/p'
+}
+
+# True when this QEMU binary has the Radeon device. The probe output is
+# captured before grepping, so pipefail cannot turn its exit status into
+# the answer.
+qemu_has_radeon() {
+    local devices
+    devices=$("$1" -device help 2>&1 || true)
+    printf '%s' "$devices" | grep -qF "\"${RADEON_DEVICE}\""
+}
+
+# True when this QEMU has the Screamer, the PowerMac sound chip. Upstream QEMU
+# has no PowerMac sound; the Radeon build carries it. `-device screamer,help`
+# lists its properties even though it cannot be added by hand.
+qemu_has_screamer() {
+    local props
+    props=$("$1" -device screamer,help 2>&1 || true)
+    printf '%s' "$props" | grep -q "audiodev="
 }
 
 detect_os() {

@@ -20,6 +20,13 @@ LOCAL_INSTALL_DIR="qemu-install"
 # Assembled by build_and_install_qemu and add_if_available
 CONFIGURE_ARGS=()
 
+# Homebrew reads stdin while it builds and upgrades, so without </dev/null it
+# swallows the answers queued for the menus that follow: `printf '3\n1\n' |
+# ./install-deps.sh` reached the second menu with nothing left and quit.
+brew_install() {
+    brew install "$@" </dev/null
+}
+
 # ============================================================================
 # Runtime dependencies (needed by the QemuMac scripts themselves)
 # ============================================================================
@@ -31,7 +38,7 @@ install_runtime_dependencies() {
 
     if [[ "$os_type" == "macos" ]]; then
         info "Installing via Homebrew: jq, hfsutils"
-        brew install jq hfsutils || error "Some runtime dependencies failed to install"
+        brew_install jq hfsutils || error "Some runtime dependencies failed to install"
     else
         info "Installing via apt: jq, curl, unzip, hfsprogs"
         sudo apt-get update
@@ -55,7 +62,7 @@ install_qemu_from_packages() {
 
     if [[ "$os_type" == "macos" ]]; then
         info "Installing QEMU via Homebrew..."
-        brew install qemu || die "Failed to install QEMU via Homebrew"
+        brew_install qemu || die "Failed to install QEMU via Homebrew"
     else
         info "Installing QEMU via apt..."
         # qemu-system-misc provides qemu-system-m68k on Debian/Ubuntu.
@@ -87,12 +94,12 @@ install_build_dependencies() {
         fi
 
         info "Installing core build toolchain..."
-        brew install libffi gettext glib pkg-config pixman ninja meson \
+        brew_install libffi gettext glib pkg-config pixman ninja meson \
             || die "Failed to install core build dependencies"
 
         info "Installing optional feature dependencies..."
         # Each is probed by pkg-config at configure time, so failures are not fatal
-        brew install sdl2 sdl2_image libusb vde nettle gnutls libssh libslirp jpeg libpng || true
+        brew_install sdl2 sdl2_image libusb gnutls libssh libslirp jpeg libpng || true
     else
         info "Installing core build toolchain..."
         sudo apt-get update
@@ -123,7 +130,6 @@ install_build_dependencies() {
             libasound2-dev \
             libpipewire-0.3-dev \
             libslirp-dev \
-            libvdeplug-dev \
             libgnutls28-dev \
             nettle-dev \
             libssh-dev \
@@ -149,28 +155,37 @@ resolve_latest_stable_tag() {
         | tail -n1
 }
 
+# $1 = "stable" for the latest QEMU release, or "radeon" for the branch that
+# carries the ATI Radeon 9700 on top of a QEMU release (RADEON_QEMU_* in
+# lib/common.sh).
 clone_qemu_source() {
+    local flavour="${1:-stable}"
     header "Downloading QEMU Source"
 
-    local stable_tag
-    stable_tag=$(resolve_latest_stable_tag || true)
-
-    if [[ -z "$stable_tag" ]]; then
-        die "Could not determine the latest stable QEMU release from ${QEMU_GIT_URL}"
+    local url="$QEMU_GIT_URL" ref
+    if [[ "$flavour" == "radeon" ]]; then
+        url="$RADEON_QEMU_GIT_URL"
+        ref="$RADEON_QEMU_BRANCH"
+        info "QEMU with the ATI Radeon 9700: ${url} (${ref})"
+    else
+        ref=$(resolve_latest_stable_tag || true)
+        if [[ -z "$ref" ]]; then
+            die "Could not determine the latest stable QEMU release from ${QEMU_GIT_URL}"
+        fi
+        info "Latest stable release: ${ref}"
     fi
-    info "Latest stable release: ${stable_tag}"
 
     if dir_exists "$QEMU_SOURCE_DIR"; then
         info "Removing existing QEMU source directory..."
         rm -rf "$QEMU_SOURCE_DIR"
     fi
 
-    # Shallow clone of the tag only - a full QEMU history is over 1GB
-    info "Cloning QEMU ${stable_tag}..."
-    git clone --depth 1 --branch "$stable_tag" "$QEMU_GIT_URL" "$QEMU_SOURCE_DIR" \
+    # Shallow clone of the one ref - a full QEMU history is over 1GB
+    info "Cloning QEMU ${ref}..."
+    git clone --depth 1 --branch "$ref" "$url" "$QEMU_SOURCE_DIR" \
         || die "Failed to clone QEMU repository"
 
-    success "QEMU ${stable_tag} downloaded"
+    success "QEMU ${ref} downloaded"
 }
 
 # Append a configure flag to CONFIGURE_ARGS only when one of the named
@@ -233,14 +248,17 @@ build_and_install_qemu() {
         CONFIGURE_ARGS+=("--audio-drv-list=${audio_drivers}")
     fi
 
-    # Networking, crypto, image formats
-    CONFIGURE_ARGS+=("--enable-slirp")
+    # Networking, crypto, image formats. VDE is left to configure's own
+    # detection: Homebrew's vde has no libvdeplug.h, so forcing it on failed
+    # every macOS source build. nettle is turned off outright: with it, QEMU
+    # 11.1 compiles its gnutls TLS code without gnutls's include path, which
+    # Homebrew keeps outside /usr/include, and configure would pick nettle up
+    # by itself. QemuMac uses neither VDE networking nor QEMU's crypto.
+    CONFIGURE_ARGS+=("--enable-slirp" "--disable-nettle")
     add_if_available "--enable-gnutls" gnutls
-    add_if_available "--enable-nettle" nettle
     add_if_available "--enable-png" libpng libpng16
     add_if_available "--enable-libusb" libusb-1.0
     add_if_available "--enable-usb-redir" libusbredirparser-0.5
-    add_if_available "--enable-vde" vdeplug
     add_if_available "--enable-libssh" libssh
 
     info "Configuring QEMU build..."
@@ -256,14 +274,21 @@ build_and_install_qemu() {
         num_jobs=$(nproc)
     fi
 
+    # The macOS build and install both sign the binaries with Apple's Rez,
+    # found on PATH. A Mac OS toolchain's Rez (Retro68, MPW) earlier on PATH
+    # takes different arguments and fails at that last step, so Apple's goes
+    # first for both.
+    local build_path="$PATH"
+    [[ "$os_type" == "macos" ]] && build_path="/usr/bin:${PATH}"
+
     info "Building QEMU with $num_jobs parallel jobs..."
-    make -j"$num_jobs" || die "QEMU build failed"
+    PATH="$build_path" make -j"$num_jobs" || die "QEMU build failed"
 
     info "Installing QEMU..."
     if [[ "$install_type" == "local" ]]; then
-        make install || die "QEMU installation failed"
+        PATH="$build_path" make install || die "QEMU installation failed"
     else
-        sudo make install || die "QEMU installation failed"
+        sudo env PATH="$build_path" make install || die "QEMU installation failed"
     fi
 
     cd ..
@@ -282,7 +307,7 @@ qemu_probe() {
 }
 
 check_qemu_features() {
-    local qemu_m68k="$1"
+    local qemu_m68k="$1" qemu_ppc="$2"
 
     header "Feature Check"
 
@@ -322,10 +347,18 @@ check_qemu_features() {
             success "✓ Resizable scaling window (DISPLAY_ZOOM) supported"
         fi
     fi
+
+    # Only the Radeon source build has it; its absence is normal.
+    if qemu_has_radeon "$qemu_ppc"; then
+        success "✓ ATI Radeon 9700 PRO available (DISPLAY_GPU=\"radeon9700\")"
+    else
+        info "ATI Radeon 9700 PRO not in this build - Mac OS X 3D needs the Radeon source build"
+    fi
 }
 
+# $2 = "radeon" when the Radeon build was installed, which must then have it.
 verify_installation() {
-    local install_type="$1"
+    local install_type="$1" flavour="${2:-stable}"
 
     header "Verifying Installation"
 
@@ -372,8 +405,13 @@ verify_installation() {
         error "✗ no md5sum or md5 - download checksums cannot be verified"
     fi
 
+    if [[ "$flavour" == "radeon" ]] && ! qemu_has_radeon "${prefix}qemu-system-ppc"; then
+        error "✗ qemu-system-ppc was built without the ${RADEON_DEVICE} device"
+        ok=false
+    fi
+
     [[ "$ok" == true ]] || return 1
-    check_qemu_features "${prefix}qemu-system-m68k"
+    check_qemu_features "${prefix}qemu-system-m68k" "${prefix}qemu-system-ppc"
 }
 
 # ============================================================================
@@ -384,8 +422,9 @@ usage() {
     echo "Usage: $0 [-h]"
     echo ""
     echo "Installs QEMU and the tools QemuMac needs, on macOS or Ubuntu/Debian."
-    echo "Runs interactively; you choose between a package-manager install and"
-    echo "a source build of the latest stable QEMU release."
+    echo "Runs interactively; you choose between a package-manager install, a"
+    echo "source build of the latest stable QEMU release, and (on macOS) a source"
+    echo "build with the ATI Radeon 9700 for Mac OS X 3D (DISPLAY_GPU=\"radeon9700\")."
 }
 
 main() {
@@ -415,11 +454,21 @@ main() {
     fi
     info "QemuMac needs QEMU ${QEMU_MIN_VERSION} or later."
 
+    # The Radeon's 3D engine runs on Metal, so its build is only offered where
+    # it does something. Appended last, so the other choices keep their numbers.
+    local -a methods=(
+        "Package manager - fast, uses the version your OS ships"
+        "Build from source - latest stable QEMU release, takes 20-40 minutes"
+    )
+    [[ "$os_type" == "macos" ]] && methods+=(
+        "Build from source with the ATI Radeon 9700 - Mac OS X OpenGL and Quartz Extreme, takes 20-40 minutes")
+
     local method
-    method=$(menu "How should QEMU be installed?" \
-        "Package manager - fast, uses the version your OS ships" \
-        "Build from source - latest stable QEMU release, takes 20-40 minutes")
+    method=$(menu "How should QEMU be installed?" "${methods[@]}")
     [[ "$method" == "QUIT" ]] && exit 0
+
+    local flavour="stable"
+    [[ "$method" == *"Radeon"* ]] && flavour="radeon"
 
     install_runtime_dependencies "$os_type"
 
@@ -435,11 +484,11 @@ main() {
         [[ "$location" == "Local"* ]] && install_type="local"
 
         install_build_dependencies "$os_type"
-        clone_qemu_source
+        clone_qemu_source "$flavour"
         build_and_install_qemu "$install_type" "$os_type"
     fi
 
-    verify_installation "$install_type" || die "Installation is incomplete - see the errors above"
+    verify_installation "$install_type" "$flavour" || die "Installation is incomplete - see the errors above"
 
     header "Installation Complete"
     if [[ "$install_type" == "local" ]]; then
