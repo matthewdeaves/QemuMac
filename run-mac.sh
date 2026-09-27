@@ -815,6 +815,18 @@ main() {
 
     declare -a QEMU_ARGS
     QEMU_ARGS=("$qemu_bin_path")
+
+    # A unix-socket HMP monitor alongside the display, so the fleet can
+    # screendump a live VM (e.g. `echo screendump out.ppm | nc -U
+    # monitor.sock`) without touching the interactive session. Keyed to
+    # the VM's own directory so two VMs never share a path; the display
+    # itself still gets its own built-in monitor (Ctrl-Alt-2) too, since
+    # this is an additional chardev, not a replacement.
+    local monitor_sock
+    monitor_sock="$(dirname "$HD_IMAGE")/monitor.sock"
+    rm -f "$monitor_sock"
+    QEMU_ARGS+=(-monitor "unix:${monitor_sock},server,nowait")
+
     build_display_and_input_args
     # if/else, not `test && a || b`: if build_m68k_args ever returned
     # non-zero, the || branch would also run and append PPC devices to an
