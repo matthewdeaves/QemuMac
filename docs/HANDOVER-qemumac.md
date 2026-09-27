@@ -34,8 +34,8 @@ disk; claim `qemu-tiger3d` through the fleet picker like real hardware.
 1. [#1](https://github.com/matthewdeaves/qemu/issues/1) — one hang seen
    once (`ppc-mac-gpu: IB lost`), on a throwaway debug build; not
    reproduced on `b5d2ac4f4a`. Watch for it.
-2. [#2](https://github.com/matthewdeaves/qemu/issues/2) — Quake II's
-   driver rewrites identical bytes into bound-texture VRAM every frame;
+2. [#2](https://github.com/matthewdeaves/qemu/issues/2) — under Quake II,
+   the guest rewrites identical bytes into bound-texture VRAM every frame;
    find out why.
 3. [#3](https://github.com/matthewdeaves/qemu/issues/3) — vertex path
    (`draw_core`/`r300_pvs_run`) still 5-10% of the guest CPU thread.
@@ -57,15 +57,16 @@ disk; claim `qemu-tiger3d` through the fleet picker like real hardware.
 # qemu-install/ from qemu-source/.
 ./install-deps.sh
 
-# Fast incremental build during dev:
-cd qemu/build && PATH="/usr/bin:$PATH" ninja qemu-system-ppc   # Apple tools first: a Retro68 Rez elsewhere breaks the build
+# Fast incremental build during dev, in the fork's checkout (~/Documents/qemu):
+cd ~/Documents/qemu/build && PATH="/usr/bin:$PATH" ninja qemu-system-ppc   # Apple tools first: a Retro68 Rez elsewhere breaks the build
 
-# Offline 3D tests (macOS, needs Metal):
-sh tests/r300/run.sh
+# Offline 3D tests (macOS, needs Metal), in the fork's checkout:
+sh ~/Documents/qemu/tests/r300/run.sh
 
 # Run a dev build against the VM (QEMUMAC_QEMU_INSTALL_DIR points at a dir
 # with bin/qemu-system-ppc, bin/qemu-img symlinked to the qemu build dir):
-QEMUMAC_QEMU_INSTALL_DIR=/path/to/dev-install ./run-mac.sh vms/power_mac_g4_tiger_3d
+QEMUMAC_QEMU_INSTALL_DIR=/path/to/dev-install ./run-mac.sh --config vms/power_mac_g4_tiger_3d/power_mac_g4_tiger_3d.conf
+# (qemu-vm.sh up passes the same variable through)
 
 # CI:
 tests/ci/macos-radeon-build.sh
