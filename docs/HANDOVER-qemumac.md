@@ -1,5 +1,58 @@
 # Handover: qemumac fleet agent
 
+## 2026-09-28 session: qemu#23 triage confirmed no-action, qemu#1 A/B bench done
+
+Picked up from the 2026-09-28-1610 checkpoint. Startup queue said "Next:
+qemu#23", but that ticket already carries its own complete triage deliverable
+(three upstream perf candidates evaluated, one ruled out as already covered)
+plus a prior-session comment: "No action this round... out of scope for this
+takeover round per standing instruction... leaving in Measuring for the
+manager to split into per-feature tickets when one gets prioritized." Nothing
+for me to add -- confirmed and moved on rather than re-doing finished work.
+
+**Incident, self-caused, recovered clean:** diagnosing qemu-tiger3d's
+ssh-stalled state (build-host#139 pattern -- QEMU monitor alive, guest ssh
+dead) via the HMP monitor socket, appended `quit` to a `screendump` command
+meaning to just end the `nc` session. In HMP, `quit` terminates the whole
+`qemu-system-ppc` process -- killed the VM outright instead of closing the
+connection. No lasting harm (recovery was already "down then up" per the
+picker's own advice, and `qemu-vm.sh up` + `doctor` came back fully green,
+all 5 games still present) but it skipped the graceful TERM/wait/KILL
+sequence. Mailed buildhost for their build-host#139 tracking. Saved to memory
+so it isn't repeated: never send `quit` to a monitor socket to end a session.
+
+**qemu#1's outstanding per-install A/B, done.** Both the pre-fix baseline
+(88df5f6dad, sha256 `052a41a0bf5c92f457946316252188326dc0b1704744f0d4316d1c68731b680f`)
+and the reference Quake II v2.15.1 artefact from the prior session's own
+handover survived under the session scratchpad (lucky -- copied to
+`~/oldmac/qemu1-scratch/` this time so it survives a restart for real). First
+attempt: **HOST-OVERLOADED** (bench-compare.sh's own verdict) -- an unrelated
+personal Xcode test job (`SignalboxMetalTests`) was hammering the host
+40-79% CPU throughout, not mine to interrupt; posted for the record, not
+claimed as proof. Waited for it to quiet (one Bash `run_in_background` poll
+loop on 5m load < 6.0, resolved in under a minute) and reran the full 5
+rounds/side, claim released between sides for quakespasm: **candidate
+(70fed3035f, the already-deployed build) costs nothing measurable against
+baseline** -- mean 80.4fps vs 77.9fps, diff -2.53fps, inside the 3.50fps
+noise band (bench-compare's own INCONCLUSIVE label is just the known
+1-decimal-fps identical-samples technicality, not a stale read). Posted both
+results to qemu#1. VM left on the production `qemu-install` (70fed3035f,
+doctor green), claim released.
+
+qemu#1 not closed -- standing live-sign-off requirement, and the actual hang
+root cause is still open. Checked the armed IB-boundary diagnostic log
+(`$TMPDIR/qemu-vm-power_mac_g4_tiger_3d.log`) after ~20 rounds of demo1
+traffic across both A/B legs: zero natural deferrals captured, consistent
+with how rare the earlier sessions found the trigger. Nothing new to chase
+without a live repro.
+
+Also cleaned up a stray untracked `build-install/` (441M) in
+`~/Documents/qemu` -- leftover debris from an earlier build attempt, not a
+git worktree, nothing had it open, safe to remove.
+
+Board otherwise unchanged: qemu#13/#14 still Blocked (untouched, per
+standing guidance), qemu#9 (design ticket, not yet on the board) untouched.
+
 ## 2026-09-28 session: qemu#17 CLOSED -- fence-based split fix landed, ~1.2-2.3x fps
 
 Picked up qemu#17 exactly where the prior session's handover left it: time
