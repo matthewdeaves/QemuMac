@@ -204,6 +204,30 @@ add_if_available() {
     return 0
 }
 
+# SHA-256 of a file. Linux/coreutils has sha256sum, macOS has shasum.
+compute_sha256() {
+    if command_exists sha256sum; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command_exists shasum; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        return 1
+    fi
+}
+
+# Record what ./qemu-install was built from (build-host#148), so the fleet's
+# install-audit compares the binary that will actually run, not the source
+# checkout's HEAD. $1 = install dir, $2 = source dir it was built from.
+write_qemu_build_info() {
+    local install_dir="$1" source_dir="$2"
+    local bin="${install_dir}/bin/qemu-system-ppc" commit sha
+    commit=$(git -C "$source_dir" rev-parse HEAD 2>/dev/null) || return 1
+    sha=$(compute_sha256 "$bin") || return 1
+    [[ -n "$commit" && -n "$sha" ]] || return 1
+    printf 'commit=%s\nsha256=%s\nbuilt=%s\n' "$commit" "$sha" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${install_dir}/BUILD_INFO"
+}
+
 build_and_install_qemu() {
     local install_type="$1"
     local os_type="$2"
@@ -292,6 +316,10 @@ build_and_install_qemu() {
     fi
 
     cd ..
+    if [[ "$install_type" == "local" ]]; then
+        write_qemu_build_info "$LOCAL_INSTALL_DIR" "$QEMU_SOURCE_DIR" \
+            || error "Could not write ${LOCAL_INSTALL_DIR}/BUILD_INFO"
+    fi
     success "QEMU built and installed successfully"
 }
 

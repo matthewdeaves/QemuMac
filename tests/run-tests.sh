@@ -1245,6 +1245,25 @@ done" 2>/dev/null | tr '\n' ' ')
     assert_eq "$out" "11.0.3:yes 10.1.0:yes 8.2:yes 8.0:no 7.2:no " \
         "version_at_least compares numerically, not lexically (10.x > 8.x)"
 
+    # build-host#148: BUILD_INFO ties the installed binary to its source commit.
+    local bi_dir bi_out
+    bi_dir=$(mktemp -d)
+    mkdir -p "$bi_dir/inst/bin" "$bi_dir/src"
+    printf 'fake-qemu\n' > "$bi_dir/inst/bin/qemu-system-ppc"
+    git -C "$bi_dir/src" init -q
+    git -C "$bi_dir/src" -c user.name=t -c user.email=t@t commit -q --allow-empty -m x
+    bi_out=$(bash -c "$loader
+write_qemu_build_info '$bi_dir/inst' '$bi_dir/src' && cat '$bi_dir/inst/BUILD_INFO'" 2>&1)
+    assert_contains "$bi_out" "commit=$(git -C "$bi_dir/src" rev-parse HEAD)" \
+        "BUILD_INFO records the full source commit"
+    assert_contains "$bi_out" "sha256=$( (sha256sum "$bi_dir/inst/bin/qemu-system-ppc" 2>/dev/null || shasum -a 256 "$bi_dir/inst/bin/qemu-system-ppc") | awk '{print $1}')" \
+        "BUILD_INFO records the installed binary's sha256"
+    assert_contains "$bi_out" "built=" "BUILD_INFO records the build time"
+    bi_out=$(bash -c "$loader
+write_qemu_build_info '$bi_dir/inst' '$bi_dir/nonexistent' || echo rc=\$?" 2>&1)
+    assert_contains "$bi_out" "rc=1" "BUILD_INFO refuses to write without a source commit"
+    rm -rf "$bi_dir"
+
     # The regex, not the network, is what regressed before - assert on it
     # directly so the test stays offline and deterministic.
     TESTS_RUN=$((TESTS_RUN + 1))
