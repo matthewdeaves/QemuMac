@@ -117,10 +117,64 @@ crashes before rendering). Background the *ssh invocation itself* instead
 in-game-screenshot work (QemuMac#20 step 4, caused the hang incident) and
 very nearly the alephone frame check here.
 
-Board after this session: QemuMac#20 and QemuMac#21 both closed/Done.
-qemu#1/#11/#13/#14 still Blocked/watch-only, untouched. Nothing left
-approved for qemumac as of this handover -- check the board fresh next
-session rather than assuming more is queued.
+Board after that point: QemuMac#20 and QemuMac#21 both closed/Done.
+qemu#1/#11/#13/#14 still Blocked/watch-only, untouched.
+
+**Update, same session again (context hard ceiling hit mid-task):** manager
+approved qemu#17 next (Quake II real-dlight path, 36fps vs ~90fps
+flashblend -- the gap QemuMac#21 established as real, on the v2.15.1
+binary). Started it: claimed qemu-tiger3d, ran `qemu-profile.sh quake2`
+(15s) alongside `bench.sh qemu-tiger3d demo1 1024x768` (32.9fps this run,
+load ~2). Profile breakdown (vCPU thread, inclusive):
+
+```
+63.7%  ppc_mac_gpu_mmio_write -> process_ring_buffer -> process_pm4 -> execute_ib
+  46.3%  r300_render
+    32.6%  metal_draw_r300
+      32.5%  r200_new_cb        (almost ALL of metal_draw_r300's cost)
+    8.3%  r300_draw_build
+    6.4%  r300_texture_full     (the lightmap/CPU-converted-texture path)
+    6.4%  metal_flush_r200      (called directly from r300_render)
+    3.3%  draw_core
+```
+
+**Root-cause hypothesis (code reading only, not yet confirmed with a
+counter):** `r300_texture_full()` (`hw/display/ppc_mac_gpu_metal.m:7348`,
+the path used for the lightmap texture) does `if (!td->host_data &&
+metal_range_busy_r200(st, lo, hi, false)) { metal_flush_r200(st); }` before
+even checking the texture cache -- a genuine read-after-write hazard guard,
+but real-dlight rebuilds the lightmap then reads it back the *same frame*,
+likely the same batch, so this probably fires on nearly every draw that
+samples it. `r200_new_cb` dominating `metal_draw_r300` connects: both its
+call sites only fire when `g_r200_cb` is `NULL`, which an eager
+`metal_flush_r200` causes on (probably) every draw. flashblend never
+rebuilds-then-reads a texture same-frame, consistent with it never hitting
+this cost. **Not empirically confirmed** -- no counter run yet distinguishing
+this flush call site from any other, unlike QemuMac#21's discipline.
+
+**Not attempted, and shouldn't be without its own design pass** (same shape
+as qemu#9): this touches CPU/GPU texture-data-race correctness, not just
+speed, and needs a repro/regression test before any fix lands. Filed
+**qemu#18** (Triage) to track the actual fix design. `qemu#17` itself
+stays In progress -- next session's first steps:
+1. Confirm the hypothesis with a counter (tag `metal_flush_r200`'s call
+   sites, or `PPCGPU_DIAG` around `r300_texture_full`'s flush branch) --
+   don't skip this and go straight to a fix.
+2. If confirmed, work qemu#18's design questions, then fix forward with a
+   bench-compare A/B per change (5 rounds, vsync off -- already the
+   default, see QemuMac#21) against the reference v2.15.1 DMG build.
+3. `qemu#17`'s own Pass bar: a profile breakdown posted (done, this
+   handover) and at least one change with a BETTER verdict, or a written
+   reason the path is near the floor.
+
+Claim on `qemu-tiger3d` released; the VM should still be on the production
+`qemu-install` (1dfe1535, QemuMac#21's counter build) -- no install dir
+override was active when this session stopped, but re-run `qemu-vm.sh
+status` to confirm rather than trust this note, since it wasn't
+double-checked before the context ceiling cut this session off.
+
+Nothing else left approved for qemumac as of this handover -- check the
+board fresh next session rather than assuming more is queued.
 
 
 You (the "qemumac" agent in `~/Documents/retro-agents`) own **QemuMac**, the
