@@ -301,3 +301,8 @@ vms/                VM configs and disk images
 iso/  roms/         media and ROMs (gitignored); roms/radeon/ is the Radeon firmware
 shared/             the shared disk (gitignored)
 ```
+
+## License
+
+GPL-2.0-only. See [LICENSE](LICENSE). The bundled Radeon firmware in `roms/radeon/`
+carries its own license — see `roms/radeon/README.md`.
