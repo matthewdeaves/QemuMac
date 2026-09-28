@@ -1,5 +1,115 @@
 # Handover: qemumac fleet agent
 
+## 2026-09-28 session: qemu#17 three counters landed, qemu#18 closed (disconfirmed), A/B confounded
+
+Picked up qemu#17 exactly where the prior session's handover (below) left
+it: "confirm the hypothesis with a counter... before designing a fix."
+Did that, three times over, and each round disconfirmed the previous
+session's theory rather than confirming it:
+
+1. **g_r300_stat_tex_hazard_full/raw** (9df5fd7): tags r300_texture_full/
+   raw's `metal_range_busy_r200 -> metal_flush_r200` guard -- the flush
+   qemu#18 was split out to redesign. Rebuilt qemu-install, claimed
+   qemu-tiger3d, ran demo1 1024x768 (34.8fps, matches the 36fps
+   baseline): **159 hits over 1,638,000 draws** (~1 in 10,300) -- not
+   "nearly every draw", noise. **Closed qemu#18**: its premise doesn't
+   survive the counter it asked for. Flagged the closure to the manager
+   since Triage is normally their call to move things out of, not mine;
+   manager confirmed it was right and recorded it Done.
+2. **g_r300_stat_tex_full_upload(_bytes)** (25bae0f): qemu#17's own step 2
+   asked whether the lightmap's sub-rectangle updates force a whole-
+   texture re-upload. They do -- qemu#2's per-page hashing only narrows
+   re-*hashing*, not re-uploading; any single dirty page still allocates
+   a fresh MTLTexture and re-uploads every mip level. But the counter
+   showed **148 uploads, 12,786 KB total, flat across the back half of a
+   1.6M-draw run** -- a one-time level-load cost, not a per-frame one.
+   Real inefficiency, doesn't explain the fps gap.
+3. **g_r300_stat_conflict_depth/colour/tex** (49a20da): what actually
+   tracks the profile's dominant r200_new_cb cost (32.5% inclusive) is
+   the pre-existing g_r200_stat_conflicts counter -- ~40,200 over the
+   same run, 27x the real flush count, each one ending the batch via
+   r200_split() and forcing the next draw's r200_new_cb() exactly like a
+   flush does. Tagged which of metal_draw_r300's three conflict checks
+   fires: **688 depth / 19,821 colour-buffer / 19,685 texture-unit** --
+   roughly even, not overwhelmingly texture-driven, so it isn't cleanly
+   "the lightmap gets rendered-to then sampled" on its own.
+
+**Gotcha, costly one**: `install-deps.sh` clones from `origin` (GitHub),
+not your local `~/Documents/qemu` checkout -- an uncommitted-and-unpushed
+instrumentation change gets silently dropped by the next rebuild, which
+just reinstalls the current tip again. Burned one full build cycle this
+session before noticing (commit + push *before* every install-deps.sh
+run, not after).
+
+**Also found, unrelated but real**: qemu-tiger3d was wedged on session
+start (a leaked `qemu-system-ppc` from a prior session, "desktop not
+answering", `qemu-vm.sh down`'s ssh-based shutdown loop hung past its own
+3-minute budget). Fixed with the documented TERM-wait13s-KILL sequence,
+never a bare KILL. Every subsequent down/up cycle this session was clean
+and fast -- this really was just a leaked process, not a build issue.
+
+**Couldn't get a real flashblend-era comparison.** The ticket's own
+description says v2.15.1 (confirmed installed via `CFBundleVersion` over
+ssh -- this doc's own "Games installed" line below is stale, still says
+v2.15.0) turned on real per-surface dynamic lighting *unconditionally*;
+flashblend isn't a runtime toggle in this binary. Verified empirically:
+`+set gl_flashblend 1 +set gl_dynamic 0` vs `+set gl_flashblend 0 +set
+gl_dynamic 1` on demo1 measured 35.3 vs 34.8 fps -- no real difference,
+both hit the identical code path. A genuine A/B needs the actual
+pre-v2.15.1 binary; didn't track one down (checked a few `~/oldmac`
+scratch artefacts, couldn't confirm versions cheaply, didn't chase
+further).
+
+**Manager asked for a per-install A/B** (1dfe1535 pre-counters vs 49a20da
+with all three) to confirm the counters cost nothing idle. Built
+1dfe1535 as a scratch install at `~/oldmac/qemu17-scratch/install-
+1dfe1535` (worktree at `~/oldmac/qemu17-scratch/src-1dfe1535`, same
+CONFIGURE_ARGS as install-deps.sh -- first configure attempt hit a
+transient "Nonexistent build file 'pyvenv/meson.build'" meson error,
+second attempt from the same fresh worktree just worked, never
+root-caused). 5 rounds a side via bench-evidence.sh/bench-compare.sh
+(`BENCH_ARTEFACT` pinned to a local copy of the guest's quake2+ref_gl.so
+so the guest binary reads as unchanged across legs; `QEMUMAC_QEMU_
+INSTALL_DIR` passed to bench-evidence.sh itself, not just `qemu-vm.sh
+up` -- bench-evidence.sh reads it independently for its own stale-build
+check). **Verdict: CONFOUNDED + HOST-OVERLOADED** (bench-compare.sh's own
+words) -- old-mac-quake2's repo HEAD moved between legs (a concurrent
+fleet session, not me) and workstation load hit the 60%-headroom gate
+during the baseline leg. diff 1.15fps inside a 2.61 noise band regardless.
+Posted for the record on qemu#17, not claimed as proof either way.
+
+**Gotcha, caught by the manager, not by me**: ran the gl_flashblend/
+gl_dynamic A/B and two plain demo1 legs directly via `cd
+old-mac-quake2 && ./scripts/bench.sh` in a loop -- old-mac-quake2 is a
+peer's repo, never mine to leave output in. Checked afterward: `git
+status`/`git diff` in that tree came back fully clean, so nothing was
+actually left behind this time (lucky, not by design), but don't repeat
+the pattern -- bench-evidence.sh's own BENCH_OUT_DIR plumbing is the
+correct path in, straight from the top of a bench task, not just once a
+peer flags the loop.
+
+**qemu#17 left In Progress**, not Done -- no fix landed, and the
+counters' Pass bar ("profile posted, plus a better verdict or a written
+floor reason") isn't met by disconfirming two hypotheses. Next session's
+first steps, from the qemu#17 thread:
+1. Time `r200_new_cb` directly (it's just `[commandQueue commandBuffer]`
+   plus an optional `encodeWaitForEvent:` -- trivially cheap code, so its
+   32.5% inclusive share most likely means it's *blocking* on Metal
+   command-queue back-pressure from ~40k small batches, not doing real
+   work. Not verified this session.
+2. If confirmed, candidate fixes are raising the queue's in-flight depth
+   or reducing conflict-triggered splits -- either needs its own design
+   pass + regression test, same shape as qemu#18's original (now closed)
+   charter.
+3. A real flashblend-era binary would still be useful for confirming
+   whether the ~50/50 conflict split is real-dlight-specific.
+
+`qemu-tiger3d` claim released, VM left on `radeon-9700` tip `49a20da`
+(all three counters, zero measured behavioural regression --
+tests/r300/run.sh passed after every commit). Scratch worktree/install
+at `~/oldmac/qemu17-scratch/` left in place, matching the QemuMac#20/21
+precedent of reusable scratch installs -- not cleaned up.
+
 ## 2026-09-28 session: QemuMac#20 closed, QemuMac#21 in progress (handed off)
 
 Picked up QemuMac#20 (validate b60a6d9936: A/B vs e47f3a1387, 5-game pass, Q2
