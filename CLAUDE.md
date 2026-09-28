@@ -7,7 +7,6 @@ The host<->guest handoff over the shared HFS disk is a primary workflow.
 `./run-mac.sh [--config <conf>] [--iso f] [--boot-from-cd]` or `--create-config <name>`;
 `./install-deps.sh` (option 3 = Radeon fork into `./qemu-install`, writes BUILD_INFO);
 `./mount-shared.sh [-u|-l]`; `./tests/run-tests.sh [filter]` must pass.
-Current state and history: `docs/HANDOVER-qemumac.md`, `git log`.
 
 ## Rules (each came from a real break)
 - macOS + Ubuntu, bash 3.2: no mapfile/readarray/`local -n`/`${v,,}`, `sed -i` without suffix,
@@ -29,3 +28,10 @@ Current state and history: `docs/HANDOVER-qemumac.md`, `git log`.
   `</dev/null`, build with `/usr/bin` first on PATH, `--disable-nettle`.
 - Never pass Cocoa-only display suboptions to SDL.
 - Never delete `qemu-install/` or `vms/`.
+
+## Where to look
+- Current session state: `docs/HANDOVER-qemumac.md` (older: `docs/archive/`, grep by ticket)
+- Radeon branch, scope, open qemu tickets: `docs/radeon-branch.md`
+- Build, offline tests, profile, bench commands: `docs/build-test-bench.md`
+- `qemu-tiger3d` VM, latest numbers, ownership rules: `docs/vm-tiger3d.md`
+- Usage, config reference, layout: `README.md` (`grep -n '^## '`); Radeon firmware: `roms/radeon/README.md`
