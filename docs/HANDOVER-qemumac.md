@@ -6,6 +6,66 @@ You (the "qemumac" agent in `~/Documents/retro-agents`) own **QemuMac**, the
 `radeon-9700` except for a release rebase. One VM at a time on the bench
 disk; claim `qemu-tiger3d` through the fleet picker like real hardware.
 
+## 2026-09-28 session: qemu#7/#4/#15 closed, queue empty
+
+Picked up from the 2026-09-28-0114 checkpoint (context ceiling wrap-up).
+That session's outstanding step -- record commit+sha256 on qemu#7/#11,
+restart the VM onto it, mail buildhost -- was still undone; did all of it
+first this session, then worked the rest of the approved queue.
+
+- **qemu#7 (screenshot readback black) -- closed, not just installed.**
+  Posted commit `b60a6d9936` + sha256 (below) on qemu#7 and qemu#11, claimed
+  qemu-tiger3d, `qemu-vm.sh up` (doctor all green, `ps` confirmed
+  `qemu-install/bin/qemu-system-ppc` is the running binary), then actually
+  **re-ran the ticket's own repro** (ioquake3 `screenshotJPEG` via
+  `autoshot.cfg`, demo four) rather than trusting the earlier NO-DIFFERENCE
+  bench + regression pass alone: `shot0003.jpg` came back a real Q3 menu
+  frame (min=0 max=255 mean=32.49), not black. Closed on the strength of
+  that direct re-test. Mailed buildhost; they folded it into
+  `docs/qemu-vm.md` (`ef2e3fe`) within the same session.
+- **qemu#4 (per-draw Metal encoding / CPU clears/resolves / full-frame
+  refresh) -- closed, no code change.** Re-profiled at b60a6d9936
+  (`qemu-profile.sh quake2 12` alongside `bench.sh ... demo1`, one run,
+  host fleet-contended so the 35.4 fps figure isn't citable but the
+  **shares** are, per the project's own profiling rule). All three
+  originally-named costs are now small-to-invisible: `metal_draw_r300`
+  ~1.1% inclusive (was ~5% before qemu#2/#3 landed), `r300_zmask_clear` /
+  `r300_cmask_clear` / `r200_clear_depth_buffer` zero samples, display
+  refresh (`-[QemuCocoaView drawRect:]`) ~0.64% of main-thread samples.
+  The actual dominant cost now is generic PM4/ring-buffer dispatch
+  (`ppc_mac_gpu_process_pm4`/`execute_ib` chain, 20.4% inclusive) plus
+  `r300_render`/`r300_draw_build` (9.3%/8.4%) -- not any of the three
+  things this ticket named. Closed with that data; a PM4-dispatch-overhead
+  ticket, if wanted, should be its own fresh ticket with its own profile.
+- **qemu#15 (magenta dlight cast) -- closed, not reproducible.** The
+  ticket's own discriminating test (`gl_dynamic 1 gl_flashblend 0 map
+  base1`, screendump) re-run directly on b60a6d9936: spawn frame and a
+  frame with an active muzzle-flash dlight (fired the blaster via monitor
+  `sendkey ctrl` three times) both render with completely normal colours --
+  no purple/magenta anywhere in world, viewmodel or HUD. Bug was first
+  seen on 3ee0d25a81; the install has since moved through qemu#2/#3/#5/#6/#7,
+  several of which touched `r300_render`/`r300_to_vram`, so one of those
+  likely fixed it incidentally. Closed without chasing hypothesis A vs B.
+
+**Board after this session: Measuring/Ready/In progress empty for
+QemuMac/qemu/ppcosxkvm.** Only the four Blocked watch items remain
+(qemu#1, #11, #13, #14) -- none reproduced or actionable this session,
+left alone per standing guidance. Nothing new filed to Triage.
+
+**Gotcha hit and fixed inline, worth remembering:** `qemu-profile.sh` and
+`bench.sh` both contend for the `qemu-tiger3d` picker claim if run as the
+docs suggest (`profile.sh & bench.sh`) while something else already holds
+it -- with today's fleet-wide contention on this one VM, that raced. Fix:
+acquire the claim yourself first (`pick-bench-host.sh --acquire
+qemu-tiger3d <label>`), then export `RETRO_BENCH_LOCK=qemu-tiger3d` before
+invoking `bench.sh`/`screenshot.sh` directly (not through their own
+re-exec) -- that env var is exactly the "claimed further up the chain"
+bypass both scripts already support. Also: don't name a shell variable
+`PPID` for a captured `$!` -- it's a bash read-only special variable, and
+the assignment fails silently in a way that looks like an unrelated
+"busy" error if you're staring at a stale log file instead of the actual
+exit code.
+
 ## Solo VM work, 2026-09-27
 
 User authorized work across these forks, commits/pushes and closing fixed
@@ -48,17 +108,16 @@ parity or complete gamma emulation. Physical-machine tickets remain untested.
 ## radeon-9700 branch state
 
 - Repo: `github.com/matthewdeaves/qemu`, branch `radeon-9700`, on QEMU v11.1.1.
-- Tip and installed PPC binary: `57502abdd7` (2026-09-27). The clean
-  `qemu-source` mirror has been fast-forwarded to that revision. The installed
-  binary was built from the matching clean `~/Documents/qemu` checkout and
-  copied atomically into `qemu-install/bin/qemu-system-ppc`; `--version` reports
-  `v11.1.1-41-g57502abdd7`. SHA256:
-  `dda6414d60cfb00923c8cac234235961f3c78c2208030c1fcc0f4e1916fe99d8`.
-  The m68k binary was not rebuilt or relabelled. The permanent install is ready for normal
-  startup. At 16:36 BST another session held `qemumac-qemu2-measure` and
-  was running the VM through its Claude scratch `dev-install` symlink to
-  `~/Documents/qemu/build/qemu-system-ppc`. Do not restart or release that
-  session's claim. Both binary paths hashed identically when checked.
+- **Tip and installed PPC binary (2026-09-28, current): `b60a6d9936`**
+  (qemu#7's GART/AGP render-target redirect). The clean `qemu-source` mirror
+  is fast-forwarded to match. `qemu-tiger3d` is running this build (verified
+  live via `ps`, not just doctor). SHA256:
+  `qemu-system-ppc  396f0396c13ac9d755dd4e21d00bc069092f0d048830423357d847f3ae7eca73`
+  `qemu-system-m68k 4eff36d74719e85207251d09b98655cdf4ba5fe490739a7e590141d0ef5c9f6d`
+  (m68k unchanged from the prior build, just re-copied). `docs/qemu-vm.md`
+  (buildhost-owned) has this recorded too, as of `ef2e3fe`.
+- Prior tip/install (2026-09-27, now superseded): `57502abdd7`,
+  sha256 `dda6414d60cfb00923c8cac234235961f3c78c2208030c1fcc0f4e1916fe99d8`.
 - Adds: ATI Radeon 9700 PRO for `mac99` (3D via Metal), Screamer audio,
   Cocoa fixes, PowerPC TCG speedups (host-FPU fast path, inline FPRF,
   lmw/stmw, lfs/stfs conversion). `git log --oneline v11.1.1..radeon-9700`
