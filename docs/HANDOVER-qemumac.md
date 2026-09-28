@@ -1,6 +1,6 @@
 # Handover: qemumac fleet agent
 
-## 2026-09-28 session: qemu#17 -- r200_new_cb cost confirmed, candidate fix tested and reverted
+## 2026-09-28 session: qemu#17 CLOSED -- fence-based split fix landed, ~1.2-2.3x fps
 
 Picked up qemu#17 exactly where the prior session's handover left it: time
 `r200_new_cb` directly to check whether its 32.5% inclusive profile share
@@ -47,19 +47,60 @@ Backgrounding the ssh invocation itself (not `nohup` inside it, per the
 prior session's own documented gotcha) is still correct; just don't
 *also* hand it to `run_in_background`.
 
-**qemu-install now on `5de870b558`** (revert applied, counter kept,
-sha256s mailed to buildhost, `docs/qemu-vm.md` updated by them to the
-canonical revert build, `88bc9a3`). `qemu-tiger3d` doctor all green, no
-stale-build warning, claim released.
+**Update, same session (continued past the point above): the actual
+fix landed.** The prior session's own "next direction" (reduce the
+number of conflict-triggered splits) turned out structurally blocked --
+writes are only ever recorded under render-target/depth attachment keys
+(`r200_note_written`'s call sites), while a texture read always builds a
+*different* key via the texture cache, so the same-key exemption that
+already lets colour/depth writes continue without splitting can never
+apply to a texture read. That's why the texture-conflict check passes
+`same=NULL` unconditionally -- not an oversight, a real constraint
+(distinct Metal view objects over the same memory aren't ordered by
+Metal's own automatic hazard tracking).
 
-**qemu#17 left In Progress** -- confirmed the mechanism, ruled out one
-candidate fix with real evidence for *why* it doesn't work, but no fps
-win landed. Next direction, unstarted: reduce the *number* of
-conflict-triggered splits itself (688 depth / ~19,800 colour / ~19,700
-texture-unit conflicts from the prior session's breakdown, roughly even)
-rather than trying to absorb their cost more cheaply. A real
-flashblend-era binary would still help confirm whether that ~50/50 split
-is real-dlight-specific or just how this demo plays.
+Redirected instead at *how* a split is paid for, not how often it
+happens: `r200_split()` only needs to order the next encoder's writes
+after the split-triggering encoder's -- exactly what `MTLFence` is for,
+and it doesn't need a new command buffer at all. Changed `r200_split()`
+to end the current encoder with `updateFence:afterStages:` instead of
+committing, and both draw paths' encoder-creation sites (each already
+creates exactly one fresh encoder on the very next draw after any
+split) issue `waitForFence:beforeStages:` first. Real flush/frame-submit
+ordering (`g_r200_event`/`r200_new_cb`/`r200_commit`) is untouched.
+`b3e5942d2b`.
+
+No test exercises this path (`tests/r300/run.sh` only builds
+`hw/display/r300/*.c`, never `ppc_mac_gpu_metal.m` -- "tests pass" on
+every commit this session validated the rasterizer, not the Metal
+orchestration being changed). Validated instead with a full
+`qemu-install` rebuild (clean, no warnings) plus live checks on
+`qemu-tiger3d`: an in-engine `screenshot` mid-demo1 gameplay (900
+warm-up wait frames, QemuMac#20's own mechanism) came back clean, no
+corruption. **Gotcha hit twice getting there**: a host-side QEMU
+monitor `screendump`, even after confirmed real gameplay via a
+ready-marker in the guest's own console log, caught the Finder desktop
+instead of the game window both times -- an ssh-launched fullscreen SDL
+window apparently doesn't reliably become frontmost for that capture
+path here. The in-engine screenshot command sidesteps it (captures the
+GL framebuffer directly, independent of window-server compositing).
+
+Counters, consistent across three separate demo1 runs: `new_cb` avg
+1-2us/call (was 155us), `metal_flush_r200`'s real wait avg ~1076-
+1087us/flush (was 3039us, and *not* grown the way the reverted
+queue-depth attempt grew it) -- total synchronization time fell from
+~59% of wall-clock to ~18.5%, a real reduction, not a redistribution.
+fps, two single-round samples (host load varied, not a formal
+interleaved bench-evidence.sh A/B): 689 frames in 8.5s (80.9fps) and
+689 frames in 15.5s (44.4fps), both clear of the 35.9fps baseline and
+of every noise band this ticket measured all session.
+
+**qemu-install now on `b3e5942d2b`**, sha256s mailed to buildhost,
+`qemu-tiger3d` doctor all green, claim released. **qemu#17 closed**
+(board moved to Done) -- full writeup on the ticket's own closing
+comment. A future session doing a proper interleaved A/B on a quiet
+host would firm up the exact multiplier, but the qualitative result
+isn't in doubt given the counter data's consistency.
 
 ## 2026-09-28 session: qemu#17 three counters landed, qemu#18 closed (disconfirmed), A/B confounded
 
