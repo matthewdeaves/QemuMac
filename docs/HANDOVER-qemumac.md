@@ -1,5 +1,91 @@
 # Handover: qemumac fleet agent
 
+## 2026-09-28 session: QemuMac#20 closed, QemuMac#21 in progress (handed off)
+
+Picked up QemuMac#20 (validate b60a6d9936: A/B vs e47f3a1387, 5-game pass, Q2
+screenshot). All four "Do" steps done, both Pass criteria met, closed:
+
+- **Step 1**: bench-compare A/B, e47f3a1387 (scratch) vs b60a6d9936
+  (installed), quake2 demo1 1024x768, 5 interleaved rounds/side, qemu-tiger3d.
+  First attempt INVALID both sides (stale local `ref_gl.so` reference --
+  refresh it from the guest every time before benching, it gets redeployed
+  without warning). Reran clean: **NO-DIFFERENCE**, diff 17.55 fps well
+  inside noise band 28.85, load 1m/5m ~2/~3 throughout. Baseline flagged
+  VSYNC-QUANTISED (~58fps cap) -- neither side's number is a release figure.
+  Confirms code reading: the GART copy-out only fires on a redirected
+  (screenshot-style) target, not ordinary VRAM-backed draws.
+- **Step 3**: one VALID bundle per game on b60a6d9936, load 2.1-2.3
+  throughout, all comfortably above the 25fps floor: quakespasm 88.5,
+  quake3 (four, 1024x768) 69.3, halflife (c0a0) 52.8/122.6/121.0, alephone
+  31.1-60.7, quake2 (demo1, pre-v2.15.1 binary) 45.0. Only did a live pixel
+  frame check for quake2 (via `vm-frame-check.sh`, clean); the other four
+  got no pixel check, just VALID-hash + sane fps -- QemuMac#21 now asks for
+  those too.
+- **Step 4**: Quake II's own in-game `screenshot` command (qemu#7's second,
+  distinct mechanism from screenshot.sh/check-frames.sh, which #97 already
+  fixed separately) -- confirmed **no longer black** on b60a6d9936. Needed
+  900 warm-up `wait` frames in the cfg to land on real gameplay rather than
+  the loading screen (same fix shape as #97's own 300->900 bump). **Gotcha
+  hit**: launching the guest binary via `nohup ... &` inside an ssh command
+  loses its WindowServer session and crashes on `bootstrap_register` --
+  background the *ssh invocation itself* instead (`ssh host bash <<'EOF' &`,
+  matching `vm-frame-check.sh`'s own pattern), never `nohup` inside the
+  remote shell.
+- **Step 5** (qemu#5's own requested rerun, c7096bfafd vs e47f3a1387):
+  INCONCLUSIVE on `bench-compare.sh`'s own identical-samples technicality,
+  even after 7 rounds/side -- root cause confirmed from the raw engine log,
+  not a stale read: demo1's own timedemo report is 1-decimal fps and
+  run-to-run variance here was under 1fps, so only ~14 distinct achievable
+  values exist across the spread -- collisions are near-guaranteed
+  regardless of round count. Substance was clean throughout: diff -0.2 to
+  -0.25fps, comfortably inside the 0.34-0.40 noise band on every recount.
+  Worth flagging to buildhost: build-host#113's check can't distinguish
+  this from an actual stale read.
+
+**Mid-session incident**: a live in-game-screenshot test hung (my own bug --
+deleted the test cfg via a `timeout`-not-found/`|| true` mask, then
+relaunched without recreating it, so the guest sat idle on demo1 forever).
+Manager caught it at 22+ minutes via the picker's process visibility. TERM'd
+the guest process, waited ~13s, KILL'd (never a bare KILL), cleaned up
+`/tmp` cruft the picker's release-time check flagged, released the claim.
+Also: don't call a port's own `screenshot.sh` without setting `SHOT_DIR`
+somewhere under `~/oldmac` -- the default lands PNGs in that port's own
+`docs/screenshots/`, which is their tree, not scratch.
+
+**QemuMac#21 opened by the manager** off QemuMac#20's own numbers: quake2
+went 94.9 (#19, c7096bfafd) -> 45.0 (#20, b60a6d9936) on the **same** binary,
+plus lower lows on quake3/alephone. Hypothesis A (the GART copy-out costing
+something on ordinary frames) vs B (noise -- single one-shot samples, and
+b60a6d9936 already showed huge candidate variance in step 1, 39.9-76+ fps).
+Code review before spending VM time: the copy-out block is only reachable
+when `r300_to_vram()` fails for the primary colour buffer (i.e. a
+redirected/AGP target) -- an ordinary draw never reaches it, and the other
+changed line (`vram_alloc_size` passed to `draw_r300`) is only used in O(1)
+bounds comparisons, not per-size work. That makes A look unlikely from the
+code, but doesn't prove it, so added a live counter instead of guessing:
+`PPCGPU_RATE` now reports GART copy-outs/s alongside draws/s (`1dfe153571`
+on `radeon-9700`, pushed, `tests/r300/run.sh` passes). **Not done, first
+thing next session**:
+1. Rebuild `qemu-install/` from `radeon-9700` tip (`1dfe153571`) under a
+   `qemu-tiger3d` claim, mail buildhost the new sha256s.
+2. The actual discriminating test: vsync-off (`+set gl_swapinterval 0`,
+   confirmed in `effective.txt`) A/B, c7096bfafd vs the new b60a6d9936+
+   build, quake2 demo1, 5 interleaved rounds/side, load < 4, with
+   `PPCGPU_RATE` captured (env `R300_...` or whatever trace-enable var this
+   build uses -- check `TRACE_ON` callers) during at least one round per
+   side to read the copy-out rate directly.
+3. Frame checks for quakespasm/quake3/halflife/alephone via
+   `vm-frame-check.sh` (port each one needs its own copy, or generalise --
+   quake2's is the only one that exists today), `SHOT_DIR` under `~/oldmac`.
+4. Scratch installs for e47f3a1387 and c7096bfafd already exist at
+   `~/oldmac/qemu20-scratch/install-{e47f3a1387,c7096bfafd}` -- reusable,
+   no rebuild needed for those two sides.
+
+Board after this session: QemuMac#20 closed/Done. QemuMac#21 In progress
+(this handover is its state). qemu#1/#11/#13/#14 still Blocked/watch-only,
+untouched.
+
+
 You (the "qemumac" agent in `~/Documents/retro-agents`) own **QemuMac**, the
 **qemu radeon-9700 fork**, and the **ppcosxkvm** fork. Never PR upstream
 (qemu/qemu, linuxkid473/\*) — only matthewdeaves/\* repos. Never force-push
