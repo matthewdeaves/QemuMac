@@ -1,5 +1,66 @@
 # Handover: qemumac fleet agent
 
+## 2026-09-28 session: qemu#17 -- r200_new_cb cost confirmed, candidate fix tested and reverted
+
+Picked up qemu#17 exactly where the prior session's handover left it: time
+`r200_new_cb` directly to check whether its 32.5% inclusive profile share
+is really Metal command-queue back-pressure, not misattributed inclusive
+cost. It is. Full writeup posted to qemu#17 (comment); summary here.
+
+**Counter landed** (`787dac916a`, tests/r300/run.sh passes): times just
+`-[MTLCommandQueue commandBuffer]` inside `r200_new_cb`. demo1 1024x768,
+single run, 35.9fps (matches baseline): the running-average counter climbs
+from ~1us/call at 2,000 draws to ~155us/call by ~800,000 draws, then holds
+flat -- 42,607 calls, 6,623,770us total, **34.5% of the run's wall-clock**.
+Confirmed real, not noise.
+
+**Candidate fix, tested and reverted.** `-[MTLDevice newCommandQueue]`
+defaults to Metal's documented 64-uncompleted-buffer cap; `r200_split()`
+commits ~40k times/run without ever waiting on the result (ordering is a
+shared event, not a CPU wait), so the CPU races ahead and hits that cap
+routinely. Raised it to 2048 (`3c2a75beed`,
+`newCommandQueueWithMaxCommandBufferCount:`): same VM cycle, same demo,
+new_cb dropped to avg 1us/call as predicted -- but `metal_flush_r200`'s
+real `waitUntilCompleted` cost roughly doubled to compensate (avg
+3039us -> 7604us/flush). Total stalled time (new_cb backpressure + real
+flush waits) came out within 6% either way (~59% vs ~58% of wall-clock),
+fps barely moved (35.9 -> 37.0, one round each side, not a proper
+interleaved A/B -- a mechanism check, not a verdict). **Reverted**
+(`5de870b558`): the cap wasn't manufacturing the cost, only choosing
+where the CPU pays it -- keeping it would have been unmotivated
+complexity for no real gain. The counter itself stays; it's what found
+this out and it's cheap when idle.
+
+**What this says**: the real bottleneck is total GPU dispatch/sync cost
+across ~40,000 tiny split batches per run, not an artificial software
+throttle. Queue depth is a dead end.
+
+**Gotcha, repeated from itself this session**: `run_in_background: true`
+plus a trailing `&` inside the command double-backgrounds it -- the tool
+call returns (and reports "completed") the instant the outer shell
+forks, before the real work (an install-deps.sh rebuild, an ssh-launched
+guest game) finishes. Happened twice before catching it (rebuild #1, the
+first demo1 launch). Fix: capture the real PID from the nested `&`, then
+Monitor an `until ! kill -0 $PID` loop on it -- don't trust the harness's
+own "completed" notification when the command itself contains `&`.
+Backgrounding the ssh invocation itself (not `nohup` inside it, per the
+prior session's own documented gotcha) is still correct; just don't
+*also* hand it to `run_in_background`.
+
+**qemu-install now on `5de870b558`** (revert applied, counter kept,
+sha256s mailed to buildhost, `docs/qemu-vm.md` updated by them to the
+canonical revert build, `88bc9a3`). `qemu-tiger3d` doctor all green, no
+stale-build warning, claim released.
+
+**qemu#17 left In Progress** -- confirmed the mechanism, ruled out one
+candidate fix with real evidence for *why* it doesn't work, but no fps
+win landed. Next direction, unstarted: reduce the *number* of
+conflict-triggered splits itself (688 depth / ~19,800 colour / ~19,700
+texture-unit conflicts from the prior session's breakdown, roughly even)
+rather than trying to absorb their cost more cheaply. A real
+flashblend-era binary would still help confirm whether that ~50/50 split
+is real-dlight-specific or just how this demo plays.
+
 ## 2026-09-28 session: qemu#17 three counters landed, qemu#18 closed (disconfirmed), A/B confounded
 
 Picked up qemu#17 exactly where the prior session's handover (below) left
