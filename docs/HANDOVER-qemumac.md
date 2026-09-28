@@ -1,5 +1,26 @@
 # Handover: qemumac fleet agent
 
+## 2026-09-28 session: QemuMac#16 LICENSE added (GPL-2), team restart for qemu-ppc round
+
+Manager restarted the whole team for a new round (qemu-ppc, plans/qemu-ppc,
+GRANTS eb0f4a5; POLICY and briefs updated). Checkpointing cleanly, not
+mid-task.
+
+- qemu#23, qemu#1 (matthewdeaves/qemu): re-checked, no change since the
+  prior session's entry below -- qemu#23 stays no-action (out of scope for
+  the VM-tooling-only takeover), qemu#1's natural-deferral diagnostic
+  stayed armed with qemu-tiger3d healthy all session, nothing to chase.
+- QemuMac#16 ("Add a LICENSE file") had been left for the user explicitly.
+  User confirmed GPL. Added `LICENSE` (verbatim GPLv2 text, matching the
+  radeon-9700 QEMU fork and the bundled `roms/radeon/` firmware, both
+  already GPL-2) and a README License section. Commit `8309ae6`, pushed.
+  Issue closed with evidence, board item added straight to Done.
+- CI green on QemuMac main throughout.
+- No claims, jobs or locks held at checkpoint. Both `QemuMac` and
+  `~/Documents/qemu` clean and pushed.
+- Next session: read `plans/qemu-ppc` per the manager's restart note before
+  resuming the qemu#23/qemu#1 queue.
+
 ## 2026-09-28 session: qemu#23 triage confirmed no-action, qemu#1 A/B bench done
 
 Picked up from the 2026-09-28-1610 checkpoint. Startup queue said "Next:
