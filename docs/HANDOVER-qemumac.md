@@ -81,9 +81,46 @@ thing next session**:
    `~/oldmac/qemu20-scratch/install-{e47f3a1387,c7096bfafd}` -- reusable,
    no rebuild needed for those two sides.
 
-Board after this session: QemuMac#20 closed/Done. QemuMac#21 In progress
-(this handover is its state). qemu#1/#11/#13/#14 still Blocked/watch-only,
-untouched.
+**Update, same session (continued past the point above):** finished
+QemuMac#21 rather than leaving it mid-flight. Rebuilt `qemu-install/` from
+the counter commit (`1dfe1535`), sha256s mailed to buildhost and recorded
+in `docs/qemu-vm.md` (`c36203b`). Three independent checks, all agreeing:
+
+1. **Live counter, ordinary gameplay** (`PPCGPU_RATE=1`, demo1 timedemo, no
+   screenshot/capture): every per-second sample read **0 GART copy-outs/s**
+   alongside tens of thousands of ordinary draws/s.
+2. **vsync-off A/B**: turned out vsync was already off throughout (`bench.sh`
+   always sets `gl_swapinterval 0`, confirmed in every `effective.txt` all
+   session). c7096bfafd vs the new counter build, quake2 demo1, 5 rounds/side,
+   load ~2/~3: INCONCLUSIVE on the same 1-decimal-precision identical-samples
+   technicality as step 5, but diff +0.375fps inside an 0.88 noise band --
+   candidate marginally *faster*, not slower.
+3. **Frame checks**, all four games, host-side screendump mid-gameplay, all
+   clean/no corruption: quakespasm (demo1 timedemo), quake3 (own
+   `screenshot.sh`, 8 frames), half-life (map c0a0 -- needed ~25s past
+   launch to clear the loading splash, 8s wasn't enough), aleph one
+   (Marathon 2 L00 film, classic GL -- the film arg needs the full
+   `Demos/L00.filA` path, not the bare name).
+
+**Verdict: hypothesis B.** The 94.9->45.0 fps figure was a single one-shot
+sample landing inside b60a6d9936's own already-documented wide variance on
+the *old* v2.15.0 quake2 binary (QemuMac#20 step 1's own A/B showed
+39.9-100+ fps swings on that exact binary/build combo) -- not a regression
+from the copy-out. No fix needed; the counter stays as permanent,
+zero-cost-when-idle instrumentation. QemuMac#21 closed.
+
+**Gotcha hit**: launching a guest game via `nohup cmd &` *inside* an ssh
+remote shell loses its WindowServer session (`bootstrap_register` failure,
+crashes before rendering). Background the *ssh invocation itself* instead
+(`ssh host bash <<'EOF' &` from the calling shell), matching
+`vm-frame-check.sh`'s own pattern -- this bit both the Quake II
+in-game-screenshot work (QemuMac#20 step 4, caused the hang incident) and
+very nearly the alephone frame check here.
+
+Board after this session: QemuMac#20 and QemuMac#21 both closed/Done.
+qemu#1/#11/#13/#14 still Blocked/watch-only, untouched. Nothing left
+approved for qemumac as of this handover -- check the board fresh next
+session rather than assuming more is queued.
 
 
 You (the "qemumac" agent in `~/Documents/retro-agents`) own **QemuMac**, the
