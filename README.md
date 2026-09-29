@@ -1,5 +1,9 @@
 # QemuMac
 
+Run classic Macintosh VMs under QEMU on macOS or Ubuntu, with a shared host/guest disk.
+The launch scripts support Quadra 800 and PowerMac G4 configurations.
+Use the setup sections for a first boot and the configuration reference for an existing VM.
+
 Run classic Macintosh VMs under QEMU — 68k (Quadra 800) and PowerPC (PowerMac G4) —
 on macOS or Ubuntu, with a shared disk for moving files between host and guest.
 

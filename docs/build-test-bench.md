@@ -1,8 +1,8 @@
 # Build, test, profile and bench the Radeon emulator
 
-Commands for building `qemu-install/` from `qemu-source/`, running offline R300 tests, running a
-dev build against the VM, profiling with `sample`, and benching each Quake port.
-One section, copy-paste blocks; read the whole file (it is short).
+Build and install commands for `qemu-install/`, plus VM launch and shared-disk entry points.
+Offline tests are in `docs/TESTING.md`; profiling and benchmark commands in `docs/BENCH.md`.
+Sections: Commands, VM commands, Build environment.
 
 ## Commands
 
@@ -25,13 +25,15 @@ QEMUMAC_QEMU_INSTALL_DIR=/path/to/dev-install ./run-mac.sh --config vms/power_ma
 # CI:
 tests/ci/macos-radeon-build.sh
 
-# Profile (macOS `sample` of QEMU during a game; guest-CPU-thread top
-# functions and Radeon share):
-old-mac-quakespasm/scripts/qemu-profile.sh <quakespasm|quake2|ioquake3-bench> [seconds] [out]
-
-# Bench (each Quake port):
-<port>/scripts/bench.sh qemu-tiger3d <demo> 1024x768 1   # Q1/Q2: demo1, Q3: four
 ```
 
-Debug switches cost fps and must be off for any bench: `R300_DRAWLOG`,
-`PPCGPU_DIAG`, `PPCGPU_RATE`, `R300_DUMP`.
+Profile and benchmark procedure: `docs/BENCH.md`.
+
+## VM commands
+
+`./run-mac.sh [--config <conf>] [--iso f] [--boot-from-cd]` launches a guest; `--create-config <name>` creates its configuration.
+`./mount-shared.sh [-u|-l]` manages the shared disk. Offline tests: `./tests/run-tests.sh [filter]`.
+
+## Build environment
+
+Run `brew` with `</dev/null`, put `/usr/bin` first on PATH for builds, and use `--disable-nettle`. `install-deps.sh` option 3 builds the Radeon fork into `./qemu-install` and writes `BUILD_INFO`.
