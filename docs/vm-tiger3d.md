@@ -24,30 +24,36 @@ copy. Claim `qemu-tiger3d` first with
 <label>` (status with `--status qemu-tiger3d`), release with
 `--release qemu-tiger3d` when done.
 
-`qemu-install/` current build (radeon-9700 tip `a824d07101`, QEMU 11.1.1,
-built and verified by `install-deps.sh` option 3 — Radeon 9700 + Screamer
-both detected; re-confirmed live today for QemuMac#15, four commits
-behind the branch tip above, not yet urgent to rebuild):
+`qemu-install/` current build (radeon-9700 tip `6f0f80cd`, QEMU 11.1.1,
+built by `install-deps.sh` option 3, CI green on that commit; includes the
+qemu#1 fix, qemu#24 GPU vertex programs and qemu#26 AltiVec on NEON; BUILD_INFO
+records commit and sha):
 
 ```
-qemu-system-ppc  sha256=9d2c8624cc2246a8468dbafcbd2b02f334f9886da2f7c0a5cfe21e481631e96b
-qemu-system-m68k sha256=70c836fea234311d6a9f37db4b787891240bdb17cfaa11c1ac71182709ae9707
+qemu-system-ppc  sha256=4c39fd42994f68075d29e27a3172da82dac0838f9045a83b35fa2a6c103db0be
+qemu-system-m68k sha256=ddc20f06fca6c1fab1529914508127982442c78b00b2c7dad63fcfc6b744ddb0
 ```
+
+`install-deps.sh` replaces `qemu-source/` with a fresh shallow clone: to keep
+local branches there, run it in a scratch clone of QemuMac and rsync its
+`qemu-install/` over the real one (under a claim, VM down first).
 
 ## Latest numbers
 
-qemu `b5d2ac4f4a` (dev build), 1024x768, one run each, host moderately
-loaded (load avg ~3), 2026-09-27, picture checked by eye:
+Round qemu-ppc, 2026-09-29, `bench-compare` verdicts, 1024x768, vsync off,
+load < 6, 5 VALID rounds a side (QemuMac#23 has the table and bundles):
 
-- Quake 1 demo1: 74.1 fps (was ~49 fps at the start of the day, 4.8 before
-  any of this work).
-- Quake 2 demo1: 88.3 fps.
-- Quake 3 four: 82.2 fps.
+- Quake III four: 103.9 fps (`70fed303`) -> 123.9 (`8317eb56`, qemu#24) ->
+  133.6 (`6f0f80cd`, qemu#26; interleaved A/B against `8317eb56`, BETTER).
+- QuakeSpasm demo1: 85.1 -> 90.1 -> 91.6. Quake II demo1: 79.7 -> 79.1 -> 80.8
+  (no change). Half-Life timerefresh about 125-130 (no change). Aleph One
+  60 (vsync-quantised, does not measure cost).
+- Ring execution is 0.2% of the vCPU thread on Q3 (qemu#25 measured, not
+  ported); the rest is TCG and TLB flushing.
 
-Host load swings results widely (Quake 3 measured 10-82 fps on similar
-builds while other GPU/CPU work ran on the host). Judge changes by
-`qemu-profile.sh` guest-CPU-thread shares, one run per measurement — VM fps
-is never release or floor evidence.
+Host load swings results widely: only interleaved A/B (restart the VM onto
+each install in turn, same load) or a `bench-compare` verdict without
+HOST-LOAD-DIFFERS is a result. VM fps is never release or floor evidence.
 
 ## Rules
 

@@ -7,16 +7,17 @@ Sections: branch state, Scope, Open items.
 ## Branch state
 
 - Repo: `github.com/matthewdeaves/qemu`, branch `radeon-9700`, on QEMU v11.1.1.
-- **Tip and installed PPC binary (2026-09-28, current): `b60a6d9936`**
-  (qemu#7's GART/AGP render-target redirect). The clean `qemu-source` mirror
-  is fast-forwarded to match. `qemu-tiger3d` is running this build (verified
-  live via `ps`, not just doctor). SHA256:
-  `qemu-system-ppc  396f0396c13ac9d755dd4e21d00bc069092f0d048830423357d847f3ae7eca73`
-  `qemu-system-m68k 4eff36d74719e85207251d09b98655cdf4ba5fe490739a7e590141d0ef5c9f6d`
-  (m68k unchanged from the prior build, just re-copied). `docs/qemu-vm.md`
-  (buildhost-owned) has this recorded too, as of `ef2e3fe`.
-- Prior tip/install (2026-09-27, now superseded): `57502abdd7`,
-  sha256 `dda6414d60cfb00923c8cac234235961f3c78c2208030c1fcc0f4e1916fe99d8`.
+- **Tip and installed PPC binary (2026-09-29, current): `6f0f80cd`**
+  (qemu#26 AltiVec on NEON, on top of qemu#24 GPU vertex programs and the
+  qemu#1 fix `70fed303`), CI green. `qemu-tiger3d` runs this build.
+  SHA256 of `qemu-system-ppc`:
+  `4c39fd42994f68075d29e27a3172da82dac0838f9045a83b35fa2a6c103db0be`;
+  `qemu-install/BUILD_INFO` records commit and sha. Numbers: `vm-tiger3d.md`.
+- Round qemu-ppc closed: qemu#1 (fixed), #24, #26 landed; #25 (ring thread)
+  measured at 0.2% of the vCPU thread and not ported (WIP on branch
+  `qemu25-wip`); qemu#27 wires `tests/ppc-vmx` into CI and needs the gh token's
+  `workflow` scope (user). Open: QemuMac#23 item 4 (the user's live look).
+- Superseded tips: `b60a6d9936` (2026-09-28), `57502abdd7` (2026-09-27).
 - Adds: ATI Radeon 9700 PRO for `mac99` (3D via Metal), Screamer audio,
   Cocoa fixes, PowerPC TCG speedups (host-FPU fast path, inline FPRF,
   lmw/stmw, lfs/stfs conversion). `git log --oneline v11.1.1..radeon-9700`
