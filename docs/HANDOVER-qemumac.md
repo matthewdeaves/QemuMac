@@ -13,8 +13,7 @@ interleaved), qemu#25 (ring is 0.2% of the vCPU: not ported). qemu#1 was already
 closed. QemuMac#23 has the baseline, final table and the 1-hour soak (0 IB lost,
 0 deferrals, 0 dead ssh); item 4, the user's live look, is the only thing open.
 
-Open follow-ups: qemu#27 (CI step for tests/ppc-vmx on local branch `qemu26-ci`;
-needs `gh auth refresh -s workflow`, user). build-host#153 (launch-game "no pid
+Open follow-ups: qemu#27 (closed: CI step pushed as radeon-9700 d02ad6fc, CI green). build-host#153 (launch-game "no pid
 within 90s" flake; shared-v29 reports why and retries). alephone was mailed that its
 round leaves Aleph One running. Aleph One needs a vsync-off run from its port to
 measure cost. qemu#13/#14 stay Blocked.
